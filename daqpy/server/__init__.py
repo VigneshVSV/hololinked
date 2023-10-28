@@ -3,7 +3,7 @@ from .config import *
 from .serializers import *
 from .zmq_message_brokers import *
 from .database import *
-from .scada_decorators import *
+from .decorators import *
 from .remote_parameter import *
 from .remote_object import *
 from .eventloop import *

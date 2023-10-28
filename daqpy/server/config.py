@@ -1,4 +1,5 @@
 # adapted from pyro - https://github.com/irmen/Pyro5 - see following license
+# currently not used correctly because its not correctly integrated to the package 
 """
 MIT License
 
@@ -45,13 +46,13 @@ class Configuration:
         self.reset_actions()
 
 
-    def reset_variables(self, use_environment=True):
+    def reset_variables(self, use_environment : bool = True):
         """
         Reset to default config items.
         If use_environment is False, won't read environment variables settings (useful if you can't trust your env).
         """
         self.HOST = "localhost"
-        self.TEMP_DIR = tempfile.gettempdir() + "\\scadapy"
+        self.TEMP_DIR = tempfile.gettempdir() + "\\daqpy"
         # self.NS_HOST = "localhost"
         # self.NS_PORT = 9090
         # self.NS_BCPORT = 9091

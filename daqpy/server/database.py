@@ -1,5 +1,4 @@
-from typing import Union
-
+import typing
 from sqlalchemy.ext import asyncio as asyncio_ext
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
@@ -28,7 +27,7 @@ def create_DB_URL(file_name : str, asynch : bool = False):
 
 class BaseAsyncDB:
     
-    def __init__(self, database : str, serializer : BaseSerializer, config_file : Union[str, None] = None) -> None:
+    def __init__(self, database : str, serializer : BaseSerializer, config_file : typing.Union[str, None] = None) -> None:
         if config_file:
             URL = f"{create_DB_URL(config_file, True)}/{database}"
             self.engine = asyncio_ext.create_async_engine(URL, echo = True)
@@ -38,7 +37,7 @@ class BaseAsyncDB:
 
 class BaseSyncDB:
 
-    def __init__(self, database : str, serializer : BaseSerializer, config_file : Union[str, None] = None) -> None:
+    def __init__(self, database : str, serializer : BaseSerializer, config_file : typing.Union[str, None] = None) -> None:
         if config_file:
             URL = f"{create_DB_URL(config_file, False)}/{database}"
             self.engine = create_engine(URL, echo = True)

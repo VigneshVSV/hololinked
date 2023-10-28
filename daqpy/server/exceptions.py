@@ -11,7 +11,9 @@ class BreakAllLoops(Exception):
     pass
 
 class StateMachineError(Exception):
-
+    """
+    raise to show errors while calling methods or writing parameters in wrong state
+    """
     pass 
 
 

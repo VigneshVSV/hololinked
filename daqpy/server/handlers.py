@@ -1,5 +1,4 @@
 # routing ideas from https://www.tornadoweb.org/en/branch6.3/routing.html
-
 import traceback
 import typing
 from typing import List, Dict, Any, Union, Callable, Tuple
@@ -8,10 +7,8 @@ from tornado.web import RequestHandler, StaticFileHandler
 from tornado.iostream import StreamClosedError
 from tornado.httputil import HTTPServerRequest
 from time import perf_counter
-from dataclasses import dataclass, asdict
 
-
-from .constants import (IMAGE_STREAM, INSTRUCTION, EVENT, CALLABLE, ATTRIBUTE, FILE)
+from .constants import (IMAGE_STREAM, EVENT, CALLABLE, ATTRIBUTE, FILE)
 from .serializers import JSONSerializer
 from .path_converter import extract_path_parameters
 from .zmq_message_brokers import MessageMappedZMQClientPool, EventConsumer
@@ -19,7 +16,7 @@ from .webserver_utils import log_request
 from .remote_object import RemoteObject
 from .eventloop import EventLoop
 from .utils import current_datetime_ms_str
-from .scada_decorators import (HTTPServerResourceData, HTTPServerEventData,
+from .decorators import (HTTPServerResourceData, HTTPServerEventData,
                             HTTPServerResourceData, FileServerData)
 
 UnknownHTTPServerData = HTTPServerResourceData(
@@ -277,6 +274,7 @@ class BaseRequestHandler(RequestHandler):
 class GetResource(BaseRequestHandler):
 
     async def handled_as_filestream(self, request : HTTPServerRequest) -> bool:
+        """this method is wrong and does not work"""
         for route in self.resources["DYNAMIC_ROUTES"].values():
             arguments = extract_path_parameters(self.request.path, route.path_regex, route.param_convertors)
             if arguments and route.what == FILE:
@@ -388,6 +386,9 @@ class DeleteResource(BaseRequestHandler):
 
 
 class OptionsResource(BaseRequestHandler):
+    """
+    this is wrong philosophically
+    """
 
     async def options(self):        
         self.set_status(204)

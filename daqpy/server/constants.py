@@ -1,7 +1,7 @@
-from enum import Enum
 import logging
 import functools 
-from typing import Union, Dict, Any
+import typing
+from enum import Enum
 from types import MethodType, FunctionType
 
 
@@ -38,7 +38,6 @@ private_dunder_methods = frozenset([
     "__getstate__", "__setstate__", "__reduce__", "__reduce_ex__", "__subclasshook__"
 ])
 
-
 # HTTP related
 POST : str = 'POST'
 GET  : str = 'GET'
@@ -61,10 +60,8 @@ log_levels = dict(
     FATAL    = logging.FATAL
 )
 
-
 # types
 CallableType = (FunctionType, MethodType)
-JSONSerializable = Union[Dict[str, Any], list, str, int, float, None]
-
+JSONSerializable = typing.Union[typing.Dict[str, typing.Any], list, str, int, float, None]
 
 ZMQ_PROTOCOLS = Enum('ZMQ_PROTOCOLS', 'TCP IPC')

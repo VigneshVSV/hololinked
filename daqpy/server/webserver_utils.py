@@ -7,7 +7,7 @@ from typing import Dict, Any, List
 from tornado.httputil import HTTPServerRequest
 
 from .constants import CALLABLE, ATTRIBUTE, EVENT, FILE, IMAGE_STREAM
-from .scada_decorators import HTTPServerEventData, HTTPServerResourceData, FileServerData
+from .decorators import HTTPServerEventData, HTTPServerResourceData, FileServerData
 from .zmq_message_brokers import AsyncZMQClient, SyncZMQClient
 
 

@@ -12,10 +12,10 @@ from .database import create_DB_URL
 
 class PCHostServer(HTTPServer):
 
-    consumers   = TypedList( item_type = Consumer, default = None, allow_None = True, 
+    consumers = TypedList(item_type=Consumer, default=None, allow_None=True, 
                    doc="""Remote Object to be directly served within the HTTP server""")
     
-    db_config_file = String ( default = '' )
+    db_config_file = String(default='')
 
     def __init__(self, *, port = 8080, address = '0.0.0.0', log_level = logging.INFO, 
                 db_config_file = 'host_db_config.json', json_serializer = None, protocol_version = 2, **kwargs):
@@ -33,10 +33,10 @@ class PCHostServer(HTTPServer):
 
 class PrimaryHostServer(HTTPServer):
 
-    consumers   = TypedList( item_type = Consumer, default = None, allow_None = True, 
+    consumers = TypedList(item_type=Consumer, default=None, allow_None=True, 
                     doc="""Remote Object to be directly served within the HTTP server""")
     
-    db_config_file = String ( default = '' )
+    db_config_file = String(default='')
 
     def __init__(self, *, port = 8080, address = '0.0.0.0', log_level = logging.INFO, 
                 db_config_file = 'host_db_config.json', json_serializer = None, protocol_version = 2, **kwargs):

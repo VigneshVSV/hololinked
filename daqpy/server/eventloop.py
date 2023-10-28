@@ -2,27 +2,27 @@ import subprocess
 import asyncio
 import traceback
 import importlib
-from typing import List, Any, Dict, Union, Tuple, Type
 import typing 
+
 
 from .utils import unique_id, wrap_text
 from .constants import *
-from ..param.parameters import Boolean, ClassSelector, TypedList, List as PlainList
 from .remote_parameters import TypedDict
 from .exceptions import *
-from .scada_decorators import post, get
+from .decorators import post, get
 from .remote_object import *
-from .zmq_message_brokers import AsyncPollingZMQServer, AsyncZMQServer, ZMQServerPool, ServerTypes
+from .zmq_message_brokers import AsyncPollingZMQServer, ZMQServerPool, ServerTypes
 from .remote_parameter import RemoteParameter
+from ..param.parameters import Boolean, ClassSelector, TypedList, List as PlainList
 
 
 
 class Consumer:
-    consumer  = ClassSelector( default = None, allow_None = True, class_ = RemoteObject, isinstance = False)
-    args      = PlainList ( default = None, allow_None = True, accept_tuple = True)
-    kwargs    = TypedDict (default = None, allow_None = True, key_type = str)
+    consumer = ClassSelector(default=None, allow_None=True, class_=RemoteObject, isinstance=False)
+    args = PlainList(default=None, allow_None=True, accept_tuple=True)
+    kwargs = TypedDict(default=None, allow_None=True, key_type=str)
    
-    def __init__(self, consumer : Type[RemoteObject], args : Tuple =(), **kwargs) -> None:
+    def __init__(self, consumer : typing.Type[RemoteObject], args : typing.Tuple = tuple(), **kwargs) -> None:
         if consumer is not None:
             self.consumer = consumer
         else:
@@ -40,16 +40,14 @@ class EventLoop(RemoteObject):
     """
     server_type = ServerTypes.EVENTLOOP
 
-    remote_objects = TypedList(item_type = (RemoteObject, Consumer), bounds = (0,100), allow_None = True, default = None,
+    remote_objects = TypedList(item_type=(RemoteObject, Consumer), bound=(0,100), allow_None=True, default=None,
                         doc="""list of RemoteObjects which are being executed""")
-    threaded  = Boolean (default = False, doc = """by default False, set to True to use thread pool executor instead of 
+    threaded = Boolean(default=False, doc="""by default False, set to True to use thread pool executor instead of 
                         of simple asyncio. Default executor is a single-threaded asyncio loop. Thread pool executor creates 
                         each thread with its own asyncio loop.""" )
-    
     # Remote Parameters
-    uninstantiated_remote_objects = TypedDict(default = None, allow_None = True, key_type = str,
-                        item_type = (Consumer, str)) #, URL_path = '/uninstantiated-remote-objects')
-
+    uninstantiated_remote_objects = TypedDict(default=None, allow_None=True, key_type=str,
+                        item_type=(Consumer, str)) #, URL_path = '/uninstantiated-remote-objects')
 
     def __new__(cls, **kwargs):
         obj = super().__new__(cls, **kwargs)
@@ -57,13 +55,13 @@ class EventLoop(RemoteObject):
         return obj
 
     def __init__(self, *, instance_name : str, 
-                remote_objects : Union[RemoteObject, Consumer, List[Union[RemoteObject, Consumer]]] = [], # type: ignore - requires covariant types
+                remote_objects : typing.Union[RemoteObject, Consumer, List[Union[RemoteObject, Consumer]]] = list(), # type: ignore - requires covariant types
                 log_level : int = logging.INFO, **kwargs) -> None:
-        super().__init__(instance_name = instance_name, remote_objects = remote_objects, log_level = log_level, **kwargs)
+        super().__init__(instance_name=instance_name, remote_objects=remote_objects, log_level=log_level, **kwargs)
         self._message_broker_pool : ZMQServerPool = ZMQServerPool(instance_names=None, 
                     # create empty pool as message brokers are already created
-                    proxy_serializer = self.proxy_serializer, json_serializer = self.json_serializer) 
-        remote_objects : List[RemoteObject] = [self]
+                    proxy_serializer=self.proxy_serializer, json_serializer=self.json_serializer) 
+        remote_objects : typing.List[RemoteObject] = [self]
         if self.remote_objects is not None:
             for consumer in self.remote_objects:
                 if isinstance(consumer, RemoteObject):
@@ -87,7 +85,7 @@ class EventLoop(RemoteObject):
     def message_broker_pool(self):
         return self._message_broker_pool 
      
-    @get('/remote-objects/dict')
+    @get('/remote-objects')
     def servers(self):
         return {
             instance.__class__.__name__ : instance.instance_name for instance in self.remote_objects 
@@ -126,15 +124,15 @@ class EventLoop(RemoteObject):
         )
 
     @post('/remote-object/instantiate')
-    def instantiate(self, file_name : str, object_name : str, kwargs = {}):
+    def instantiate(self, file_name : str, object_name : str, kwargs : typing.Dict = {}):
         consumer = self.import_remote_object(file_name, object_name)
         instance = consumer(**kwargs, eventloop_name = self.instance_name)
         self.register_new_consumer(instance)
         
     def register_new_consumer(self, instance : RemoteObject):
-        zmq_server = AsyncPollingZMQServer(instance_name = instance.instance_name, server_type = ServerTypes.USER_REMOTE_OBJECT,
-                    context = self.message_broker_pool.context, json_serializer = self.json_serializer, 
-                    proxy_serializer = self.proxy_serializer)
+        zmq_server = AsyncPollingZMQServer(instance_name=instance.instance_name, server_type=ServerTypes.USER_REMOTE_OBJECT,
+                    context=self.message_broker_pool.context, json_serializer=self.json_serializer, 
+                    proxy_serializer=self.proxy_serializer)
         self.message_broker_pool.register_server(zmq_server)
         instance.message_broker = zmq_server
         self.remote_objects.append(instance)
@@ -224,7 +222,7 @@ class EventLoop(RemoteObject):
 
     @classmethod
     async def execute_once(cls, instance_name : str, instance : RemoteObject, instruction_str : str, 
-                           arguments : typing.Dict[str, Any]) -> Dict[str, Any]:
+                           arguments : typing.Dict[str, typing.Any]) -> typing.Dict[str, typing.Any]:
         scadapy = instance.instance_resources[instruction_str] 
         if scadapy.iscallable:      
             if scadapy.state is None or (hasattr(instance, 'state_machine') and 
@@ -257,8 +255,8 @@ class EventLoop(RemoteObject):
         raise NotImplementedError("Unimplemented execution path for RemoteObject {} for instruction {}".format(instance_name, instruction_str))
 
 
-def fork_empty_eventloop(instance_name : str, logfile : Union[str, None] = None, python_command : str = 'python',
-                        condaenv : Union[str, None] = None, prefix_command : Union[str, None] = None):
+def fork_empty_eventloop(instance_name : str, logfile : typing.Union[str, None] = None, python_command : str = 'python',
+                        condaenv : typing.Union[str, None] = None, prefix_command : typing.Union[str, None] = None):
     command_str = '{}{}{}-c "from scadapy.server import EventLoop; E = EventLoop({}); E.run();"'.format(
         f'{prefix_command} ' if prefix_command is not None else '',
         f'call conda activate {condaenv} && ' if condaenv is not None else '',

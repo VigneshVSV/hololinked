@@ -34,7 +34,7 @@ import array
 import datetime
 import uuid
 import decimal
-from typing import Union, Dict, Any
+import typing
 from enum import Enum
 
 from ..param.parameters import TypeConstrainedList, TypeConstrainedDict, TypedKeyMappingsConstrainedDict
@@ -123,10 +123,10 @@ class JSONSerializer(BaseSerializer):
         data = json.dumps(data, ensure_ascii=False, allow_nan=True, default=self.default)
         return data.encode("utf-8")
 
-    def dump(self, data : Dict[str, Any], file_desc) -> None:
+    def dump(self, data : typing.Dict[str, typing.Any], file_desc) -> None:
         json.dump(data, file_desc, ensure_ascii=False, allow_nan=True, default=self.default)
 
-    def loads(self, data : Union[bytearray, memoryview, bytes]) -> Any:
+    def loads(self, data : typing.Union[bytearray, memoryview, bytes]) -> typing.Any:
         data : str = self._convertToBytes(data).decode("utf-8") 
         try:
             return json.loads(data)
@@ -138,7 +138,7 @@ class JSONSerializer(BaseSerializer):
             else:
                 raise 
 
-    def load(cls, file_desc) -> Dict[str, Any]:
+    def load(cls, file_desc) -> typing.Dict[str, typing.Any]:
         return json.load(file_desc)
 
     @classmethod
@@ -147,16 +147,16 @@ class JSONSerializer(BaseSerializer):
         return data.encode("utf-8")
 
     @classmethod
-    def general_dump(cls, data : Dict[str, Any], file_desc) -> None:
+    def general_dump(cls, data : typing.Dict[str, typing.Any], file_desc) -> None:
         json.dump(data, file_desc, ensure_ascii = False, allow_nan = True)
     
     @classmethod
-    def general_loads(cls, data : Union[bytearray, memoryview, bytes]) -> Dict[str, Any]:
+    def general_loads(cls, data : typing.Union[bytearray, memoryview, bytes]) -> typing.Dict[str, typing.Any]:
         data = cls._convertToBytes(data).decode("utf-8") # type: ignore
         return json.loads(data)
     
     @classmethod
-    def general_load(cls, file_desc) -> Dict[str, Any]:
+    def general_load(cls, file_desc) -> typing.Dict[str, typing.Any]:
         return json.load(file_desc)
 
     def default(self, obj):

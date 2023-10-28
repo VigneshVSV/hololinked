@@ -1,4 +1,3 @@
-# builtins and 3rd party
 import asyncio
 from collections import deque
 import json
@@ -15,16 +14,15 @@ from sqlalchemy import (Integer as DBInteger, String as DBString, JSON as DB_JSO
 from sqlalchemy import select
 from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, MappedAsDataclass
 
-# 3rd party modified by us
 from ..param.parameterized import Parameterized, ParameterizedMetaclass 
 from ..param.parameters import (String, ClassSelector, TupleSelector, TypedDict, Boolean, 
                                 Selector, TypedKeyMappingsConstrainedDict)
-# own
+
 from .constants import (EVENT, GET, IMAGE_STREAM, JSONSerializable, instance_name_regex, CallableType, CALLABLE, 
                         HTTP, PROXY, ATTRIBUTE, READ, WRITE, log_levels, POST, ZMQ_PROTOCOLS, FILE)
 from .serializers import *
 from .exceptions import BreakInnerLoop
-from .scada_decorators import (GUIResources, HTTPServerEventData, HTTPServerResourceData, ProxyResourceData, 
+from .decorators import (GUIResources, HTTPServerEventData, HTTPServerResourceData, ProxyResourceData, 
                             HTTPServerResourceData, FileServerData, ScadaInfoData, get, post, remote_method, 
                             ScadaInfoValidator)
 from .api_platform_utils import postman_item, postman_itemgroup
@@ -54,12 +52,12 @@ class StateMachine:
     Attributes: 
         exists (bool): internally computed, True if states and initial_states are valid 
     """
-    initial_state = RemoteClassSelector ( default=None, allow_None=True, constant=True, class_=(Enum, str) )
-    exists        = RemoteBoolean ( default=False )
-    states        = RemoteClassSelector ( default=None, allow_None=True, constant=True, class_=(EnumMeta, tuple, list)) 
-    on_enter = TypedDict( default=None, allow_None=True, key_type=str )
-    on_exit  = TypedDict( default=None, allow_None=True, key_type=str ) 
-    machine  = TypedDict( default=None, allow_None=True, key_type=str, item_type=(list, tuple) )
+    initial_state = RemoteClassSelector(default=None, allow_None=True, constant=True, class_=(Enum, str))
+    exists = RemoteBoolean(default=False)
+    states = RemoteClassSelector(default=None, allow_None=True, constant=True, class_=(EnumMeta, tuple, list)) 
+    on_enter = TypedDict(default=None, allow_None=True, key_type=str)
+    on_exit = TypedDict(default=None, allow_None=True, key_type=str) 
+    machine = TypedDict(default=None, allow_None=True, key_type=str, item_type=(list, tuple))
 
     def __init__(self, states : typing.Union[EnumMeta, typing.List[str], typing.Tuple[str]], *, 
             initial_state : typing.Union[Enum, str], 

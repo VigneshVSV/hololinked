@@ -2,11 +2,9 @@ import typing
 import os 
 from enum import Enum
 
-from scadapy.param.parameterized import Parameterized
-
 from ..param.parameterized import Parameter, Parameterized, ClassParameters, raise_TypeError
 from ..param.exceptions import raise_ValueError
-from .scada_decorators import ScadaInfoValidator
+from .decorators import ScadaInfoValidator
 from .constants import GET, HTTP, PROXY, PUT, USE_OBJECT_NAME
 from .zmq_message_brokers import Event
 

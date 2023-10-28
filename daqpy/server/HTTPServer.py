@@ -16,7 +16,7 @@ from ..param.parameters import Integer, IPAddress, ClassSelector, Selector, Type
 
 
 from .utils import create_default_logger
-from .scada_decorators import HTTPServerResourceData, get, put, post, delete, remote_method
+from .decorators import HTTPServerResourceData, get, put, post, delete, remote_method
 from .serializers import JSONSerializer
 from .constants import GET, PUT, POST, OPTIONS, DELETE, USE_OBJECT_NAME, HTTP, CALLABLE
 from .webserver_utils import log_resources, log_request, update_resources
