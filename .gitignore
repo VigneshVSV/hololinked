@@ -9,7 +9,6 @@ __pycache__/
 old/ 
 doc/build
 doc/source/generated
-examples
 extra-packages 
 *.json
 
