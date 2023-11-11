@@ -40,7 +40,7 @@ class EventLoop(RemoteObject):
     """
     server_type = ServerTypes.EVENTLOOP
 
-    remote_objects = TypedList(item_type=(RemoteObject, Consumer), bound=(0,100), allow_None=True, default=None,
+    remote_objects = TypedList(item_type=(RemoteObject, Consumer), bounds=(0,100), allow_None=True, default=None,
                         doc="""list of RemoteObjects which are being executed""")
     threaded = Boolean(default=False, doc="""by default False, set to True to use thread pool executor instead of 
                         of simple asyncio. Default executor is a single-threaded asyncio loop. Thread pool executor creates 
@@ -55,7 +55,7 @@ class EventLoop(RemoteObject):
         return obj
 
     def __init__(self, *, instance_name : str, 
-                remote_objects : typing.Union[RemoteObject, Consumer, List[Union[RemoteObject, Consumer]]] = list(), # type: ignore - requires covariant types
+                remote_objects : typing.Union[RemoteObject, Consumer, typing.List[typing.Union[RemoteObject, Consumer]]] = list(), # type: ignore - requires covariant types
                 log_level : int = logging.INFO, **kwargs) -> None:
         super().__init__(instance_name=instance_name, remote_objects=remote_objects, log_level=log_level, **kwargs)
         self._message_broker_pool : ZMQServerPool = ZMQServerPool(instance_names=None, 

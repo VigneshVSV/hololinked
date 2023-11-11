@@ -13,7 +13,7 @@ from .config import global_config
 from .serializers import (JSONSerializer, PickleSerializer, BaseSerializer, SerpentSerializer, # DillSerializer, 
                           serializers)
 from ..param.parameterized import Parameterized
-from .decorators import ScadaInfoValidator
+
 
 
 HANDSHAKE   = b'HANDSHAKE'

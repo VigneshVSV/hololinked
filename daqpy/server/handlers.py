@@ -16,7 +16,7 @@ from .webserver_utils import log_request
 from .remote_object import RemoteObject
 from .eventloop import EventLoop
 from .utils import current_datetime_ms_str
-from .decorators import (HTTPServerResourceData, HTTPServerEventData,
+from .data_containers import (HTTPServerResourceData, HTTPServerEventData,
                             HTTPServerResourceData, FileServerData)
 
 UnknownHTTPServerData = HTTPServerResourceData(
@@ -362,6 +362,18 @@ class PostResource(BaseRequestHandler):
 class PutResource(BaseRequestHandler):
     
     async def put(self):      
+
+        if (await self.handled_through_remote_object(self.request)):           
+            return  
+
+        self.set_status(404)
+        self.add_header("Access-Control-Allow-Origin", self.client_address)
+        self.finish()
+ 
+
+class PatchResource(BaseRequestHandler):
+    
+    async def patch(self):      
 
         if (await self.handled_through_remote_object(self.request)):           
             return  

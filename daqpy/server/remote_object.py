@@ -22,8 +22,9 @@ from .constants import (EVENT, GET, IMAGE_STREAM, JSONSerializable, instance_nam
                         HTTP, PROXY, ATTRIBUTE, READ, WRITE, log_levels, POST, ZMQ_PROTOCOLS, FILE)
 from .serializers import *
 from .exceptions import BreakInnerLoop
-from .decorators import (GUIResources, HTTPServerEventData, HTTPServerResourceData, ProxyResourceData, 
-                            HTTPServerResourceData, FileServerData, ScadaInfoData, get, post, remote_method, 
+from .decorators import get, post, remote_method
+from .data_containers import (GUIResources, HTTPServerEventData, HTTPServerResourceData, ProxyResourceData, 
+                            HTTPServerResourceData, FileServerData, ScadaInfoData, 
                             ScadaInfoValidator)
 from .api_platform_utils import postman_item, postman_itemgroup
 from .database import BaseAsyncDB, BaseSyncDB
