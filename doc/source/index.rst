@@ -6,33 +6,34 @@
 Welcome to daqpy's documentation!
 =================================
 
-``daqpy`` is (supposed to be) a versatile and pythonic tool for building control and data acquisition systems. It is also supposed integrate well
-with browser based GUI frameworks (like ReactJS). There are a number of packages to build such systems, however most of them lack at least some of the following features:
+``daqpy`` is (supposed to be) a versatile and pythonic tool for building control and data acquisition software systems. It integrates well
+with browser based GUI frameworks (like ReactJS). ``daqpy`` was created & is being designed with the following features in mind:  
 
-* not truly pythonic
-* harder to understand than other python packages
-* many steps to setup
-* harder to debug or no line by line debugging as they run within a C/C++ environment
-* harder to integrate with HTTP (as HTTP is primarily used for REST and not RPC) 
-* not agnostic to system size 
-
-``daqpy`` is a modest attempt to address these issues.  
+* being truly pythonic - all code in python & all features of python
+* easy to understand & setup
+* agnostic to system size - use it for 1, 10-100 or 1000 instruments
+* integrate with HTTP
+.. use it in your home, or in a lab or a big facility or industry
 
 The building block of ``daqpy`` is the  ``RemoteObject`` class. Your instrument class (i.e. that which controls the hardware) should inherit this class. Each such 
-class provides remote methods (method decorated with ``daqpy.server.remote_method`` decorator) and remote attributes (also called parameters) which are type-checked and provide getter-setter method options.
-These methods and attributes become available on the network through HTTP (through ``HTTPServer`` instance) or TCP or both. Optionally, there are events (``daqpy.server.Event``) which
-allow to asynchronously push arbitrary data to clients.   
+class provides remote methods, remote attributes (also called remote parameters) & events which become accessible on the network through HTTP and/or TCP
+after being implemented by the ``daqpy`` developer. Remote methods can be used to run control and measurement operations on your instruments or arbitrary python logic. 
+Remote parameters are type-checked attributes of class which provide getter-setter options (identical to python ``property`` except its exposed to network access). 
+Events allow to asynchronously push arbitrary data to clients. Once such a ``RemoteObject`` is instantiated, it can be connected with a HTTP server to be accessible  
+by browser clients, among others. 
 
-It is recommended to use such remote methods to run control and measurement operations on your instruments. Remote parameters must be used to modify settings for your instruments. 
-Naturally, such methods and attributes can run arbitrary logic which may not always talk to your hardware. 
+.. note::
+   Web developers & software engineers, consider reading this note 
 
-To explain the above, the documentation is separated into examples, tutorials (for beginners), how-to's and API reference.
+Please follow the documentation for examples & tutorials, how-to's and API reference.
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
    examples/index
+   autodoc/index
+   software-note
 
 
 
@@ -44,4 +45,4 @@ Indices and tables
 * :ref:`search`
 
 .. note::
-   This project is under development and is an idealogical state and should not be used for critical applications.
+   This project is under development and is an idealogical state. It should not be used for critical applications, or for that matter in any real world system under operation.

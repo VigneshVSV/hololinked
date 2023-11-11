@@ -1,5 +1,5 @@
-Example 1 - Spectrometer & Array Data 
-=====================================
+Spectrometer & Array Data 
+=========================
 
 Consider you have an optical spectrometer & you need to have following options to control it:
 

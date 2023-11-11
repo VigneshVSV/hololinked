@@ -1,6 +1,9 @@
 Examples
 ========
 
+DAQPY Remote Objects
+--------------------
+
 The examples are divided according to data-types, which can summarized into the following:
 
 .. toctree::
@@ -11,8 +14,8 @@ The code is hosted at the repository `daqpy-examples <https://github.com/Vignesh
 a JSON preview tool for your browser like `Chrome JSON Viewer <https://chrome.google.com/webstore/detail/json-viewer/gbmdgpbipfallnflgajpaliibnhdgobh>`_.
 Once you can run your example object, you may consider installing `daqpy-portal <https://github.com/VigneshVSV/daqpy-portal>`_ to have an web-interface to interact with it. 
 
-Extended Examples for ReactJS GUI 
-=================================
+ReactJS 
+-------
 
 The examples below build React apps for the above examples. One can use the template repository at `daqpy-gui-examples-template <https://github.com/VigneshVSV/daqpy-gui-examples-template.git>`_
 to follow if interested (please note the README). The examples are based on `react material UI <https://mui.com/>`_.

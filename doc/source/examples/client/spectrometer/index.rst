@@ -3,7 +3,7 @@ Spectrometer
 
 First, we start off by adding a title and a search bar for the device. 
 
-.. code-block:: jsx
+.. code-block:: 
 
     function App() {
         const GUIOptions = ['Device', 'Database', 'Information']

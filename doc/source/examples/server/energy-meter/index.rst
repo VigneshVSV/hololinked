@@ -1,2 +1,2 @@
-Example 2 - Energy Meter & Timeseries Data
-==========================================
+Energy Meter & Timeseries Data
+==============================
