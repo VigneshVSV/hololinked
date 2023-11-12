@@ -5,3 +5,4 @@ daqpy.server
     
     remote_object
     decorators
+    data_classes
