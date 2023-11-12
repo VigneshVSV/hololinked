@@ -7,9 +7,8 @@ from functools import wraps
 from dataclasses import dataclass, asdict, field, fields
 
 
-from .data_containers import ScadaInfoValidator, ScadaInfoData
-from .constants import (USE_OBJECT_NAME, UNSPECIFIED, HTTP, PROXY, GET, POST, PUT, DELETE,
-    states_regex, url_regex, http_methods, WRAPPER_ASSIGNMENTS)
+from .data_classes import ScadaInfoValidator, ScadaInfoData
+from .constants import (USE_OBJECT_NAME, UNSPECIFIED, GET, POST, PUT, DELETE, WRAPPER_ASSIGNMENTS)
 from .utils import wrap_text
 from .path_converter import compile_path
 
@@ -49,14 +48,11 @@ def is_private_attribute(attr_name: str) -> bool:
     return False
 
     
-def remote_method(access_type = (HTTP, PROXY) , 
-            URL_path : str = USE_OBJECT_NAME, http_method : str = POST, 
+def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = POST, 
             state : Optional[Union[str, Enum]] = None) -> Callable:
     """Use this function to decorate your methods to be accessible remotely.  
     
     Args:
-        access_type (str, tuple): whether the object should be accessible to HTTP methods, ProxyClient, both or neither 
-            (enter None).
         URL_path (str, optional): The path of URL under which the object is accessible. defaults to name of the object.
         http_method (str, optional)  : HTTP method (GET, POST, PUT etc.). defaults to POST.
         state (Union[str, Tuple[str]], optional): state under which the object can executed or written. When not provided,
@@ -82,7 +78,6 @@ def remote_method(access_type = (HTTP, PROXY) ,
                 )             
             else:
                 obj.scada_info = ScadaInfoValidator() 
-            obj.scada_info.access_type = access_type
             obj_name = obj.__qualname__.split('.')
             if len(obj_name) > 1: # i.e. its a bound method, used by RemoteObject
                 if URL_path == USE_OBJECT_NAME: 
@@ -137,35 +132,35 @@ def get(URL_path = USE_OBJECT_NAME):
     use it on RemoteObject subclass methods to be available with GET HTTP request. 
     method is also by default accessible to proxy clients. 
     """
-    return remote_method(access_type=(HTTP, PROXY), URL_path=URL_path, http_method=GET)
+    return remote_method(URL_path=URL_path, http_method=GET)
     
 def post(URL_path = USE_OBJECT_NAME):
     """
     use it on RemoteObject subclass methods to be available with POST HTTP request. 
     method is also by default accessible to proxy clients. 
     """
-    return remote_method(access_type=(HTTP, PROXY), URL_path=URL_path, http_method=POST)
+    return remote_method(URL_path=URL_path, http_method=POST)
 
 def put(URL_path = USE_OBJECT_NAME):
     """
     use it on RemoteObject subclass methods to be available with PUT HTTP request. 
     method is also by default accessible to proxy clients. 
     """
-    return remote_method(access_type=(HTTP, PROXY), URL_path=URL_path, http_method=PUT)
+    return remote_method(URL_path=URL_path, http_method=PUT)
     
 def delete(URL_path = USE_OBJECT_NAME):
     """
     use it on RemoteObject subclass methods to be available with DELETE HTTP request. 
     method is also by default accessible to proxy clients. 
     """
-    return remote_method(access_type=(HTTP, PROXY), URL_path=URL_path, http_method=DELETE)
+    return remote_method(URL_path=URL_path, http_method=DELETE)
 
 def patch(URL_path = USE_OBJECT_NAME):
     """
     use it on RemoteObject subclass methods to be available with PATCH HTTP request. 
     method is also by default accessible to proxy clients. 
     """
-    return remote_method(access_type=(HTTP, PROXY), URL_path=URL_path, http_method=DELETE)
+    return remote_method(URL_path=URL_path, http_method=DELETE)
 
 
 @dataclass 

@@ -17,9 +17,9 @@ from ..param.parameters import Integer, IPAddress, ClassSelector, Selector, Type
 
 from .utils import create_default_logger
 from .decorators import get, put, post, delete, remote_method
-from .data_containers import HTTPServerResourceData
+from .data_classes import HTTPServerResourceData
 from .serializers import JSONSerializer
-from .constants import GET, PUT, POST, OPTIONS, DELETE, USE_OBJECT_NAME, HTTP, CALLABLE
+from .constants import GET, PUT, POST, OPTIONS, DELETE, USE_OBJECT_NAME, CALLABLE
 from .webserver_utils import log_resources, log_request, update_resources
 from .zmq_message_brokers import MessageMappedZMQClientPool
 from .handlers import (BaseRequestHandler, GetResource, PutResource, OptionsResource, 
@@ -177,8 +177,8 @@ class HTTPServer(Parameterized):
 
     def http_method_decorator(self, http_method : str, URL_path = USE_OBJECT_NAME):
         def decorator(given_func):
-            func = remote_method(access_type=HTTP, URL_path=decorator.URL_path, 
-                                    http_method=decorator.http_method)(given_func)
+            func = remote_method(URL_path=decorator.URL_path, 
+                            http_method=decorator.http_method)(given_func)
             self.resources[http_method]["STATIC_ROUTES"][decorator.URL_path] = HTTPServerResourceData (
                                             what=CALLABLE,
                                             instance_name='',

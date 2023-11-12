@@ -16,7 +16,7 @@ from .webserver_utils import log_request
 from .remote_object import RemoteObject
 from .eventloop import EventLoop
 from .utils import current_datetime_ms_str
-from .data_containers import (HTTPServerResourceData, HTTPServerEventData,
+from .data_classes import (HTTPServerResourceData, HTTPServerEventData,
                             HTTPServerResourceData, FileServerData)
 
 UnknownHTTPServerData = HTTPServerResourceData(

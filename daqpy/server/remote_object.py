@@ -19,11 +19,11 @@ from ..param.parameters import (String, ClassSelector, TupleSelector, TypedDict,
                                 Selector, TypedKeyMappingsConstrainedDict)
 
 from .constants import (EVENT, GET, IMAGE_STREAM, JSONSerializable, instance_name_regex, CallableType, CALLABLE, 
-                        HTTP, PROXY, ATTRIBUTE, READ, WRITE, log_levels, POST, ZMQ_PROTOCOLS, FILE)
+                        ATTRIBUTE, READ, WRITE, log_levels, POST, ZMQ_PROTOCOLS, FILE)
 from .serializers import *
 from .exceptions import BreakInnerLoop
 from .decorators import get, post, remote_method
-from .data_containers import (GUIResources, HTTPServerEventData, HTTPServerResourceData, ProxyResourceData, 
+from .data_classes import (GUIResources, HTTPServerEventData, HTTPServerResourceData, ProxyResourceData, 
                             HTTPServerResourceData, FileServerData, ScadaInfoData, 
                             ScadaInfoValidator)
 from .api_platform_utils import postman_item, postman_itemgroup

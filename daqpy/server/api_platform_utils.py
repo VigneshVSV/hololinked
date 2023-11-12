@@ -1,14 +1,14 @@
 from typing import Dict, List, Any, Union
 from dataclasses import dataclass, field, asdict
 
-from .serializers import JSONSerializer
 from .constants import POST
+from .serializers import JSONSerializer
 
 
 @dataclass
 class postman_collection:
     """
-    Generate postman JSON of schema v2.1.0 (https://schema.getpostman.com/json/collection/v2.1.0/)
+    Generate postman JSON of schema v2.1.0 (https://schema.postman.com/collection/json/v2.1.0/draft-04/collection.json)
     """
     info : "postman_collection_info"
     item : Union[List[Union["postman_item", "postman_itemgroup"]], Dict[str, Any]]
@@ -33,11 +33,10 @@ class postman_collection_info:
     name : str 
     description : str
     version : str = field(default="v2.1.0")
-    schema  : str = field(default="https://schema.getpostman.com/json/collection/v2.1.0/")
+    schema : str = field(default="https://schema.getpostman.com/json/collection/v2.1.0/")
 
     def json(self):
         return asdict(self)
-
 
 @dataclass
 class postman_item:
@@ -58,7 +57,7 @@ class postman_http_request:
     """
     url : str 
     header : Union[List[Dict[str, Any]], None] = field(default=None)  
-    body   : Union[Dict[str, Any], None] = field(default=None)
+    body : Union[Dict[str, Any], None] = field(default=None)
     method : str = field(default=POST) 
     description : Union[str, None] = field(default=None)
 
@@ -86,7 +85,7 @@ class postman_itemgroup:
         if isinstance(self.item, list):
             self.item.append(item)
         else: 
-            raise ValueError("")
+            raise ValueError(f"itemgroup must be list, not type {type(item)}")
         
     def json(self):
         return asdict(self)
@@ -96,6 +95,7 @@ class postman_itemgroup:
 __all__ = [
     'postman_collection',
     'postman_collection_info',
+    'postman_item',
     'postman_http_request',
     'postman_itemgroup'
 ]

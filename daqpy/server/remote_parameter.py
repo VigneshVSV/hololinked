@@ -5,7 +5,7 @@ from enum import Enum
 from ..param.parameterized import Parameter, Parameterized, ClassParameters, raise_TypeError
 from ..param.exceptions import raise_ValueError
 from .decorators import ScadaInfoValidator
-from .constants import GET, HTTP, PROXY, PUT, USE_OBJECT_NAME
+from .constants import GET, PUT, USE_OBJECT_NAME
 from .zmq_message_brokers import Event
 
 try: 
@@ -30,7 +30,6 @@ class RemoteParameter(Parameter):
 
     def __init__(self, default: typing.Any = None, *, doc : typing.Optional[str] = None, constant : bool = False, 
                 readonly : bool = False, allow_None : bool = False, 
-                access_type : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (HTTP, PROXY),
                 URL_path : str = USE_OBJECT_NAME, 
                 http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (GET, PUT), 
                 state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
@@ -147,7 +146,6 @@ class RemoteParameter(Parameter):
         if URL_path is not USE_OBJECT_NAME:
             assert URL_path.startswith('/'), "URL path should start with a leading '/'"
         self.scada_info = ScadaInfoValidator(
-            access_type = access_type,
             http_method = http_method,
             URL_path    = URL_path,
             state       = state,
@@ -279,7 +277,6 @@ class Image(VisualizationParameter):
 
     def __init__(self, default : typing.Any = None, *, streamable : bool = True, doc : typing.Optional[str] = None, 
                 constant : bool = False, readonly : bool = False, allow_None : bool = False,  
-                access_type : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (HTTP, PROXY),
                 URL_path : str = USE_OBJECT_NAME, 
                 http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (GET, PUT), 
                 state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
@@ -289,7 +286,7 @@ class Image(VisualizationParameter):
                 deepcopy_default : bool = False, per_instance_descriptor : bool = False, 
                 precedence : typing.Optional[float] = None) -> None: 
         super().__init__(default, doc=doc, constant=constant, readonly=readonly, allow_None=allow_None, 
-                access_type=access_type, URL_path=URL_path, http_method=http_method, state=state, 
+                URL_path=URL_path, http_method=http_method, state=state, 
                 db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
                 fget=fget, fset=fset, fdel=fdel, deepcopy_default=deepcopy_default, 
                 per_instance_descriptor=per_instance_descriptor, precedence=precedence)
