@@ -57,6 +57,7 @@ dependencies:
   - snowballstemmer=2.2.0=pyhd8ed1ab_0
   - soupsieve=2.5=pyhd8ed1ab_1
   - sphinx=7.2.6=pyhd8ed1ab_0
+  - sphinx-copybutton=0.5.2=pyhd8ed1ab_0
   - sphinxcontrib-applehelp=1.0.7=pyhd8ed1ab_0
   - sphinxcontrib-devhelp=1.0.5=pyhd8ed1ab_0
   - sphinxcontrib-htmlhelp=2.0.4=pyhd8ed1ab_0
@@ -92,4 +93,3 @@ dependencies:
   - zeromq=4.3.4=h0e60522_1
   - zipp=3.17.0=pyhd8ed1ab_0
   - zlib=1.2.13=h8cc25b3_0
-prefix: C:\Users\ladmin\.conda\envs\daqpy
