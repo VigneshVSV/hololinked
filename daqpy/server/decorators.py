@@ -8,7 +8,7 @@ from dataclasses import dataclass, asdict, field, fields
 
 
 from .data_classes import ScadaInfoValidator, ScadaInfoData
-from .constants import (USE_OBJECT_NAME, UNSPECIFIED, GET, POST, PUT, DELETE, WRAPPER_ASSIGNMENTS)
+from .constants import (USE_OBJECT_NAME, UNSPECIFIED, GET, POST, PUT, DELETE, PATCH, WRAPPER_ASSIGNMENTS)
 from .utils import wrap_text
 from .path_converter import compile_path
 
@@ -160,7 +160,7 @@ def patch(URL_path = USE_OBJECT_NAME):
     use it on RemoteObject subclass methods to be available with PATCH HTTP request. 
     method is also by default accessible to proxy clients. 
     """
-    return remote_method(URL_path=URL_path, http_method=DELETE)
+    return remote_method(URL_path=URL_path, http_method=PATCH)
 
 
 @dataclass 
@@ -189,32 +189,35 @@ class FuncInfo:
 #     level_type    : str = field(default = '')
 
 
-def parse_request_args(*args, method : str):   
-    arg_len = len(args)
-    if arg_len > 2 or arg_len == 0: 
-        raise ValueError(
-            """
-            method {}() accepts only two argument, URL and/or a function/method.
-            Given length of arguments : {}.
-            """.format(method.lower(), arg_len)
-        )
-    if isinstance(args[0], FunctionType):
-        target = args[0] 
-    elif len(args) > 1 and isinstance(args[1], FunctionType):
-        target = args[1]
-    else:
-        target = None         
-    if isinstance(args[0], str):
-        URL = args[0]
-    elif len(args) > 1 and isinstance(args[1], str):
-        URL = args[1]
-    else:   
-        URL = USE_OBJECT_NAME 
-    return target, URL
+# def parse_request_args(*args, method : str):  
+#     """
+#     This method is useful when linters figure out conditional returns on decorators
+#     """ 
+#     arg_len = len(args)
+#     if arg_len > 2 or arg_len == 0: 
+#         raise ValueError(
+#             """
+#             method {}() accepts only two argument, URL and/or a function/method.
+#             Given length of arguments : {}.
+#             """.format(method.lower(), arg_len)
+#         )
+#     if isinstance(args[0], FunctionType):
+#         target = args[0] 
+#     elif len(args) > 1 and isinstance(args[1], FunctionType):
+#         target = args[1]
+#     else:
+#         target = None         
+#     if isinstance(args[0], str):
+#         URL = args[0]
+#     elif len(args) > 1 and isinstance(args[1], str):
+#         URL = args[1]
+#     else:   
+#         URL = USE_OBJECT_NAME 
+#     return target, URL
     
 
 
 
-__all__ = ['get', 'put', 'post', 'delete', 'remote_method']
+__all__ = ['get', 'put', 'post', 'delete', 'patch', 'remote_method', 'remote_parameter']
 
 
