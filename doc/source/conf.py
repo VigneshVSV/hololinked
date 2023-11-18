@@ -17,7 +17,7 @@
 
 # -- Project information -----------------------------------------------------
 
-project = 'daqpy'
+project = 'hololinked'
 copyright = '2023, Vignesh Venkatasubramanian Vaidyanathan'
 author = 'Vignesh Venkatasubramanian Vaidyanathan'
 
