@@ -405,6 +405,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
             POST    = dict(),
             PUT     = dict(),
             DELETE  = dict(),
+            PATCH   = dict(),
             OPTIONS = dict()
         )
         # The following dict will be given to the proxy client
@@ -424,26 +425,24 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
                 # methods are already bound though
                 fullpath = "{}{}".format(self.full_URL_path_prefix, scada_info.URL_path) 
                 if scada_info.iscallable:
-                    if HTTP in scada_info.access_type:
-                        for http_method in scada_info.http_method:
-                            httpserver_resources[http_method][fullpath] = HTTPServerResourceData(
-                                                        what=CALLABLE,
-                                                        instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
-                                                        fullpath=fullpath,
-                                                        instruction=fullpath,
-                                                        http_request_as_argument=scada_info.http_request_as_argument 
-                                                    )
-                    if PROXY in scada_info.access_type:
-                        proxy_resources[fullpath] = ProxyResourceData(
-                                                                    what=CALLABLE,
-                                                                    instruction=fullpath,                                                                                                                                                                                        
-                                                                    module=getattr(resource, '__module__'), 
-                                                                    name=getattr(resource, '__name__'),
-                                                                    qualname=getattr(resource, '__qualname__'), 
-                                                                    doc=getattr(resource, '__doc__'),
-                                                                    kwdefaults=getattr(resource, '__kwdefaults__'),
-                                                                    defaults=getattr(resource, '__defaults__'),
-                                                                )
+                    for http_method in scada_info.http_method:
+                        httpserver_resources[http_method][fullpath] = HTTPServerResourceData(
+                                                    what=CALLABLE,
+                                                    instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
+                                                    fullpath=fullpath,
+                                                    instruction=fullpath,
+                                                    http_request_as_argument=scada_info.http_request_as_argument 
+                                                )
+                    proxy_resources[fullpath] = ProxyResourceData(
+                                                    what=CALLABLE,
+                                                    instruction=fullpath,                                                                                                                                                                                        
+                                                    module=getattr(resource, '__module__'), 
+                                                    name=getattr(resource, '__name__'),
+                                                    qualname=getattr(resource, '__qualname__'), 
+                                                    doc=getattr(resource, '__doc__'),
+                                                    kwdefaults=getattr(resource, '__kwdefaults__'),
+                                                    defaults=getattr(resource, '__defaults__'),
+                                                )
                     instance_resources[fullpath] = scada_info 
         # Other remote objects 
         for name, resource in inspect.getmembers(self, lambda o : isinstance(o, RemoteSubobject)):
@@ -479,34 +478,32 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
                 scada_info = parameter.scada_info.create_dataclass(obj=parameter, bound_obj=self) # type: ignore
                 fullpath = "{}{}".format(self.full_URL_path_prefix, scada_info.URL_path) 
                 if scada_info.isparameter:
-                    if HTTP in scada_info.access_type:
-                        read_http_method, write_http_method = scada_info.http_method
+                    read_http_method, write_http_method = scada_info.http_method
                        
-                        httpserver_resources[read_http_method][fullpath] = HTTPServerResourceData(
+                    httpserver_resources[read_http_method][fullpath] = HTTPServerResourceData(
                                                         what=ATTRIBUTE, 
                                                         instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
                                                         fullpath=fullpath,
                                                         instruction=fullpath + '/' + READ
                                                     )
-                        if isinstance(parameter, Image) and parameter.streamable:
-                            parameter.event._owner = self 
-                            parameter.event.full_URL_path_prefix = self.full_URL_path_prefix
-                            parameter.event.publisher = self._event_publisher         
-                            httpserver_resources[GET]['{}/event{}'.format(
-                                            self.full_URL_path_prefix, parameter.event.URL_path)] = HTTPServerEventData(
+                    if isinstance(parameter, Image) and parameter.streamable:
+                        parameter.event._owner = self 
+                        parameter.event.full_URL_path_prefix = self.full_URL_path_prefix
+                        parameter.event.publisher = self._event_publisher         
+                        httpserver_resources[GET]['{}/event{}'.format(
+                                        self.full_URL_path_prefix, parameter.event.URL_path)] = HTTPServerEventData(
                                                         what=EVENT, 
                                                         event_name=parameter.event.name,
                                                         socket_address=self._event_publisher.socket_address,
                                                     )
-                        httpserver_resources[write_http_method][fullpath] = HTTPServerResourceData(
+                    httpserver_resources[write_http_method][fullpath] = HTTPServerResourceData(
                                                         what=ATTRIBUTE, 
                                                         instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
                                                         fullpath=fullpath,
                                                         instruction=fullpath + '/' + WRITE
                                                     )
                         
-                    if PROXY in scada_info.access_type:
-                        proxy_resources[fullpath] = ProxyResourceData(
+                    proxy_resources[fullpath] = ProxyResourceData(
                                 what=ATTRIBUTE, 
                                 instruction=fullpath, 
                                 module=__file__, 
@@ -861,7 +858,7 @@ class RemoteObject(RemoteSubobject):
             filename = f'{self.__class__.__name__}_postman_collection.json'
         with open(filename, 'w') as file:
             json.dump(self.postman_collection().json(), file, indent = 4)
-        
+
     @get('/parameters/names')
     def _parameters(self):
         return self.parameters.descriptors.keys()
@@ -872,8 +869,16 @@ class RemoteObject(RemoteSubobject):
         returns requested parameter values in a dict
         """
         data = {}
-        for field, requested_parameter in kwargs.items():
-            data[field] = self.parameters[requested_parameter].__get__(self, type(self))
+        if 'filter_by' in kwargs:
+            names = kwargs['filter_by']
+            for requested_parameter in names.split(','):
+                data[requested_parameter] = self.parameters[requested_parameter].__get__(self, type(self))
+        elif len(kwargs.keys()) != 0:
+            for rename, requested_parameter in kwargs.items():
+                data[rename] = self.parameters[requested_parameter].__get__(self, type(self))              
+        else:
+            for parameter in self.parameters.descriptors.keys():
+                data[parameter] = self.parameters[parameter].__get__(self, type(self))
         return data 
 
     @get('/state')    
