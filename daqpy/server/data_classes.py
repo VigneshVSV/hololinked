@@ -92,15 +92,15 @@ class ScadaInfoData:
         Serilization method to access the container for HTTP clients. Set use_json_method = True 
         in serializers.JSONSerializer instance and pass the object to the serializer directly. 
         """
-        try:
-            return self._json # accessing dynamic attr from frozen object
-        except AttributeError:
-            json_dict = {}
-            for field in fields(self):
-                if field.name != 'obj' and field.name != 'bound_obj':
-                    json_dict[field.name] = getattr(self, field.name)
-            object.__setattr__(self, '_json', json_dict) # because object is frozen 
-            return json_dict               
+        # try:
+        #     return self._json # accessing dynamic attr from frozen object
+        # except AttributeError: # always causes attribute error when slots are True
+        json_dict = {}
+        for field in fields(self):
+            if field.name != 'obj' and field.name != 'bound_obj':
+                json_dict[field.name] = getattr(self, field.name)
+        # object.__setattr__(self, '_json', json_dict) # because object is frozen 
+        return json_dict                 
     
 
 @dataclass

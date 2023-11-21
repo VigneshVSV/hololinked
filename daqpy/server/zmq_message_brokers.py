@@ -61,7 +61,7 @@ class BaseZMQ:
         if protocol == "IPC":
             split_instance_name = instance_name.split('/')
             socket_dir = '\\' + '\\'.join(split_instance_name[:-1]) if len(split_instance_name) > 1 else ''
-            directory = global_config.TEMP_DIR + socket_dir
+            directory = global_config.APPDATA_DIR + socket_dir
             if not os.path.exists(directory):
                 os.makedirs(directory)
             # re-compute for IPC

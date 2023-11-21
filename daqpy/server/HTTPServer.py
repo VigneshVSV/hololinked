@@ -157,8 +157,9 @@ class HTTPServer(Parameterized):
             self.consumers.append(UtilitiesConsumer)
         return True
 
-    def start(self, block : bool = False) -> None:
+    def start(self) -> None:
         assert self.all_ok, 'HTTPServer all is not ok before starting' # Will always be True or cause some other exception
+        block : bool = True # currently block feature is not working with SSLContext due to pickling limitation of SSLContext
         if block:
             start_server(self.address, self.port, self.logger, self.subscription, self.consumers, self.resources, #type: ignore
                          self.ssl_context, self.json_serializer)
