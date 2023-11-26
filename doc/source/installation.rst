@@ -1,3 +1,5 @@
+.. |module-highlighted| replace:: ``hololinked``
+
 Installation
 ============
 

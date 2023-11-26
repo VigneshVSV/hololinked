@@ -1,14 +1,20 @@
-Spectrometer & Array Data 
-=========================
+.. |module| replace:: hololinked
+ 
+.. |module-highlighted| replace:: ``hololinked``
 
-Consider you have an optical spectrometer & you need to have following options to control it:
+.. |remote-paramerter-import-highlighted| replace:: ``hololinked.server.remote_parameters``
+
+Spectrometer
+============
+
+Consider you have an optical spectrometer & you need the following options to control it:
 
 * connect & disconnect from the instrument
 * capture spectrum data 
 * change integration time, trigger mode etc. 
 
-First, we create the object class as a sublcass of ``RemoteObject``. 
-This example is based on OceanSight USB2000+ spectrometer, which has a python high level implementation
+We start by creating the object class as a sublcass of ``RemoteObject``. 
+In this example, OceanSight USB2000+ spectrometer is used, which has a python high level wrapper
 called `seabreeze <https://python-seabreeze.readthedocs.io/en/latest/>`_
 
 .. code-block:: python 
@@ -24,10 +30,10 @@ called `seabreeze <https://python-seabreeze.readthedocs.io/en/latest/>`_
         """
 
 The spectrometers are identified by a serial number, which needs to be a string. Let us allow this serial number 
-to be changed whenever necessary. To make sure that serial number is complied to a string when accessed from a client 
-on your network, we need to use a parameter type defined in `daqpy.server.remote_parameters`. By default, `daqpy`
-defines remote parameters/attributes like Number (float or int), String, Selector (allows one object among many). 
-The exact meaning and definitions are found in the `API Reference` and is derived from ``param``. 
+to be changed whenever necessary. To ensure that the serial number is complied to a string whenever accessed by a client 
+on the network, we need to use a parameter type defined in |remote-paramerter-import-highlighted|. By default, |module-highlighted|
+defines remote parameters/attributes like Number (float or int), String, Date etc. 
+The exact meaning and definitions are found in the :ref:`API Reference <apiref>` and is derived from ``param``. 
 
 
 .. code-block:: python 
@@ -47,20 +53,18 @@ The exact meaning and definitions are found in the `API Reference` and is derive
                     doc='the model of the connected spectrometer')
 
 
-Each such parameter (like String, Number etc.) have their own list of arguments, nevertheless, here we state that 
-the default value of serial_number is ``None``, it accepts ``None`` although defined as a String and the URL_path where it should 
-be accessible when served by a HTTP Server is '/serial-number'. Normally, such a parameter, when having a valid value 
+Each such parameter (like String, Number etc.) have their own list of arguments as seen above (``default``, ``allow_None``, ``doc``). 
+Here we state that the default value of serial_number is ``None``, i.e. it accepts ``None`` although defined as a String and the URL_path where it should 
+be accessible when served by a HTTP Server is '/serial-number'. Normally, such a parameter, when having a valid (non-None) value 
 will be forced to contain a string only. Moreover, although these parameters are defined at class-level (looks like a class 
-attribute), unless the ``class_member = True`` is set on the parameter, its an instance attribute. This is due to the 
-python descriptor protocol. The same explanation applies to the `model` parameter. 
+attribute), unless the ``class_member=True`` is set on the parameter, its an instance attribute. This is due to the 
+python `descriptor <https://realpython.com/python-descriptors/>`_ protocol. The same explanation applies to the `model` parameter. 
 
-The function of the `URL_path` is as follows. First and foremost, you need to spawn a HTTPServer. Second, such a HTTP Server
-must talk to the OceanOpticsSpectrometer instance. With `daqpy`, to achieve this, the class is instantiated with a specific 
+The `URL_path` is interpreted as follows: First and foremost, you need to spawn a ``HTTPServer``. Second, such a HTTP Server
+must talk to the OceanOpticsSpectrometer instance. To achieve this, the ``RemoteObject`` is instantiated with a specific 
 ``instance_name`` and the HTTP server is spawn with an argument containing the instance_name. (We still did not implement 
 any methods like connect/disconnect etc.). When this happens, the parameter becomes available at the stated `URL_path` along
 with the prefix of the HTTP Server domain name and object instance name. 
-
-The above explanation is re-iterated after the following example:
 
 .. code-block:: python 
     :emphasize-lines: 2
@@ -82,25 +86,20 @@ The above explanation is re-iterated after the following example:
 
         O = OceanOpticsSpectrometer(
             instance_name='spectrometer/ocean-optics/USB2000-plus',
+            # a name for the instance of the object, since the same object can be instantiated with
+            # a different name to control a different spectrometer
             serial_number='USB2+H15897',
             log_level=logging.DEBUG,
         )
         O.run()
+To construct the full `URL_path`, the format is 
+`https://{domain name}/{instance name}/{parameter URL path}` which gives 
+`https://localhost:8083/spectrometer/ocean-optics/USB2000-plus/serial-number` for the `serial_number`. 
 
-Again, the ``instance_name`` refers to what it exactly means - a name for the instance of the object, since the same object can be instantiated with
-a different name to control a different spectrometer. The same `instance_name` is given to both the HTTPServer and the OceanOpticsSpectrometer 
-instance. The `HTTPServer.start()` will create a new process where the server lives and looks for a ``RemoteObject`` s with names 
-contained in the consumers parameter. The port of the HTTPServer is 8083 here. To construct the full `URL_path`, say, for the serial_number 
-parameter, the format is as follows : `https://localhost:8083/spectrometer/ocean-optics/USB2000-plus/serial-number`. 
-
-Since the instance name partipates as a prefix in the URL path, it is recommended to use a slash separated ('/') name complying to URL 
+Since the `instance_name` partipates as a prefix in the `URL path`, it is recommended to use a slash separated ('/') name complying to URL 
 standards (name with 0 slashes are also accepted). If your PC has a domain name, you can also use the domain name instead of `localhost`. 
 
-HTTP defines certain verbs like GET, POST, PUT, DELETE etc. Each verb can be used to mean a certain action, a list of which can be found 
-on mozilla documentation `here <https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods>`_ . In case of serial_number, if you wish to 
-retrieve a serial number, you need to make a GET request at the specified link. If you need to change the value of serial_number,
-you need to make a PUT request. Examples of these will be discussed later, but if you type the link in your browser address bar, 
-a GET request will be made and you will obtain the following output:
+To access the `serial_number`, once the example starts without errors, type the URL in the web browser to get a reply like the following:
 
 .. code-block:: JSON 
 
@@ -110,8 +109,8 @@ a GET request will be made and you will obtain the following output:
         "state" : null
     }
     
-The returnValue is the most important as it is the value obtained by running the python method, in this case python attribute 
-access of serial_number. 
+The returnValue field contains the value obtained by running the python method, in this case python attribute 
+getter of `serial_number`. 
 
 Now, we would like to define methods. A `connect` and `disconnect` method may be implemented as follows:
 
@@ -156,10 +155,21 @@ URL path will be as follows:
       - `https://localhost:8083/spectrometer/ocean-optics/USB2000-plus/disconnect`
 
 The paths '/connect' and '/disconnect' are called RPC-style end-points. We directly specify a name for the method in the URL, and generally 
-use the POST HTTP request to execute it. If you have python methods fetching data (say after some computations), feel free to use GET request. 
+use the POST HTTP request to execute it. 
 
-Importantly, ``daqpy`` restricts method execution to one method at a time. Even if you define both connect and disconnect methods for remote access,
-when you execute connect, disconnect cannot be executed & vice-versa. This can be overcome only if you execute the method in your own thread. 
+HTTP defines certain 'verbs' like GET, POST, PUT, DELETE etc. Each verb can be used to mean a certain action at a specified URL (or resource representation), 
+a list of which can be found on Mozilla documentation `here <https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods>`_ . In case of `serial_number`, if you wish to 
+retrieve its value, you need to make a GET request at the specified link. The browser search bar always executes a GET request which 
+explains the JSON response obtained above with the value of the `serial_number`.  If you need to change the value of serial_number,
+you need to make a PUT request at the same URL. For execution of methods with arbitrary python logic, it is suggested to use POST method. 
+If there are python methods fetching data (say after some computations), feel free to use GET request method. For connect and disconnect,
+since we do not fetch useful data after running the method, we use the POST method. 
+
+Importantly, |module-highlighted| restricts method execution to one method at a time although HTTP Server handle multiple requests at once. 
+Even if you define both connect and disconnect methods for remote access,
+when you execute connect, disconnect cannot be executed even if you try to POST at that URL & vice-versa. 
+The request will be queued with a certain timeout (which can also be modified). 
+The queuing can be overcome only if you execute the method by threading it with your own logic. 
 
 Now we also define further options for the spectrometer, starting with the integration time. 
 
@@ -215,9 +225,9 @@ Next, trigger modes:
     if __name__ == '__main__':
         ... 
 
-The ``Selector`` parameter type allows one of several values to chosen. The manufacturer allows only the options specified 
+The ``Selector`` parameter allows one of several values to be chosen. The manufacturer allows only the options specified 
 in the ``doc`` argument, therefore we use the ``objects=[0,1,2,3,4]`` to restrict the values to one of the specified. 
-The ``objects`` list can accept any python datatype.
+The ``objects`` list can accept any python data type.
 
 After we connect to the instrument, lets say, we would like to have some information about the supported wavelengths and 
 pixels:
@@ -254,11 +264,10 @@ pixels:
 
 To make some basic tests on the object, let us complete it by defining measurement methods 
 `start_acquisition` and `stop_acquisition`. To collect the data, we also need a data container.
-We define the data container called Intensity 
+We define the data container called `Intensity` 
 
 .. code-block:: python 
   
-    import typing
     import datetime
     import numpy
     from dataclasses import dataclass, asdict
@@ -293,15 +302,17 @@ Within the OceanOpticsSpectrometer class,
     class OceanOpticsSpectrometer(RemoteObject):
 
         ...
-        last_intensity : Intensity = ClassSelector(default=None, allow_None=True, class_=Intensity, 
-            URL_path='/intensity/last', doc="last measurement intensity (in arbitrary units)") # type: ignore
+        last_intensity = ClassSelector(default=None, allow_None=True, class_=Intensity, 
+            URL_path='/intensity/last', doc="last measurement intensity (in arbitrary units)")
 
         max_intensity = Number(readonly=True, URL_path='/intensity/last/max', 
                             doc="max intensity of the last measurement")
         ...
 
-
-The acquisition methods are infinite loops, and therefore will be threaded as follows:
+i.e. since intensity will be stored within an instance of `Intensity`, we need to use a ``ClassSelector`` parameter
+which accepts values as an instance of classes specified under `class_` argument. The acquisition methods are infinite loops, 
+and therefore will need to be threaded. This is required to allow execution without blocking the execution of other remote methods.
+When we start_acquisition, we need to be able to stop_acquisition while acquisition is still running and vice versa. 
 
 .. code-block:: python 
   
@@ -337,6 +348,10 @@ The acquisition methods are infinite loops, and therefore will be threaded as fo
             # re-apply old values
             self.trigger_mode = self.trigger_mode
             self.integration_time = self.integration_time 
+
+The `measure` method is defined as follows: 
+
+.. code-block:: python 
             
         def measure(self):
             self._running = True

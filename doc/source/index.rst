@@ -19,14 +19,14 @@ with browser based GUI frameworks (like ReactJS). |module-highlighted| was creat
 * integrate with HTTP
 * 30FPS 1280*1080*3 image streaming over HTTP
 
-In short...to use it in your home, in a lab or in a big research facility or industry.
+In short...to use it in your home/hobby, in a lab or in a big research facility & industry.
 
-The building block of |module-highlighted| is the  ``RemoteObject`` class. Your instrument class (i.e. object that controls the hardware) should inherit this class. Each such 
+|module-highlighted| is primarily object oriented & the building block is the ``RemoteObject`` class. Your instrument class (i.e. the python object that controls the hardware) should inherit this class. Each such 
 class provides remote methods, remote attributes (also called remote parameters) & events which become accessible on the network through HTTP and/or TCP
-after being implemented by the |module-highlighted| developer. Remote methods can be used to run control and measurement operations on your instruments or arbitrary python logic. 
-Remote parameters are type-checked object attributes with getter-setter options (identical to python ``property`` except its exposed to network access). 
-Events allow to asynchronously push arbitrary data to clients. Once such a ``RemoteObject`` is instantiated, it can be connected with a HTTP server to be accessible  
-by browser clients, among others. 
+after implementation by the |module-highlighted| developer. Remote methods can be used to run control and measurement operations on your instruments or arbitrary python logic. 
+Remote parameters are type-checked object attributes with getter-setter options (identical to python ``property`` except added network access). 
+Events allow to asynchronously push arbitrary data to clients. Once such a ``RemoteObject`` is instantiated, it can be connected with a HTTP/TCP server to be accessible  
+by browser clients or object proxies. 
 
 .. note::
    web developers & software engineers, consider reading the :ref:`note <note>` section
