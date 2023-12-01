@@ -7,29 +7,29 @@ As |module-highlighted| is still in idealogical & development state, it is recom
 
 .. code:: shell 
 
-    git clone https://github.com/VigneshVSV/daqpy.git
+    git clone https://github.com/VigneshVSV/hololinked.git
 
-One could setup a conda environment from the included ``daqpy.yml`` file 
+One could setup a conda environment from the included ``hololinked.yml`` file 
 
 .. code:: shell 
 
-    conda env create -f daqpy.yml 
+    conda env create -f hololinked.yml 
     
 
 .. code:: shell 
 
-    conda activate daqpy
+    conda activate hololinked
     pip install -e .
 
 Also check out:
 
 .. list-table:: 
   
-   * - daqpy-examples  
-     - https://github.com/VigneshVSV/daqpy-examples.git 
+   * - hololinked-examples  
+     - https://github.com/VigneshVSV/hololinked-examples.git 
      - repository containing example code discussed in this documentation
-   * - daqpy-portal 
-     - https://github.com/VigneshVSV/daqpy-portal.git
+   * - hololinked-portal 
+     - https://github.com/VigneshVSV/hololinked-portal.git
      - GUI to access RemoteObjects & Data Visualization helper
 
 

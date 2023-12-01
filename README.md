@@ -1,10 +1,10 @@
-# DAQPY
+# hololinked
 
 ### Description
 
-For beginners - `daqpy` is a pattern suited for instrument control and data acquisition over network using python.
+For beginners - `hololinked` is a pattern suited for instrument control and data acquisition over network using python.
 <br/> 
-For those familiar with RPC & web development - `daqpy` is a ZMQ-based RPC toolkit with customizable HTTP end-points. The intended application 
+For those familiar with RPC & web development - `hololinked` is a ZMQ-based RPC toolkit with customizable HTTP end-points. The intended application 
 is, as stated before, instrument control/data acquisition or controlling generic python object(-instance)s. 
 <br />
 The main goal is to develop a pythonic (& pure python) modern package for instrument control through network (SCADA), 
@@ -13,8 +13,8 @@ along with native HTTP support for communication with browser clients for browse
 ##### NOTE - The package is rather incomplete and uploaded only for API showcase and active development. Even RPC logic is not complete. <br/>
 
 - tutorial webpage - (will be filled)
-- example repository - https://github.com/VigneshVSV/daqpy-examples
-- helper GUI - https://github.com/VigneshVSV/daqpy-portal
+- example repository - https://github.com/VigneshVSV/hololinked-examples
+- helper GUI - https://github.com/VigneshVSV/hololinked-portal
 - custom GUI examples - (will be filled)
 
 ### Already Existing Features
@@ -33,7 +33,7 @@ Again, please check examples for how-to & explanations of the above.
 
 ### To Install
 
-clone the repository and install in develop mode `pip install -e .` for convenience. The conda env daqpy.yml can also help. 
+clone the repository and install in develop mode `pip install -e .` for convenience. The conda env hololinked.yml can also help. 
 
 ### In Development
 

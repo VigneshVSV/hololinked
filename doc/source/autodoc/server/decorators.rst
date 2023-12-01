@@ -1,6 +1,6 @@
-daqpy.server.decorators
+hololinked.server.decorators
 -----------------------
 
-.. automodule:: daqpy.server.decorators
+.. automodule:: hololinked.server.decorators
     :members:
     :show-inheritance:

@@ -6,7 +6,7 @@ or controlling generic python objects.
 """
 
 setuptools.setup(
-    name="daqpy",
+    name="hololinked",
     version="0.1.0",
     author="Vignesh Vaidyanathan",
     author_email="vignesh.vaidyanathan@physik.uni-muenchen.de",
@@ -14,7 +14,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="",
-    packages=['daqpy'],
+    packages=['hololinked'],
     classifiers=[
         "Programming Language :: Python :: 3",
         "Operating System :: OS Independent",

@@ -1,4 +1,4 @@
-daqpy.server
+hololinked.server
 ============
 
 .. toctree::

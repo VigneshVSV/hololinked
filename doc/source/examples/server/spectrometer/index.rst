@@ -19,7 +19,7 @@ called `seabreeze <https://python-seabreeze.readthedocs.io/en/latest/>`_
 
 .. code-block:: python 
 
-    from daqpy.server import RemoteObject
+    from hololinked.server import RemoteObject
     from seabreeze.spectrometers import Spectrometer
 
 
@@ -40,7 +40,7 @@ The exact meaning and definitions are found in the :ref:`API Reference <apiref>`
     :emphasize-lines: 2
 
     ...
-    from daqpy.param import String, Number, Selector 
+    from hololinked.param import String, Number, Selector 
     # Number and Selector will be used later
 
     class OceanOpticsSpectrometer(RemoteObject):
@@ -70,7 +70,7 @@ with the prefix of the HTTP Server domain name and object instance name.
     :emphasize-lines: 2
 
     ...
-    from daqpy.server import HTTPServer
+    from hololinked.server import HTTPServer
     import logging
 
 
@@ -117,7 +117,7 @@ Now, we would like to define methods. A `connect` and `disconnect` method may be
 .. code-block:: python 
     :emphasize-lines: 1
 
-    from daqpy.server import RemoteObject, remote_method, post 
+    from hololinked.server import RemoteObject, remote_method, post 
     from seabreeze.spectrometers import Spectrometer
     ...
     
@@ -394,7 +394,7 @@ The `measure` method is defined as follows:
 
 .. note::
 
-    In order to see all your defined methods, parameters & events, you could use ``daqpy-portal``. There is `RemoteObject client`
+    In order to see all your defined methods, parameters & events, you could use ``hololinked-portal``. There is `RemoteObject client`
     feature which can load the HTTP exposed resources of your RemoteObject. In the search bar, you can type 
     `https://localhost:8083/spectrometer/ocean-optics/USB2000-plus` 
 

@@ -46,7 +46,7 @@ class Configuration:
         Reset to default config items.
         If use_environment is False, won't read environment variables settings (useful if you can't trust your env).
         """
-        self.APPDATA_DIR = tempfile.gettempdir() + "\\daqpy"
+        self.APPDATA_DIR = tempfile.gettempdir() + "\\hololinked"
         return 
         # qualname is not defined
         if use_environment:
