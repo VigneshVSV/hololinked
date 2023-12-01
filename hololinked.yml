@@ -1,4 +1,4 @@
-name: daqpy
+name: hololinked
 channels:
   - conda-forge
   - defaults
