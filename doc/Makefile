@@ -20,6 +20,9 @@ clean:
 	del * /s /f /q
 	cd ..
 
+cleanbuild:
+	cd ..
+
 .PHONY: help Makefile
 
 # Catch-all target: route all unknown targets to Sphinx using the new
