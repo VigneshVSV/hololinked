@@ -1,48 +1,36 @@
-from typing import Any, Callable, Any, Tuple, Type, Callable
-from threading import get_ident
+import threading 
 import asyncio
 import typing 
+import logging
 
 from .zmq_message_brokers import SyncZMQClient
-from .utils import current_datetime_ms_str
-from .constants import SERIALIZABLE_WRAPPER_ASSIGNMENTS, FUNC
+from .utils import current_datetime_ms_str, raise_local_exception
+from .constants import PARAMETER, SERIALIZABLE_WRAPPER_ASSIGNMENTS, FUNC
 
 
 
-def addMethod(cls : object, method : Callable, func_info : Tuple[Any] ):
-    for index, dunder in enumerate(SERIALIZABLE_WRAPPER_ASSIGNMENTS, 2):
-        if dunder == '__qualname__':
-            func_infor = '{}.{}'.format(cls.__class__.__name__, func_info[index].split('.')[1])
-        else:
-            func_infor = func_info[index]
-        setattr(method, dunder, func_infor)
-    cls.__setattr__(method.__name__, method)
-    
 
-
-class ProxyClient:
+class ObjectProxy:
 
     __own_attrs__ = frozenset([
         '_client', '_server_methods', '_server_attrs', '_server_oneway', '_max_retries', 
-        '_timeout', '_owner_thread', '_get_meta_data', 'instance_name', '__annotations__'
+        '_timeout', '_owner_thread', '_load_remote_object', 'instance_name', '__annotations__'
     ])
 
-    def __init__(self, instance_name : str, **kwargs) -> None:
+    def __init__(self, instance_name : str, timeout : float = 3, max_retries = 1, **kwargs) -> None:
         self.instance_name = instance_name
+        self.logger = logging.Logger()
         # compose ZMQ client in Proxy client to give the idea that all sending and receiving is actually 
         # done by the ZMQ client and not by the Proxy client directly
         self._client = SyncZMQClient(instance_name, instance_name+current_datetime_ms_str(), **kwargs)
+        self._max_retries = kwargs.get("max_retires", 1)
+        self._timeout = timeout
+        self._owner_thread = threading.get_ident() # the thread that owns this proxy
+        self._load_remote_object()
 
-        self._server_methods = set()  # all methods of the remote object, gotten from meta-data
-        self._server_attrs = set()    # attributes of the remote object, gotten from meta-data
-        self._server_oneway = set()   # oneway-methods of the remote object, gotten from meta-data
         # self._pyroSeq = 0  # message sequence number
         # self._pyroRawWireResponse = False  # internal switch to enable wire level responses
         # self._pyroHandshake = "hello"  # the data object that should be sent in the initial connection handshake message
-        self._max_retries = kwargs.get("max_retires", 3)
-        self._timeout = kwargs.get("timeout", 3)
-        self._owner_thread = get_ident()     # the thread that owns this proxy
-        self._get_meta_data()
         # if config.SERIALIZER not in serializers.serializers:
         #     raise ValueError("unknown serializer configured")
         # # note: we're not clearing the client annotations dict here.
@@ -55,30 +43,10 @@ class ProxyClient:
     def __del__(self):
         self.exit()
 
-    def __getattribute__(self, __name: str) -> Any:
-        if __name in ProxyClient.__own_attrs__: # self.__own_attrs__ will likely cause an infinite recursion
-            return super(ProxyClient, self).__getattribute__(__name)
-        if __name in self._server_attrs:
-            return super(ProxyClient, self).__getattribute__(__name)()
-        # elif __name in self._server_methods:
-        #     # client side check if the requested attr actually exists
-        #     return 
-        return super().__getattribute__(__name)
-
-    def __setattr__(self, __name : str, __value : Any):
-        if __name in ProxyClient.__own_attrs__ or __name in self._server_methods: # self.__own_attrs__ will likely cause an infinite recursion
-            return super(ProxyClient, self).__setattr__(__name, __value)
-        elif __name in self._server_attrs:
-            return _RemoteAttribute(self._client, __name, self._max_retries) 
-        raise AttributeError("Cannot set foreign attribute to ProxyClient class for {}".format(self.instance_name))
-        # remote attribute
-        # client side validation if the requested attr actually exists
-        # if __name in ProxyClient.__own_attrs__:
-        #     return super().__setattr__(__name, __value)  # one of the special pyro attributes
-        # # get metadata if it's not there yet
-        # if not self._pyroMethods and not self._pyroAttrs:
-        #     self._pyroGetMetadata()
-        # raise AttributeError("remote object '%s' has no exposed attribute '%s'" % (self._pyroUri, name))
+    def __setattr__(self, __name : str, __value : typing.Any):
+        if __name in ObjectProxy.__own_attrs__ or (__name not in self.__dict__ and isinstance(__value, __allowed_attribute_types__)):
+            return super(ObjectProxy, self).__setattr__(__name, __value)
+        raise AttributeError(f"Cannot set foreign attribute {__name} to ObjectProxy for {self.instance_name}. Given attribute not found in RemoteObject.")
 
     def __repr__(self):
         if self._pyroConnection:
@@ -357,19 +325,20 @@ class ProxyClient:
     #         self._pyroGetMetadata(uri.object)
     #     return True
 
-    def _get_meta_data(self, objectId=None, known_metadata=None):
+    def _load_remote_object(self):
         """
-        Get metadata from server (methods, attrs, oneway, ...) and remember them in some attributes of the proxy.
+        Get metadata from server (methods, parameters...) and remember them in some attributes of the proxy.
         Usually this will already be known due to the default behavior of the connect handshake, where the
         connect response also includes the metadata.
         """
-        func = _RemoteMethod(self._client, '/proxy', 3)
-        reply = func()[4][self.instance_name]["returnValue"]
+        fetch = _RemoteMethod(self._client, '/resources/object-proxy', 3)
+        reply = fetch()[4][self.instance_name]["returnValue"]
+
         for name, data in reply.items():
             if data[1] == FUNC:
-                self._server_methods.add(data[3])
-            addMethod(self, _RemoteMethod(self._client, data[0], self._max_retries), data)
-        
+                _add_method(self, _RemoteMethod(self._client, data[0], self._max_retries), data)
+            if data[1] == PARAMETER:
+                _add_parameter(self, _RemoteParameter(self._client, data[0], self._max_retries), data)
         # objectId = objectId or self._pyroUri.object
         # log.debug("getting metadata for object %s", objectId)
         # if self._pyroConnection is None and not known_metadata:
@@ -487,38 +456,40 @@ class _RemoteMethod(object):
         self._max_retries = max_retries
         self._loop = asyncio.get_event_loop()
 
+    @property # i.e. cannot have setter
     def last_return_value(self):
         return self._last_return_value
 
-    def __call__(self, *args, **kwargs) -> Any:
+    def __call__(self, *args, **kwargs) -> typing.Any:
         for attempt in range(self._max_retries + 1):
-            try:
-                self._last_return_value = self._client.execute_function(self._instruction, kwargs)
-                return self._last_return_value
-            except Exception as E:
-                print(E)
+            self._last_return_value : typing.Dict = self._client.execute(self._instruction, kwargs)
+            exception = self._last_return_value.get("exception", None)
+            if exception:
+                raise_local_exception(exception, "remote method")
+            return self._last_return_value
+           
 
     
+class _RemoteParameter(object):
+    """parameter set & get abstraction"""
 
-
-class _RemoteAttribute(object):
-    """method call abstraction"""
-
-    def __init__(self, client, instruction, max_retries):
+    def __init__(self, client : SyncZMQClient, instruction : str, max_retries : int):
         self._client = client
         self._instruction = instruction
         self._max_retries = max_retries
 
+    @property # i.e. cannot have setter
     def last_value(self):
         return self._last_value
     
-    def __call__(self, *args, **kwargs) -> Any:
+    def set(self, *args, **kwargs) -> typing.Any:
         for attempt in range(self._max_retries + 1):
-            try:
-                self._last_value = self._client.execute_function(self._instruction, kwargs)
-                return self._last_value
-            except Exception as E:
-                print(E)
+            self._last_value : typing.Dict = self._client.execute(self._instruction, kwargs)
+            exception = self._last_value.get("exception", None)
+            if exception:
+                raise_local_exception(exception, "remote method")
+            return self._last_value
+        
 
     
 
@@ -575,5 +546,26 @@ class _StreamResultIterator(object):
         self.proxy = None
 
 
-__all__ = ['ProxyClient']
+__allowed_attribute_types__ = (_RemoteParameter, _RemoteMethod)
+
+def _add_method(cls : ObjectProxy, method : _RemoteMethod, func_info : Tuple[Any] ) -> None:
+    for index, dunder in enumerate(SERIALIZABLE_WRAPPER_ASSIGNMENTS, 2):
+        if dunder == '__qualname__':
+            func_infor = '{}.{}'.format(cls.__class__.__name__, func_info[index].split('.')[1])
+        else:
+            func_infor = func_info[index]
+        setattr(method, dunder, func_infor)
+    cls.__setattr__(method.__name__, method)
+
+def _add_parameter(cls : ObjectProxy, parameter : _RemoteParameter, parameter_info : typing.Tuple[typing.Any]) -> None:
+    for index, dunder in enumerate(SERIALIZABLE_WRAPPER_ASSIGNMENTS, 2):
+        if dunder == '__qualname__':
+            func_infor = '{}.{}'.format(cls.__class__.__name__, func_info[index].split('.')[1])
+        else:
+            func_infor = func_info[index]
+        setattr(method, dunder, func_infor)
+    cls.__setattr__(method.__name__, method)
+
+
+__all__ = ['ObjectProxy']
 

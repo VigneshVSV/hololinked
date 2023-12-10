@@ -55,3 +55,5 @@ Indices and tables
 
 .. note::
    This project is under development and is an idealogical state. Please use it only for playtesting or exploring.
+
+Documentation last build : |today|

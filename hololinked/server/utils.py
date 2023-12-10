@@ -209,6 +209,18 @@ def get_signature(function : typing.Callable):
 
 
 
+def raise_local_exception(exception : typing.Dict[str, typing.Any], caller : str):
+    exception = getattr(__builtins__, exception["name"], None)
+    message = f"{caller} raised exception, check notes for traceback."
+    if exception is None:
+        E = Exception(message)
+    else: 
+        E = exception(message)
+    E.__notes__ = exception["traceback"]
+    raise E 
+    
+
+
 __all__ = ['current_datetime_ms_str', 'wrap_text', 'copy_parameters', 'dashed_URL']
 
 

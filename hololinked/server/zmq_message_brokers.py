@@ -4,6 +4,7 @@ import zmq.asyncio
 import asyncio
 import logging
 import typing
+import threading
 from enum import Enum
 from typing import Union, List, Any, Dict, Sequence, Iterator, Set
 
@@ -302,10 +303,16 @@ class AsyncPollingZMQServer(AsyncZMQServer):
 
     """
 
-    def __init__(self, instance_name : str, server_type : Enum, context : Union[zmq.asyncio.Context, None] = None, 
-                    poll_timeout = 25,  **kwargs) -> None:
+    def __init__(self, instance_name : str, executor_thread_event : threading.Event, 
+                server_type : Enum, context : Union[zmq.asyncio.Context, None] = None, 
+                poll_timeout = 25,  **kwargs) -> None:
         super().__init__(instance_name, server_type, context, **kwargs)
         self.poller = zmq.asyncio.Poller()
+        self._inproc_socket = None # definitions to be used later 
+        self._ipc_socket = None 
+        self._tcp_socket = None
+        self._executor_thread_event = executor_thread_event
+        self._instructions = []
         self.poller.register(self.socket, zmq.POLLIN)
         self.poll_timeout = poll_timeout
 
@@ -336,7 +343,8 @@ class AsyncPollingZMQServer(AsyncZMQServer):
                                                                                                                 instruction[4]))
                             instructions.append(instruction)
             if len(instructions) > 0:
-                break
+                self._instructions.extend(instructions)
+                self._executor_thread_event.set()
         return instructions
 
     def stop_polling(self) -> None:
