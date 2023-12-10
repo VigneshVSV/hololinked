@@ -6,6 +6,8 @@ import re
 import asyncio
 import inspect
 import typing
+import builtins
+import types
 from typing import List
 from ..param.exceptions import wrap_error_text as wrap_text
 
@@ -209,13 +211,15 @@ def get_signature(function : typing.Callable):
 
 
 
-def raise_local_exception(exception : typing.Dict[str, typing.Any], caller : str):
-    exception = getattr(__builtins__, exception["name"], None)
-    message = f"{caller} raised exception, check notes for traceback."
-    if exception is None:
+def raise_local_exception(exception : typing.Dict[str, typing.Any]):
+    exc = getattr(builtins, exception["type"], None)
+    message = f"server raised exception, check following for server side traceback & above for client side traceback : "
+    # tb = types.TracebackType()
+    if exc is None:
         E = Exception(message)
     else: 
-        E = exception(message)
+        E = exc(message)
+    # E.with_traceback()
     E.__notes__ = exception["traceback"]
     raise E 
     

@@ -332,7 +332,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
                         doc="returns a dictionary with two fields " ) # type: ignore
     httpserver_resources = RemoteParameter(readonly=True, URL_path='/resources/http', 
                         doc="""""" ) # type: ignore
-    proxy_resources = RemoteParameter(readonly=True, URL_path='/resources/proxy', 
+    proxy_resources = RemoteParameter(readonly=True, URL_path='/resources/object-proxy', 
                         doc= """object's resources exposed to ProxyClient, similar to http_resources but differs 
                         in details.""") # type: ignore
     
@@ -462,7 +462,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
             resource._owner = self
             resource.full_URL_path_prefix = self.full_URL_path_prefix
             resource.publisher = self._event_publisher                
-            httpserver_resources[GET]['{}/event{}'.format(
+            httpserver_resources[GET]['{}{}'.format(
                         self.full_URL_path_prefix, resource.URL_path)] = HTTPServerEventData(
                                                             # event URL_path has '/' prefix
                                                             what=EVENT,
@@ -491,7 +491,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
                         parameter.event._owner = self 
                         parameter.event.full_URL_path_prefix = self.full_URL_path_prefix
                         parameter.event.publisher = self._event_publisher         
-                        httpserver_resources[GET]['{}/event{}'.format(
+                        httpserver_resources[GET]['{}{}'.format(
                                         self.full_URL_path_prefix, parameter.event.URL_path)] = HTTPServerEventData(
                                                         what=EVENT, 
                                                         event_name=parameter.event.name,
@@ -658,6 +658,7 @@ class RemoteObject(RemoteSubobject):
     def _prepare_message_brokers(self):
         self.message_broker = AsyncPollingZMQServer(
                                 instance_name=self.instance_name, 
+                                executor_thread_event=threading.Event(),
                                 server_type=self.__server_type__,
                                 protocols=self.server_protocols, json_serializer=self.json_serializer,
                                 proxy_serializer=self.proxy_serializer

@@ -195,7 +195,8 @@ class ProxyResourceData:
     Used by Proxy objects to fill attributes & methods in a proxy class.   
     """
     what : str 
-    instruction : str 
+    instruction : str
+    # below are all dunders, when something else is added, be careful to remember to edit ObjectProxy logic when necessary
     module : typing.Union[str, None]
     name : str
     qualname : str
@@ -206,6 +207,8 @@ class ProxyResourceData:
     def json(self):
         return asdict(self)
     
+    def get_dunder_attr(self, __dunder_name : str):
+        return getattr(self, __dunder_name.strip('_'))
 
 @dataclass
 class GUIResources:

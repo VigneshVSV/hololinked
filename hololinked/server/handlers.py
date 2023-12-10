@@ -105,7 +105,7 @@ class BaseRequestHandler(RequestHandler):
             })
             
     async def handle_instruction(self, info : HTTPServerResourceData, path_arguments : typing.Optional[typing.Dict] = None) -> None:
-        self.set_status(202)
+        self.set_status(200)
         self.add_header("Access-Control-Allow-Origin", self.client_address)
         self.set_header("Content-Type" , "application/json")  
         try:

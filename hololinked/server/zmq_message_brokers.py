@@ -9,7 +9,8 @@ from enum import Enum
 from typing import Union, List, Any, Dict, Sequence, Iterator, Set
 
 
-from .utils import current_datetime_ms_str, create_default_logger, run_coro_somehow, run_coro_sync, wrap_text
+from .utils import (current_datetime_ms_str, create_default_logger, run_coro_somehow, run_coro_sync, wrap_text,
+        raise_local_exception)
 from .config import global_config
 from .serializers import (JSONSerializer, PickleSerializer, BaseSerializer, SerpentSerializer, # DillSerializer, 
                           serializers)
@@ -152,7 +153,7 @@ class BaseZMQServer(BaseZMQ):
                 if client_type == PROXY:
                     message[5] = self.proxy_serializer.loads(message[5]) # type: ignore
                     message[6] = self.proxy_serializer.loads(message[6]) # type: ignore
-                    message[7] = self.proxy_serializer.loads(message[6]) # type: ignore
+                    message[7] = self.proxy_serializer.loads(message[7]) # type: ignore
                 elif client_type == HTTP_SERVER:
                     message[5] = self.json_serializer.loads(message[5]) # type: ignore
                     message[6] = self.json_serializer.loads(message[6]) # type: ignore
@@ -557,7 +558,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                 handshake : bool = True, protocol : str = "IPC", context : Union[zmq.asyncio.Context, None] = None, 
                 **serializer) -> None:
         BaseZMQClient.__init__(self, server_address =  bytes(server_instance_name, encoding='utf-8'),
-                            server_instance_name = server_instance_name, client_type = client_type, **serializer)
+                            server_instance_name=server_instance_name, client_type=client_type, **serializer)
         BaseSyncZMQ.__init__(self)
         self.create_socket(context or zmq.Context(), server_instance_name, identity)
         self._terminate_context = context == None
@@ -577,9 +578,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             if reply:
                 self.logger.debug("received reply with msg-id {}".format(reply[3]))
                 if reply[5].get('exception', None) is not None and raise_client_side_exception:
-                    exc_info = reply[5]['exception']
-                    raise Exception("traceback : {},\nmessage : {},\ntype : {}".format('\n'.join(exc_info["traceback"]),
-                                    exc_info['message'], exc_info["type"]))
+                    raise_local_exception(reply[5]['exception'])
                 return reply
                 
     def execute(self, instruction : str, arguments : Dict[str, Any] = EMPTY_DICT, context : Dict[str, Any] = EMPTY_DICT,
@@ -1001,7 +1000,7 @@ class Event:
     def publisher(self, value : "EventPublisher") -> None:
         if not hasattr(self, '_publisher'):
             self._publisher = value
-            self._event_unique_str = bytes(f"{self.full_URL_path_prefix}/event{self.URL_path}", encoding='utf-8')
+            self._event_unique_str = bytes(f"{self.full_URL_path_prefix}{self.URL_path}", encoding='utf-8')
             self._publisher.register_event(self)
         else:
             raise AttributeError("cannot reassign publisher attribute of event {}".format(self.name)) 

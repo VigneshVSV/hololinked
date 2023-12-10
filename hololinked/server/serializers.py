@@ -256,7 +256,7 @@ serializers = {
     'pickle'  : PickleSerializer,
     # 'dill'    : DillSerializer, 
     'JSON'    : JSONSerializer, 
-    'Serpent' : SerpentSerializer,
+    'serpent' : SerpentSerializer,
     None      : SerpentSerializer
 }
 
