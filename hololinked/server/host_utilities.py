@@ -101,7 +101,7 @@ class ReactClientUtilities(BaseAsyncDB, RemoteObject):
                 return True
         return False 
     
-    @post("/app/settings")
+    @post("/app/settings/new")
     async def create_app_setting(self, field : str, value : typing.Any):
         async with self.async_session() as session, session.begin():
             session.add(self.appsettings(
@@ -111,7 +111,7 @@ class ReactClientUtilities(BaseAsyncDB, RemoteObject):
             )
             session.commit()
 
-    @put("/app/settings")
+    @post("/app/settings/edit")
     async def edit_app_setting(self, field : str, value : typing.Any):
         async with self.async_session() as session, session.begin():
             stmt = select(self.appsettings).filter_by(field = field)
@@ -121,7 +121,7 @@ class ReactClientUtilities(BaseAsyncDB, RemoteObject):
             session.commit()
             return setting
 
-    @get('/app/settings')
+    @get('/app/settings/all')
     async def all_app_settings(self):
         async with self.async_session() as session:
             stmt = select(self.appsettings)
@@ -129,7 +129,7 @@ class ReactClientUtilities(BaseAsyncDB, RemoteObject):
             return {result[self.appsettings.__name__].field : result[self.appsettings.__name__].value["value"] 
                     for result in data.mappings().all()}
         
-    @get('/app')
+    @get('/app/info/all')
     async def all_app_settings(self):
         async with self.async_session() as session:
             stmt = select(self.appsettings)
@@ -139,7 +139,7 @@ class ReactClientUtilities(BaseAsyncDB, RemoteObject):
                     for result in data.mappings().all()}
             }
 
-    @post('/dashboards')
+    @post('/dashboards/add')
     async def add_dashboards(self, name : str, URL : str, description : str):
         async with self.async_session() as session, session.begin():
             session.add(self.dashboards(
@@ -149,7 +149,7 @@ class ReactClientUtilities(BaseAsyncDB, RemoteObject):
             ))
             await session.commit()
 
-    @get('/dashboards')
+    @get('/dashboards/list')
     async def query_pages(self):
         async with self.async_session() as session:
             stmt = select(self.dashboards)
@@ -222,7 +222,7 @@ class HTTPServerUtilities(BaseAsyncDB, RemoteObject):
         self.remote_object_info = remote_object_info
         self._uninstantiated_remote_objects : typing.Dict[str, UninstantiatedRemoteObject] = {}
         
-    @post('/subscribers')
+    @post('/subscribe')
     async def subscribe_to_host(self, host : str, port : int):
         client = AsyncHTTPClient()
         try:
