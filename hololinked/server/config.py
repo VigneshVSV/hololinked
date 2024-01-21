@@ -33,7 +33,9 @@ from . import __version__
 class Configuration:
 
     __slots__ = [
-        "APPDATA_DIR", "PRIMARY_HOST", "LOCALHOST_PORT"
+        "APPDATA_DIR", "PRIMARY_HOST", "LOCALHOST_PORT",
+        "DB_CONFIG_FILE", "COOKIE_SECRET",
+        "PWD_HASHER_TIME_COST", "PWD_HASHER_MEMORY_COST"
     ]
 
     def __init__(self):

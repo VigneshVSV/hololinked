@@ -12,7 +12,8 @@ from tornado.httputil import HTTPServerRequest
 from time import perf_counter
 
 from ..param import Parameterized
-from ..param.parameters import Integer, IPAddress, ClassSelector, Selector, TypedList, Boolean, String
+from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector, 
+                    TypedList, Boolean, String)
 
 
 from .utils import create_default_logger
@@ -20,7 +21,7 @@ from .decorators import get, put, post, delete, remote_method
 from .data_classes import HTTPServerResourceData
 from .serializers import JSONSerializer
 from .constants import GET, PUT, POST, OPTIONS, DELETE, USE_OBJECT_NAME, CALLABLE
-from .webserver_utils import log_resources, log_request, update_resources
+from .webserver_utils import log_request, update_resources
 from .zmq_message_brokers import MessageMappedZMQClientPool
 from .handlers import (BaseRequestHandler, GetResource, PutResource, OptionsResource, 
                        PostResource, DeleteResource, FileHandlerResource)
@@ -273,7 +274,7 @@ async def _setup_server(address : str, port : int, logger : logging.Logger, subs
     #     S = TornadoHTTP2Server(Router, ssl_options=ssl_context)
     # else: 
     S = TornadoHTTP1Server(Router, ssl_options=ssl_context)    
-    S.listen(port = port, address = address) 
+    S.listen(port=port, address=address) 
 
 
 __all__ = ['HTTPServer']

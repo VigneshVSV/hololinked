@@ -1,16 +1,25 @@
+import secrets
+import os 
+import base64
 import socket
 import json
 import asyncio
+import ssl
 import typing
 from dataclasses import dataclass, asdict, field
+from typing import Any
 
-from sqlalchemy import Integer, String, JSON, ARRAY, Boolean
+from sqlalchemy import Engine, Integer, String, JSON, ARRAY, Boolean
 from sqlalchemy import select, create_engine
-from sqlalchemy.orm import Session
-from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase
+from sqlalchemy.orm import Session, sessionmaker, Mapped, mapped_column, DeclarativeBase
+from sqlalchemy_utils import database_exists, create_database, drop_database
+from sqlalchemy.ext import asyncio as asyncio_ext
 from argon2 import PasswordHasher
-from tornado.httputil import HTTPServerRequest
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+from tornado.web import RequestHandler, Application, authenticated
+from tornado.escape import json_decode, json_encode
+from tornado.httpserver import HTTPServer as TornadoHTTP1Server
+
 
 from .serializers import JSONSerializer
 from .remote_parameters import TypedList
@@ -20,7 +29,7 @@ from .utils import unique_id
 from .decorators import post, get, put, delete
 from .eventloop import Consumer, EventLoop, fork_empty_eventloop
 from .remote_object import RemoteObject, RemoteObjectDB, RemoteObjectMetaclass
-from .database import BaseAsyncDB
+from .database import BaseAsyncDB, create_DB_URL
 
 
 SERVER_INSTANCE_NAME = 'server-util'
@@ -45,117 +54,346 @@ CLIENT_HOST_INSTANCE_NAME = 'dashboard-util'
 # */
 
 
-class ReactClientUtilities(BaseAsyncDB, RemoteObject): 
 
-    class TableBase(DeclarativeBase):
-        pass 
+global_engine : typing.Optional[Engine] = None
+global_session : typing.Optional[Session] = None
+
+
+
+class TableBase(DeclarativeBase):
+    pass 
     
-    class dashboards(TableBase):
-        __tablename__ = "dashboards"
+class Dashboards(TableBase):
+    __tablename__ = "dashboards"
 
-        name : Mapped[str] = mapped_column(String(1024), primary_key = True)
-        URL  : Mapped[str] = mapped_column(String(1024), unique = True)
-        description : Mapped[str] = mapped_column(String(16384))
+    name : Mapped[str] = mapped_column(String(1024), primary_key=True)
+    URL  : Mapped[str] = mapped_column(String(1024), unique=True)
+    description : Mapped[str] = mapped_column(String(16384))
+    json_specfication : Mapped[typing.Dict[str, typing.Any]] = mapped_column(JSON)
 
-        def json(self):
-            return {
-                "name" : self.name, 
-                "URL"  : self.URL, 
-                "description" : self.description
-            }
+    def json(self):
+        return {
+            "name" : self.name, 
+            "URL"  : self.URL, 
+            "description" : self.description,
+            "json" : self.json_specfication
+        }
 
-    class appsettings(TableBase):
-        __tablename__ = "appsettings"
+class AppSettings(TableBase):
+    __tablename__ = "appsettings"
 
-        field : Mapped[str] = mapped_column(String(8192), primary_key = True)
-        value : Mapped[typing.Dict[str, typing.Any]] = mapped_column(JSON)
+    field : Mapped[str] = mapped_column(String(8192), primary_key=True)
+    value : Mapped[typing.Dict[str, typing.Any]] = mapped_column(JSON)
 
-        def json(self):
-            return {
-                "field" : self.field, 
-                "value" : self.value
-            }
+    def json(self):
+        return {
+            "field" : self.field, 
+            "value" : self.value
+        }
 
-    class login_credentials(TableBase):
-        __tablename__ = "login_credentials"
+class LoginCredentials(TableBase):
+    __tablename__ = "login_credentials"
 
-        username : Mapped[str] = mapped_column(String(1024), primary_key = True)
-        password : Mapped[str] = mapped_column(String(1024), unique = True)
+    email : Mapped[str] = mapped_column(String(1024), primary_key=True)
+    password : Mapped[str] = mapped_column(String(1024), unique=True)
 
-    def __init__(self, db_config_file : str, **kwargs) -> None:
-        RemoteObject.__init__(self, **kwargs)
-        BaseAsyncDB.__init__(self, database='scadapyclient', serializer=self.json_serializer, 
-                            config_file=db_config_file)
+class Server(TableBase):
+    __tablename__ = "http_servers"
 
-    @post('/user/add')
-    async def add_user(self, username : str, password : str):
-        pass 
+    hostname : Mapped[str] = mapped_column(String, primary_key=True)
+    type : Mapped[str] = mapped_column(String)
+    port : Mapped[int] = mapped_column(Integer)
+    IPAddress : Mapped[str] = mapped_column(String)
+    remote_objects : Mapped[typing.List[str]] = mapped_column(ARRAY(String))
 
-    @post('/login')
-    async def login(self, username : str, password : str):
-        async with self.async_session() as session: 
-            ph = PasswordHasher(time_cost = 500, memory_cost = 2)
-            stmt = select(self.login_credentials).filter_by(username = username)
-            data = await session.execute(stmt)
-            if data["password"] == ph.hash(password):
-                return True
-        return False 
-    
-    @post("/app/settings/new")
-    async def create_app_setting(self, field : str, value : typing.Any):
-        async with self.async_session() as session, session.begin():
-            session.add(self.appsettings(
-                    field = field, 
-                    value = {"value" : value}
-                )
-            )
-            session.commit()
 
-    @post("/app/settings/edit")
-    async def edit_app_setting(self, field : str, value : typing.Any):
-        async with self.async_session() as session, session.begin():
-            stmt = select(self.appsettings).filter_by(field = field)
-            data = await session.execute(stmt)
-            setting = data.scalar()
-            setting.value = {"value" : value}
-            session.commit()
-            return setting
+def for_authenticated_user(method):
+    def authenticated_method(self : RequestHandler):
+        if not self.current_user:
+            self.set_status(403)
+            self.set_header("Access-Control-Allow-Origin", "https://127.0.0.1:5173")
+            self.finish()
+            return
+        else:
+            print("current user is : ", self.current_user)
+        return method(self)
+    return authenticated_method
 
-    @get('/app/settings/all')
-    async def all_app_settings(self):
-        async with self.async_session() as session:
-            stmt = select(self.appsettings)
-            data = await session.execute(stmt)
-            return {result[self.appsettings.__name__].field : result[self.appsettings.__name__].value["value"] 
-                    for result in data.mappings().all()}
+
+class PrimaryHostHandler(RequestHandler):
+
+    def check_headers(self):
+        content_type = self.request.headers.get("Content-Type", None)
+        if content_type and content_type != "application/json":
+            self.set_status(500)
+            self.write({ "error" : "request body is not JSON." })
+            self.finish()
+
+    def get_current_user(self) -> Any:
+        return self.get_signed_cookie('user')
         
-    @get('/app/info/all')
-    async def all_app_settings(self):
-        async with self.async_session() as session:
-            stmt = select(self.appsettings)
-            data = await session.execute(stmt)
-            return {
-                "appsettings" : {result[self.appsettings.__name__].field : result[self.appsettings.__name__].value["value"] 
-                    for result in data.mappings().all()}
+    def set_default_headers(self) -> None:
+        return super().set_default_headers()
+        
+    async def options(self):
+        self.set_status(200)
+        self.set_header("Access-Control-Allow-Origin", "https://127.0.0.1:5173")
+        self.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.set_header("Access-Control-Allow-Headers", "*")
+        self.finish()
+
+
+class UsersHandler(PrimaryHostHandler):
+
+    async def post(self):
+        self.set_status(200)
+        self.finish() 
+
+    async def get(self):
+        self.set_status(200)
+        self.finish()
+
+    
+class LoginHandler(PrimaryHostHandler):
+
+    async def post(self):
+        self.check_headers()
+        try:
+            body = json_decode(self.request.body)
+            email = body["email"]
+            password = body["password"]
+            async with global_session() as session: 
+                stmt = select(LoginCredentials).filter_by(email=email)
+                data = await session.execute(stmt)
+                data : LoginCredentials = data.scalars().all()
+            if len(data) == 0:
+                self.set_status(403, "authentication failed")
+                self.write({"reason" : "no username found"})        
+            else:
+                ph = PasswordHasher(time_cost=500)
+                if ph.verify(data[0].password, password):
+                    self.set_status(200)
+                    self.set_signed_cookie("user", email)
+                else:
+                    self.set_status(403, "authentication failed")
+                    self.write({"reason" : ""})
+        except Exception as ex:
+            self.set_status(500, str(ex))
+        self.set_header("Access-Control-Allow-Origin", "https://127.0.0.1:5173")
+        self.finish()
+
+    async def options(self):
+        self.set_status(200)
+        self.set_header("Access-Control-Allow-Origin", "https://127.0.0.1:5173")
+        self.set_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.set_header("Access-Control-Allow-Headers", "*")
+        self.set_header("Access-Control-Allow-Credentials", True)
+        self.finish()
+    
+
+class AppSettingsHandler(PrimaryHostHandler):
+
+    @for_authenticated_user
+    async def post(self):
+        self.check_headers()
+        try:
+            value = json_decode(self.request.body["value"])
+            async with global_session() as session, session.begin():
+                session.add(AppSettings(
+                        field = field, 
+                        value = {"value" : value}
+                    )
+                )
+                await session.commit()
+            self.set_status(200)
+        except Exception as ex:
+            self.set_status(500)
+        self.finish()
+
+    @for_authenticated_user
+    async def patch(self):
+        self.check_headers()
+        try:
+            value = json_decode(self.request.body)
+            field = value["field"]
+            value = value["value"]
+            async with global_session() as session, session.begin():
+                stmt = select(AppSettings).filter_by(field = field)
+                data = await session.execute(stmt)
+                setting : AppSettings = data.scalar()
+                setting.value = {"value" : value}
+                await session.commit()
+            self.set_status(200)
+        except Exception as ex:
+            self.set_status(500)
+        self.finish()
+
+    @for_authenticated_user
+    async def get(self):
+        self.check_headers()
+        try:
+            async with global_session() as session:
+                stmt = select(AppSettings)
+                data = await session.execute(stmt)
+                serialized_data = json_encode({result[AppSettings.__name__].field : result[AppSettings.__name__].value["value"] 
+                    for result in data.mappings().all()})
+            self.set_status(200)
+            self.set_header("Content-Type", "application/json")
+            self.write(serialized_data)            
+        except Exception as ex:
+            self.set_status(500, str(ex))
+        self.finish()
+
+    
+class DashboardsHandler(PrimaryHostHandler):
+
+    @for_authenticated_user
+    async def post(self):
+        self.check_headers()
+        try:
+            data = json_decode(self.request.body)
+            async with global_session() as session, session.begin():
+                session.add(Dashboards(**data))
+                await session.commit()
+            self.set_status(200)
+            self.set_header("Access-Control-Allow-Origin", "https://127.0.0.1:5173")
+        except Exception as ex:
+            self.set_status(500, str(ex))
+        self.finish()
+
+    @for_authenticated_user
+    async def get(self):
+        self.check_headers()
+        try:
+            async with global_session() as session:
+                stmt = select(Dashboards)
+                data = await session.execute(stmt)
+                serialized_data = json_encode([result[Dashboards.__name__]._json() for result 
+                                               in data.mappings().all()])           
+            self.set_status(200)
+            self.set_header("Content-Type", "application/json")
+            self.set_header("Access-Control-Allow-Origin", "https://127.0.0.1:5173")
+            self.write(serialized_data)
+        except Exception as ex:
+            self.set_status(500, str(ex))
+        self.finish()
+
+
+class SubscribersHandler(PrimaryHostHandler):
+
+    @for_authenticated_user
+    async def post(self):
+        if self.request.headers["Content-Type"] == "application/json":
+            self.set_status(200)
+            server = SubscribedHTTPServers(**json_decode(self.request.body))
+            async with global_session() as session, session.begin():
+                session.add(server)
+                await session.commit()
+            self.finish()
+
+    @for_authenticated_user
+    async def get(self):
+        self.set_status(200)
+        self.set_header("Content-Type", "application/json")
+        async with global_session() as session:
+            result = select(Server)
+            self.write(json_encode(result.scalars().all()))
+
+
+class MainHandler(PrimaryHostHandler):
+
+    async def get(self):
+        self.check_headers()
+        self.set_status(200)
+        self.set_header("Access-Control-Allow-Origin", "https://127.0.0.1:5173")
+        self.write("<p>I am alive!!!<p>")
+        self.finish()
+
+
+def create_primary_host(config_file : str, ssl_context : ssl.SSLContext, **server_settings) -> TornadoHTTP1Server:
+    URL = f"{create_DB_URL(config_file)}/hololinked-host"
+    if not database_exists(URL): 
+        try:
+            create_database(URL)
+            sync_engine = create_engine(URL)
+            TableBase.metadata.create_all(sync_engine)
+            create_tables(sync_engine)
+            create_credentials(sync_engine)
+        except Exception as ex:
+            drop_database(URL)
+            raise ex from None
+
+    global global_engine, global_session
+    URL = f"{create_DB_URL(config_file, True)}/hololinked-host"
+    global_engine = asyncio_ext.create_async_engine(URL, echo=True)
+    global_session = sessionmaker(global_engine, expire_on_commit=True, 
+                                    class_=asyncio_ext.AsyncSession) # type: ignore
+
+    app = Application([
+        (r"/", MainHandler),
+        (r"/users", UsersHandler),
+        (r"/dashboards", DashboardsHandler),
+        (r"/settings", AppSettingsHandler),
+        (r"/subscribers", SubscribersHandler),
+        (r"/login", LoginHandler)
+    ], cookie_secret=base64.b64encode(os.urandom(32)).decode('utf-8') , **server_settings)
+    return TornadoHTTP1Server(app, ssl_options=ssl_context)
+ 
+
+
+def create_tables(engine):
+    with Session(engine) as session, session.begin():
+        # Pages
+        session.add(AppSettings(
+            field = 'dashboards',
+            value =  {
+                'deleteWithoutAsking' : True,
+                'showRecentlyUsed' : True}
+        ))
+    
+        # login page
+        session.add(AppSettings(
+            field = 'login',
+            value =  {
+                'footer' : '',
+                'footerLink' : '',
+                'displayFooter' : True
             }
+        ))
+     
+        # server
+        session.add(AppSettings(
+            field = 'servers',
+            value =  {
+                'allowHTTP' : False
+            }            
+        ))
 
-    @post('/dashboards/add')
-    async def add_dashboards(self, name : str, URL : str, description : str):
-        async with self.async_session() as session, session.begin():
-            session.add(self.dashboards(
-                name = name, 
-                URL = URL, 
-                description = description
-            ))
-            await session.commit()
+        # remote object wizard 
+        session.add(AppSettings(
+            field = 'remoteObjectViewer' ,
+            value =  {
+                'stringifyConsoleOutput' : False,
+                'consoleDefaultMaxEntries' : 15,
+                'consoleDefaultWindowSize' : 500, 
+                'consoleDefaultFontSize' : 16,
+                'stringifyLogViewerOutput' : False,
+                'logViewerDefaultMaxEntries' : 10,
+                'logViewerDefaultOutputWindowSize' : 1000,
+                'logViewerDefaultFontSize' : 16
+            }
+        ))
+    session.commit()
 
-    @get('/dashboards/list')
-    async def query_pages(self):
-        async with self.async_session() as session:
-            stmt = select(self.dashboards)
-            data = await session.execute(stmt)
-            return [result[self.dashboards.__name__] for result in data.mappings().all()]           
+def create_credentials(sync_engine):
+    print("Requested primary host seems to use a new database. Give username and password (not for database server, but for client logins from hololinked-portal) : ")
+    email = input("email-id (not collected anywhere else excepted your own database) : ")
+    password = input("password : ")
 
+    with Session(sync_engine) as session, session.begin():
+        ph = PasswordHasher(time_cost=500)
+        session.add(LoginCredentials(email=email, password=ph.hash(password)))
+    session.commit()
 
 
 @dataclass 
@@ -354,147 +592,13 @@ class PCHostUtilities(HTTPServerUtilities):
             https=False
         )
 
-    @post('/subscription')
-    def subscription(self, hostname : str, port : int, type : str, https : bool, *, request : HTTPServerRequest):
-        server = SubscribedHTTPServers(
-            hostname=hostname,
-            IPAddress=request.remote_ip,
-            port=port,
-            type=type,
-            https=https
-        )
-        self.subscribers.append(server)
-     
-    @get('/subscribers')
-    def get_subscribers(self):
-        return {"subscribers" : self.subscribers + [self.own_info]} 
-    
-    @post('/starter/run')
-    async def starter(self):
-        pass
 
-
-class PrimaryHostUtilities(PCHostUtilities):
-
-    type : str = 'PRIMARY_HOST'
-
-    class TableBase(DeclarativeBase):
-        pass 
-
-    class http_server(TableBase):
-        __tablename__ = "http_servers"
-
-        hostname : Mapped[str] = mapped_column(String, primary_key = True)
-        type    : Mapped[str] = mapped_column(String)
-        port    : Mapped[int] = mapped_column(Integer)
-        IPAddress : Mapped[str] = mapped_column(String)
-        remote_objects : Mapped[typing.List[str]] = mapped_column(ARRAY(String))
-
-    def __init__(self, db_config_file : str, server_network_interface : str, port : int, **kwargs) -> None:
-        super().__init__(db_config_file = db_config_file, server_network_interface = server_network_interface, 
-                            port = port, **kwargs)
-        self.own_info = SubscribedHTTPServers(
-            hostname = socket.gethostname(),
-            IPAddress = get_IP_from_interface(server_network_interface), 
-            port =  port, 
-            type = self.type,
-            https=False
-        )
-    
-# remote_object_info = [dict(
-#     instance_name = 'server-util',
-#     **self.class_info() 
-# ),
-# dict(
-#     instance_name = 'dashboard-util',
-#     classname = ReactClientUtilities.__name__, 
-#     script =  os.path.dirname(os.path.abspath(inspect.getfile(ReactClientUtilities)))
-# )],
-
-# remote_object_info = [dict(
-#     instance_name = 'server-util',
-#     **self.class_info() 
-# )],
-
-
-   
 def create_server_tables(serverDB):
     engine = create_engine(serverDB)
     PrimaryHostUtilities.TableBase.metadata.create_all(engine)
     RemoteObjectDB.TableBase.metadata.create_all(engine)
     engine.dispose()
 
-def create_client_tables(clientDB):
-    engine = create_engine(clientDB)
-    ReactClientUtilities.TableBase.metadata.create_all(engine)
-    with Session(engine) as session, session.begin():
-        # Pages
-        session.add(ReactClientUtilities.appsettings(
-            field = 'dashboardsDeleteWithoutAsking',
-            value =  {'value' : True}
-        ))
-        session.add(ReactClientUtilities.appsettings(
-            field = 'dashboardsShowRecentlyUsed',
-            value =  {'value' : True}
-        ))
-
-        # login page
-        session.add(ReactClientUtilities.appsettings(
-            field = 'loginFooter',
-            value =  {'value' : ''}
-        ))
-        session.add(ReactClientUtilities.appsettings(
-            field = 'loginFooterLink',
-            value =  {'value' : ''}
-        ))
-        session.add(ReactClientUtilities.appsettings(
-            field = 'loginDisplayFooter',
-            value =  {'value' : True}
-        ))
-
-        # server
-        session.add(ReactClientUtilities.appsettings(
-            field = 'serversAllowHTTP',
-            value =  {'value' : False}
-        ))
-
-        # remote object wizard 
-        session.add(ReactClientUtilities.appsettings(
-            field = 'remoteObjectViewerConsoleStringifyOutput',
-            value =  {'value' : False}
-        ))
-        session.add(ReactClientUtilities.appsettings(
-            field = 'remoteObjectViewerConsoleDefaultMaxEntries',
-            value =  {'value' : 15}
-        ))
-        session.add(ReactClientUtilities.appsettings(
-            field = 'remoteObjectViewerConsoleDefaultWindowSize',
-            value =  {'value' : 500}
-        ))
-        session.add(ReactClientUtilities.appsettings(
-            field = 'remoteObjectViewerConsoleDefaultFontSize',
-            value =  {'value' : 16}
-        ))
-
-        session.add(ReactClientUtilities.appsettings(
-            field = 'logViewerStringifyOutput',
-            value =  {'value' : False}
-        ))
-        session.add(ReactClientUtilities.appsettings(
-            field = 'logViewerDefaultMaxEntries',
-            value =  {'value' : 10}
-        ))
-        session.add(ReactClientUtilities.appsettings(
-            field = 'logViewerDefaultOutputWindowSize',
-            value =  {'value' : 1000}
-        ))
-        session.add(ReactClientUtilities.appsettings(
-            field = 'logViewerDefaultFontSize',
-            value =  {'value' : 16}
-        ))
-
-        session.commit()
-    engine.dispose()
 
 
-__all__ = ['ReactClientUtilities']
+__all__ = ['create_primary_host']
