@@ -69,7 +69,7 @@ if float('.'.join(platform.python_version().split('.')[0:2])) > 3.10:
     __use_slots_for_dataclass = True
 
 
-@dataclass(frozen=True, slots=__use_slots_for_dataclass)
+@dataclass# (frozen=True, slots=__use_slots_for_dataclass)
 class ScadaInfoData:
     """
     This container class is created by the RemoteObject instance because descriptors (used by ScadaInfoValidator) 
@@ -115,10 +115,10 @@ class HTTPServerResourceData:
     what : str 
     instance_name : str 
     instruction : str
-    http_request_as_argument : bool = field( default = False )
-    path_format : typing.Optional[str] = field( default=None ) 
-    path_regex : typing.Optional[typing.Pattern] = field( default = None )
-    param_convertors : typing.Optional[typing.Dict] = field( default = None )
+    http_request_as_argument : bool = field(default=False)
+    path_format : typing.Optional[str] = field(default=None) 
+    path_regex : typing.Optional[typing.Pattern] = field(default=None)
+    param_convertors : typing.Optional[typing.Dict] = field( default=None)
     
     def __init__(self, *, what : str, instance_name : str, fullpath : str, instruction : str, 
                     http_request_as_argument : bool = False) -> None:
@@ -173,7 +173,7 @@ class FileServerData:
             self.param_convertors = param_convertors
     
 
-@dataclass(frozen = True)
+@dataclass
 class HTTPServerEventData:
     """
     Used by the HTTPServer instance to subscribe to events published by RemoteObject at a certain address. 
@@ -189,8 +189,8 @@ class HTTPServerEventData:
    
 
 
-@dataclass(frozen = True)
-class ProxyResourceData:
+@dataclass
+class RPCResourceData:
     """
     Used by Proxy objects to fill attributes & methods in a proxy class.   
     """
@@ -209,6 +209,13 @@ class ProxyResourceData:
     
     def get_dunder_attr(self, __dunder_name : str):
         return getattr(self, __dunder_name.strip('_'))
+
+    def __getstate__(self):
+        return self.json()
+    
+    def __setstate__(self, values):
+        for key, value in values.items():
+            setattr(self, key, value)
 
 @dataclass
 class GUIResources:

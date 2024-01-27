@@ -22,15 +22,15 @@ class ObjectProxy:
         'instance_name', 'logger', 'timeout', '_timeout', 
     ])
 
-    def __init__(self, instance_name : str, timeout : float = 5, load_remote_object = True, **kwargs) -> None:
+    def __init__(self, instance_name : str, timeout : float = 5, load_remote_object = True, protocol : str = 'TCP', **serializer) -> None:
         self.instance_name = instance_name
-        self._client_ID = instance_name+current_datetime_ms_str()
+        self._client_ID = instance_name + current_datetime_ms_str()
         self.logger = logging.Logger(self._client_ID)
         self.timeout = timeout
         # compose ZMQ client in Proxy client so that all sending and receiving is
         # done by the ZMQ client and not by the Proxy client directly. Proxy client only 
         # bothers mainly about __setattr__ and _getattr__
-        self._client = SyncZMQClient(instance_name, self._client_ID, client_type=PROXY, **kwargs)
+        self._client = SyncZMQClient(instance_name, self._client_ID, client_type=PROXY, **serializer)
         if load_remote_object:
             self.load_remote_object()
 
@@ -192,7 +192,10 @@ class ObjectProxy:
         reply : SingleLevelNestedJSON = fetch()[5]["returnValue"]
 
         for name, data in reply.items():
-            data = ProxyResourceData(**data)
+            if isinstance(data, dict):
+                data = ProxyResourceData(**data)
+            elif not isinstance(data, ProxyResourceData):
+                raise RuntimeError("Logic error - unpickled info about server not instance of ProxyResourceData")
             if data.what == CALLABLE:
                 _add_method(self, _RemoteMethod(self._client, data.instruction), data)
             elif data.what == ATTRIBUTE:

@@ -24,7 +24,7 @@ from .constants import (EVENT, GET, IMAGE_STREAM, JSONSerializable, instance_nam
 from .serializers import *
 from .exceptions import BreakInnerLoop
 from .decorators import get, post, remote_method
-from .data_classes import (GUIResources, HTTPServerEventData, HTTPServerResourceData, ProxyResourceData, 
+from .data_classes import (GUIResources, HTTPServerEventData, HTTPServerResourceData, RPCResourceData, 
                             HTTPServerResourceData, FileServerData, ScadaInfoData, 
                             ScadaInfoValidator)
 from .api_platform_utils import postman_item, postman_itemgroup
@@ -181,8 +181,8 @@ class StateMachine:
                     """.format(value, self.states)
             ))
     
-    current_state = property(get_state, set_state, None, doc = """
-        read and write current state of the state machine""")
+    current_state = property(get_state, set_state, None, 
+        doc = """read and write current state of the state machine""")
 
     def query(self, info : typing.Union[str, typing.List[str]] ) -> typing.Any:
         raise NotImplementedError("arbitrary quering of {} not possible".format(self.__class__.__name__))
@@ -314,29 +314,52 @@ class RemoteObjectMetaclass(ParameterizedMetaclass):
         return mcs._param_container
     
 
-
-class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
+       
+class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass): 
     """
-    Subclass from here for remote capable sub objects composed within remote object instance. Does not support 
-    state machine, logger, serializers, dedicated message brokers etc. 
+    Expose your python classes for HTTP methods by subclassing from here. 
     """
+    __server_type__ = ServerTypes.REMOTE_OBJECT 
+    state_machine : StateMachine
 
-    instance_name = String(default=None, regex=instance_name_regex, constant = True,
-                        doc = """Unique string identifier of the instance used for many operations,
+    # objects given by user which we need to validate:
+    instance_name = String(default=None, regex=r'[A-Za-z]+[A-Za-z_0-9\-\/]*', constant=True,
+                        doc="""Unique string identifier of the instance. This value is used for many operations,
                         for example - creating zmq socket address, tables in databases, and to identify the instance 
-                        in the HTTP Server & scadapy.webdashboard client - 
+                        in the HTTP Server & webdashboard clients - 
                         (http(s)://{domain and sub domain}/{instance name}). It is suggested to use  
-                        the class name along with a unique name {class name}/{some name}. Instance names must be unique
+                        the class name along with a unique name {class name}/{some unique name}. Instance names must be unique
                         in your entire system.""") # type: ignore
-    events = RemoteParameter(readonly=True, URL_path='/events', 
+    logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, 
+                        doc = """Logger object to print log messages, should be instance of logging.Logger(). default 
+                        logger is created if none is supplied.""") # type: ignore
+    rpc_serializer = ClassSelector(class_=(SerpentSerializer, JSONSerializer, PickleSerializer, str), # DillSerializer, 
+                                default='json',  
+                                doc="""The serializer that will be used for passing messages in zmq. For custom data 
+                                    types which have serialization problems, you can subclass the serializers and implement 
+                                    your own serialization options. Recommended serializer for exchange messages between
+                                    Proxy clients and server is Serpent and for HTTP serializer and server is JSON.""") # type: ignore
+    json_serializer  = ClassSelector(class_=JSONSerializer, default=None, allow_None=True,
+                                doc = """Serializer used for sending messages between HTTP server and remote object,
+                                subclass JSONSerializer to implement undealt serialization options.""") # type: ignore
+    
+    # remote paramaters
+    object_info = RemoteParameter(readonly=True, URL_path='/object-info',
+                        doc="obtained information about this object like the class name, script location etc.") # type: ignore
+    events : typing.Dict = RemoteParameter(readonly=True, URL_path='/events', 
                         doc="returns a dictionary with two fields " ) # type: ignore
     httpserver_resources = RemoteParameter(readonly=True, URL_path='/resources/http', 
                         doc="""""" ) # type: ignore
-    proxy_resources = RemoteParameter(readonly=True, URL_path='/resources/object-proxy', 
+    rpc_resources = RemoteParameter(readonly=True, URL_path='/resources/object-proxy', 
                         doc= """object's resources exposed to ProxyClient, similar to http_resources but differs 
                         in details.""") # type: ignore
+    gui_resources : typing.Dict = RemoteParameter(readonly=True, URL_path='/resources/gui', 
+                        doc= """object's data read by scadapy webdashboard GUI client, similar to http_resources but differs 
+                        in details.""") # type: ignore
+    GUI = RemoteClassSelector(class_=ReactApp, default=None, allow_None=True, 
+                        doc= """GUI applied here will become visible at GUI tab of dashboard tool""")
     
-    
+
     def __new__(cls, **kwargs):
         """
         custom defined __new__ method to assign some important attributes at instance creation time directly instead of 
@@ -350,33 +373,45 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
         # objects created by us that require no validation but cannot be modified are called _internal_fixed_attributes
         obj._internal_fixed_attributes = ['_internal_fixed_attributes', 'instance_resources', '_owner']        
         # objects given by user which we need to validate (mostly descriptors)
-        obj.instance_name = kwargs.get('instance_name', None)
         return obj
+
+    def __init__(self, instance_name : str, logger : typing.Optional[logging.Logger] = None, log_level : typing.Optional[int] = None, 
+                log_file : typing.Optional[str] = None, logger_remote_access : bool = True, 
+                rpc_serializer : typing.Optional[BaseSerializer] = None, json_serializer : typing.Optional[JSONSerializer] = None,
+                server_protocols : typing.Optional[typing.Union[typing.List[ZMQ_PROTOCOLS], typing.Tuple[ZMQ_PROTOCOLS], ZMQ_PROTOCOLS]] = None, 
+                db_config_file : typing.Optional[str] = None) -> None:
+        super().__init__(instance_name=instance_name, logger=logger, 
+                        rpc_serializer=rpc_serializer, json_serializer=json_serializer)
+
+        # missing type definitions
+        self.instance_name : str
+        self.logger : logging.Logger 
+        self.db_engine : RemoteObjectDB
+        self.rpc_serializer : BaseSerializer
+        self.json_serializer : JSONSerializer
+        self.object_info : RemoteObjectDB.RemoteObjectInfo
+        self.events : typing.Dict
+        self.httpserver_resources : typing.Dict
+        self.rpc_resources : typing.Dict
+        self._eventloop_name : str 
+        self._owner : typing.Optional[RemoteObject]
+        self._internal_fixed_attributes : typing.List[str]
+
+        self._prepare_logger(log_file=log_file, log_level=log_level, remote_access=logger_remote_access)
+        self._prepare_message_brokers(server_protocols=server_protocols, rpc_serializer=rpc_serializer, 
+                                    json_serializer=json_serializer)
+        self._prepare_state_machine()  
+        self._prepare_DB(db_config_file)   
+
     
     def __post_init__(self):
-        self.instance_name : str
-        self.httpserver_resources : typing.Dict
-        self.proxy_resources : typing.Dict
-        self.events : typing.Dict
-        self._owner : typing.Optional[typing.Union[RemoteSubobject, RemoteObject]]
-        self._internal_fixed_attributes : typing.List[str]
-           
-    @property
-    def _event_publisher(self) -> EventPublisher:
-        try:
-            return self.event_publisher 
-        except AttributeError:
-            top_owner = self._owner 
-            while True:
-                if isinstance(top_owner, RemoteObject):
-                    self.event_publisher = top_owner.event_publisher
-                    return self.event_publisher
-                elif isinstance(top_owner, RemoteSubobject):
-                    top_owner = top_owner._owner
-                else:
-                    raise RuntimeError(wrap_text("""Error while finding owner of RemoteSubobject, 
-                        RemoteSubobject must be composed only within RemoteObject or RemoteSubobject, 
-                        otherwise there can be problems."""))
+        # Never create events before _prepare_instance(), no checks in place
+        self._owner = None
+        self._prepare_resources()
+        self._write_parameters_from_DB()
+        self.logger.info("initialialised RemoteObject of class {} with instance name {}".format(
+            self.__class__.__name__, self.instance_name))  
+        
 
     def __setattr__(self, __name: str, __value: typing.Any) -> None:
         if  __name == '_internal_fixed_attributes' or __name in self._internal_fixed_attributes: 
@@ -395,6 +430,35 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
             super().__setattr__(__name, __value)
 
 
+    def _prepare_logger(self, log_level : int, log_file : str, remote_access : bool = True):
+        if self.logger is None:
+            self.logger = create_default_logger('{}/{}'.format(self.__class__.__name__, self.instance_name), 
+                            log_level, log_file)
+        if remote_access and not any(isinstance(handler, RemoteAccessHandler) 
+                                                    for handler in self.logger.handlers):
+            self._remote_access_loghandler = RemoteAccessHandler(instance_name='logger', maxlen=500, emit_interval=1)
+            self.logger.addHandler(self._remote_access_loghandler)
+        else:
+            for handler in self.logger.handlers:
+                if isinstance(handler, RemoteAccessHandler):
+                    self._remote_access_loghandler = handler        
+
+        
+    def _prepare_message_brokers(self, protocols : typing.Optional[typing.Union[typing.List[ZMQ_PROTOCOLS], 
+                                                        typing.Tuple[ZMQ_PROTOCOLS], ZMQ_PROTOCOLS]]):
+        self.message_broker = AsyncPollingZMQServer(
+                                instance_name=self.instance_name, 
+                                executor_thread_event=threading.Event(),
+                                server_type=self.__server_type__,
+                                protocols=self.server_protocols, json_serializer=self.json_serializer,
+                                proxy_serializer=self.proxy_serializer
+                            )
+        self.json_serializer = self.message_broker.json_serializer
+        self.proxy_serializer = self.message_broker.proxy_serializer
+        self.event_publisher = EventPublisher(identity=self.instance_name, proxy_serializer=self.proxy_serializer,
+                                              json_serializer=self.json_serializer)
+     
+
     def _prepare_resources(self):
         """
         this function analyses the members of the class which have 'scadapy' variable declared
@@ -410,7 +474,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
             OPTIONS = dict()
         )
         # The following dict will be given to the proxy client
-        proxy_resources = dict()
+        rpc_resources = dict()
         # The following dict will be used by the event loop
         instance_resources : typing.Dict[str, ScadaInfoData] = dict()
         # create URL prefix
@@ -434,7 +498,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
                                                     instruction=fullpath,
                                                     http_request_as_argument=scada_info.http_request_as_argument 
                                                 )
-                    proxy_resources[fullpath] = ProxyResourceData(
+                    rpc_resources[fullpath] = RPCResourceData(
                                                     what=CALLABLE,
                                                     instruction=fullpath,                                                                                                                                                                                        
                                                     module=getattr(resource, '__module__'), 
@@ -454,7 +518,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
                 resource._prepare_instance()                    
                 for http_method, resources in resource.httpserver_resources.items():
                     httpserver_resources[http_method].update(resources)
-                proxy_resources.update(resource.proxy_resources)
+                rpc_resources.update(resource.rpc_resources)
                 instance_resources.update(resource.instance_resources)
         # Events
         for name, resource in inspect.getmembers(self, lambda o : isinstance(o, Event)):
@@ -504,7 +568,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
                                                         instruction=fullpath + '/' + WRITE
                                                     )
                         
-                    proxy_resources[fullpath] = ProxyResourceData(
+                    rpc_resources[fullpath] = RPCResourceData(
                                 what=ATTRIBUTE, 
                                 instruction=fullpath, 
                                 module=__file__, 
@@ -527,146 +591,10 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
                     instance_resources[fullpath+'/'+WRITE] = scada_info      
         # The above for-loops can be used only once, the division is only for readability
         # _internal_fixed_attributes - allowed to set only once
-        self._proxy_resources = proxy_resources       
+        self._rpc_resources = rpc_resources       
         self._httpserver_resources = httpserver_resources 
         self.instance_resources = instance_resources
 
-
-    def _prepare_instance(self):
-        """
-        iterates through the members of the Remote Object to identify the information that requires to be supplied 
-        to the HTTPServer, ProxyClient and EventLoop. Called by default in the __init__ of RemoteObject.
-        """
-        self._prepare_resources()
-
-    @httpserver_resources.getter 
-    def _get_httpserver_resources(self) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
-        return self._httpserver_resources
-
-    @proxy_resources.getter 
-    def _get_proxy_resources(self) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
-        return self._proxy_resources
-    
-
-
-class RemoteObject(RemoteSubobject): 
-    """
-    Expose your python classes for HTTP methods by subclassing from here. 
-    """
-    __server_type__ = ServerTypes.USER_REMOTE_OBJECT 
-    state_machine : StateMachine
-
-    # objects given by user which we need to validate:
-    eventloop_name  = String(default=None, constant=True, 
-                        doc = """internally managed, this value is the instance name of the eventloop where the object
-                        is running. Multiple objects can accept requests in a single event loop.""") # type: ignore
-    log_level       = Selector(objects=[logging.DEBUG, logging.INFO, logging.ERROR, 
-                                logging.CRITICAL, logging.ERROR], default = logging.INFO, allow_None = False, 
-                        doc="""One can either supply a logger or simply set this parameter to to create an internal logger 
-                        with specified level.""") # type: ignore
-    logger          = ClassSelector(class_=logging.Logger, default=None, allow_None=True, 
-                        doc = """Logger object to print log messages, should be instance of logging.Logger(). default 
-                        logger is created if none is supplied.""") # type: ignore
-    logfile     = String (default=None, allow_None=True, 
-                        doc="""Logs can be also be stored in a file when a valid filename is passed.""") # type: ignore
-    logger_remote_access = Boolean(default=False, 
-                        doc="""Set it to true to add a default RemoteAccessHandler to the logger""" )
-    db_config_file = String (default=None, allow_None=True, 
-                        doc="""logs can be also be stored in a file when a valid filename is passed.""") # type: ignore
-    server_protocols = TupleSelector(default=None, allow_None=True, accept_list=True, 
-                                objects=[ZMQ_PROTOCOLS.IPC, ZMQ_PROTOCOLS.TCP], constant=True, 
-                                doc="""Protocols to be supported by the ZMQ Server that accepts requests for the RemoteObject
-                                instance. Options are TCP, IPC or both, represented by the Enum ZMQ_PROTOCOLS. 
-                                Either pass one or both as list or tuple""") # type: ignore
-    proxy_serializer = ClassSelector(class_=(SerpentSerializer, JSONSerializer, PickleSerializer, str), # DillSerializer, 
-                                default='json',  
-                                doc="""The serializer that will be used for passing messages in zmq. For custom data 
-                                    types which have serialization problems, you can subclass the serializers and implement 
-                                    your own serialization options. Recommended serializer for exchange messages between
-                                    Proxy clients and server is Serpent and for HTTP serializer and server is JSON.""") # type: ignore
-    json_serializer  = ClassSelector(class_=JSONSerializer, default=None, allow_None=True,
-                                doc = """Serializer used for sending messages between HTTP server and remote object,
-                                subclass JSONSerializer to implement undealt serialization options.""") # type: ignore
-    
-    # remote paramaters
-    object_info = RemoteParameter(readonly=True, URL_path='/object-info',
-                        doc="obtained information about this object like the class name, script location etc.") # type: ignore
-    events : typing.Dict = RemoteParameter(readonly=True, URL_path='/events', 
-                        doc="returns a dictionary with two fields " ) # type: ignore
-    gui_resources : typing.Dict = RemoteParameter(readonly=True, URL_path='/resources/gui', 
-                        doc= """object's data read by scadapy webdashboard GUI client, similar to http_resources but differs 
-                        in details.""") # type: ignore
-    GUI = RemoteClassSelector(class_=ReactApp, default=None, allow_None=True, 
-                        doc= """GUI applied here will become visible at GUI tab of dashboard tool""")
-    
-
-    def __new__(cls, **kwargs):
-        """
-        custom defined __new__ method to assign some important attributes at instance creation time directly instead of 
-        super().__init__(instance_name = val1 , users_own_kw_argument1 = users_val1, ..., users_own_kw_argumentn = users_valn) 
-        method. The lowest child's __init__ is always called first and  then the code reaches the __init__ of RemoteObject. 
-        Therefore, when the user passes arguments to his own RemoteObject descendent, they have to again pass some required 
-        information (like instance_name) to the __init__ of super() a second time with proper keywords.
-        To avoid this hassle, we create this __new__. super().__init__() in a descendent is still not optional though. 
-        """
-        obj = super().__new__(cls, **kwargs)
-        # objects given by user which we need to validate (descriptors)
-        obj.logfile       = kwargs.get('logfile', None)
-        obj.log_level     = kwargs.get('log_level', logging.INFO)
-        obj.logger_remote_access = obj.__class__.logger_remote_access if isinstance(obj.__class__.logger_remote_access, bool) else kwargs.get('logger_remote_access', False)
-        obj.logger        = kwargs.get('logger', None)
-        obj.db_config_file = kwargs.get('db_config_file', None)    
-        obj.eventloop_name = kwargs.get('eventloop_name', None)  
-        obj.server_protocols = kwargs.get('server_protocols', (ZMQ_PROTOCOLS.IPC, ZMQ_PROTOCOLS.TCP))
-        obj.json_serializer  = kwargs.get('json_serializer', None)
-        obj.proxy_serializer = kwargs.get('proxy_serializer', 'json')   
-        return obj
-    
-
-    def __init__(self, **params) -> None:
-        # Signature of __new__ and __init__ is generally the same, however one reaches this __init__ 
-        # through the child class. Currently it is not expected to pass the instance_name, log_level etc. 
-        # once through instantian and once again through child class __init__  
-        for attr in ['instance_name', 'logger', 'log_level', 'logfile', 'db_config_file', 'eventloop_name', 
-                    'server_protocols', 'json_serializer', 'proxy_serializer']:
-            params.pop(attr, None)
-        super().__init__(**params)
-
-        # missing type definitions
-        self.eventloop_name : str 
-        self.logfile : str
-        self.log_level  : int 
-        self.logger : logging.Logger 
-        self.db_engine : RemoteObjectDB
-        self.server_protocols : typing.Tuple[Enum]
-        self.json_serializer : JSONSerializer
-        self.proxy_serializer : BaseSerializer
-        self.object_info : RemoteObjectDB.RemoteObjectInfo
-
-        self._prepare_message_brokers()
-        self._prepare_state_machine()     
-
-    def __post_init__(self):
-        super().__post_init__()
-        # Never create events before _prepare_instance(), no checks in place
-        self._owner = None
-        self._prepare_instance()
-        self._prepare_DB()
-        self.logger.info("initialialised RemoteObject of class {} with instance name {}".format(
-            self.__class__.__name__, self.instance_name))  
-      
-    def _prepare_message_brokers(self):
-        self.message_broker = AsyncPollingZMQServer(
-                                instance_name=self.instance_name, 
-                                executor_thread_event=threading.Event(),
-                                server_type=self.__server_type__,
-                                protocols=self.server_protocols, json_serializer=self.json_serializer,
-                                proxy_serializer=self.proxy_serializer
-                            )
-        self.json_serializer = self.message_broker.json_serializer
-        self.proxy_serializer = self.message_broker.proxy_serializer
-        self.event_publisher = EventPublisher(identity=self.instance_name, proxy_serializer=self.proxy_serializer,
-                                              json_serializer=self.json_serializer)
         
     def _create_object_info(self, script_path : typing.Optional[str] = None):
         if not script_path:
@@ -686,13 +614,14 @@ class RemoteObject(RemoteSubobject):
                     level_type     = ConfigInfo.USER_MANAGED.name, 
                 )  
 
-    def _prepare_DB(self):
-        if not self.db_config_file:
+
+    def _prepare_DB(self, config_file : str = None):
+        if not config_file:
             self._object_info = self._create_object_info()
             return 
         # 1. create engine 
-        self.db_engine = RemoteObjectDB(instance_name = self.instance_name, serializer = self.proxy_serializer,
-                                        config_file = self.db_config_file)
+        self.db_engine = RemoteObjectDB(instance_name=self.instance_name, serializer=self.rpc_serializer,
+                                        config_file=config_file)
         # 2. create an object metadata to be used by different types of clients
         object_info = self.db_engine.fetch_own_info()
         if object_info is None:
@@ -705,6 +634,8 @@ class RemoteObject(RemoteSubobject):
                 You might be reusing an instance name of another subclass and did not remove the old data from database. 
                 Please clean the database using database tools to start fresh. 
                 """))
+        
+    def _write_parameters_from_DB(self):
         self.db_engine.create_missing_db_parameters(self.__class__.parameters.db_init_objects)
         # 4. read db_init and db_persist objects
         for db_param in  self.db_engine.read_all_parameters():
@@ -717,27 +648,25 @@ class RemoteObject(RemoteSubobject):
         if hasattr(self, 'state_machine'):
             self.state_machine._prepare(self)
             self.logger.debug("setup state machine")
+
+
+    @property
+    def _event_publisher(self) -> EventPublisher:
+        try:
+            return self.event_publisher 
+        except AttributeError:
+            top_owner = self._owner 
+            while True:
+                if isinstance(top_owner, RemoteObject):
+                    self.event_publisher = top_owner.event_publisher
+                    return self.event_publisher
+                elif isinstance(top_owner, RemoteSubobject):
+                    top_owner = top_owner._owner
+                else:
+                    raise RuntimeError(wrap_text("""Error while finding owner of RemoteSubobject, 
+                        RemoteSubobject must be composed only within RemoteObject or RemoteSubobject, 
+                        otherwise there can be problems."""))
         
-    @logger.getter
-    def _get_logger(self) -> logging.Logger:
-        return self._logger
-
-    @logger.setter # type: ignore
-    def _set_logger(self, value : logging.Logger):
-        if value is None:
-            self._logger = create_default_logger('{}|{}'.format(self.__class__.__name__, self.instance_name), 
-                            self.log_level, self.logfile)
-            if self.logger_remote_access and not any(isinstance(handler, RemoteAccessHandler) 
-                                                        for handler in self.logger.handlers):
-                self.remote_access_handler = RemoteAccessHandler(instance_name='logger', maxlen=500, emit_interval=1)
-                self.logger.addHandler(self.remote_access_handler)
-            else:
-                for handler in self.logger.handlers:
-                    if isinstance(handler, RemoteAccessHandler):
-                        self.remote_access_handler = handler        
-        else:
-            self._logger = value
-
     @object_info.getter
     def _get_object_info(self): 
         try:
@@ -756,6 +685,14 @@ class RemoteObject(RemoteSubobject):
                 address = self.event_publisher.socket_address
             ) for event in self.event_publisher.events
         }
+    
+    @httpserver_resources.getter 
+    def _get_httpserver_resources(self) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+        return self._httpserver_resources
+
+    @rpc_resources.getter 
+    def _get_rpc_resources(self) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+        return self._rpc_resources
  
     @gui_resources.getter
     def _get_gui_resources(self):
@@ -768,11 +705,11 @@ class RemoteObject(RemoteSubobject):
         )
         for instruction, scada_info in self.instance_resources.items(): 
             if scada_info.iscallable:
-                gui_resources.methods[instruction] = self.proxy_resources[instruction].json() 
+                gui_resources.methods[instruction] = self.rpc_resources[instruction].json() 
                 gui_resources.methods[instruction]["scada_info"] = scada_info.json() 
                 # to check - apparently the recursive json() calling does not reach inner depths of a dict, 
                 # therefore we call json ourselves
-                gui_resources.methods[instruction]["owner"] = self.proxy_resources[instruction].qualname.split('.')[0]
+                gui_resources.methods[instruction]["owner"] = self.rpc_resources[instruction].qualname.split('.')[0]
                 gui_resources.methods[instruction]["owner_instance_name"] = scada_info.bound_obj.instance_name
                 gui_resources.methods[instruction]["type"] = 'classmethod' if isinstance(scada_info.obj, classmethod) else ''
                 gui_resources.methods[instruction]["signature"] = get_signature(scada_info.obj)[0]
@@ -808,7 +745,7 @@ class RemoteObject(RemoteSubobject):
         return gui_resources
    
     @get(URL_path='/resources/postman-collection')
-    def postman_collection(self, domain_prefix : str = 'https://localhost:8080') -> postman_collection:
+    def postman_collection(self, domain_prefix : str) -> postman_collection:
         try:
             return self._postman_collection
         except AttributeError:

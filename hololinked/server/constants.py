@@ -28,7 +28,7 @@ SERIALIZABLE_WRAPPER_ASSIGNMENTS = ('__module__', '__name__', '__qualname__', '_
 # regex logic
 states_regex : str = '[A-Za-z_]+[A-Za-z_ 0-9]*'
 url_regex : str = r'[\-a-zA-Z0-9@:%._\/\+~#=]{1,256}' 
-instance_name_regex : str = r'[A-Za-z]+[A-Za-z_0-9\-\/]*'
+
 
 # HTTP request methods
 GET : str = 'GET'
@@ -57,4 +57,4 @@ CallableType = (FunctionType, MethodType)
 JSONSerializable = typing.Union[typing.Dict[str, typing.Any], list, str, int, float, None]
 
 # ZMQ
-ZMQ_PROTOCOLS = Enum('ZMQ_PROTOCOLS', 'TCP IPC')
+ZMQ_PROTOCOLS = Enum('ZMQ_PROTOCOLS', 'TCP IPC INPROC')

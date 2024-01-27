@@ -37,7 +37,7 @@ PROXY       = b'PROXY'
 class ServerTypes(Enum):
     UNKNOWN_TYPE = b'UNKNOWN_TYPE'
     EVENTLOOP = b'EVENTLOOP'
-    USER_REMOTE_OBJECT = b'USER_REMOTE_OBJECT'
+    REMOTE_OBJECT = b'REMOTE_OBJECT'
     POOL = b'POOL'
        
 
