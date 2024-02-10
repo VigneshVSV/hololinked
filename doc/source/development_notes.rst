@@ -2,8 +2,8 @@
 
 .. _note:
 
-design note
-===========
+development notes
+=================
 
 In the interest of information to software engineers and web developers, the main difference of the above to a conventional RPC or REST(-like) paradigm in HTTP is that, 
 |module-highlighted| attempts to be a hybrid of both. For instrument control & data-acquisition, it is difficult to move away completely from RPC to REST. Besides, most instrument drivers/hardware 

@@ -9,7 +9,7 @@ As |module-highlighted| is still in idealogical & development state, it is recom
 
     git clone https://github.com/VigneshVSV/hololinked.git
 
-One could setup a conda environment from the included ``hololinked.yml`` file 
+Since there is no requirements files yet, one could setup a conda environment from the included ``hololinked.yml`` file 
 
 .. code:: shell 
 
@@ -30,7 +30,7 @@ Also check out:
      - repository containing example code discussed in this documentation
    * - hololinked-portal 
      - https://github.com/VigneshVSV/hololinked-portal.git
-     - GUI to access RemoteObjects & Data Visualization helper
+     - GUI to access RemoteObjects & Data Visualization helper. 
 
 
 
