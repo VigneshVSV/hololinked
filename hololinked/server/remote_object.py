@@ -1,5 +1,4 @@
 import asyncio
-from collections import deque
 import json
 import logging 
 import inspect
@@ -8,6 +7,7 @@ import threading
 import time
 import typing
 import datetime
+from collections import deque
 from enum import EnumMeta, Enum
 from dataclasses import asdict, dataclass
 
@@ -15,25 +15,24 @@ from sqlalchemy import (Integer as DBInteger, String as DBString, JSON as DB_JSO
 from sqlalchemy import select
 from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, MappedAsDataclass
 
-from ..param.parameterized import Parameterized, ParameterizedMetaclass 
-from ..param.parameters import (String, ClassSelector, TupleSelector, TypedDict, Boolean, 
-                                Selector, TypedKeyMappingsConstrainedDict)
 
-from .constants import (EVENT, GET, IMAGE_STREAM, JSONSerializable, instance_name_regex, CallableType, CALLABLE, 
+from ..param.parameterized import Parameterized, ParameterizedMetaclass 
+
+from .constants import (EVENT, GET, IMAGE_STREAM, JSONSerializable, CallableType, CALLABLE, 
                         ATTRIBUTE, READ, WRITE, log_levels, POST, ZMQ_PROTOCOLS, FILE)
 from .serializers import *
 from .exceptions import BreakInnerLoop
-from .decorators import get, post, remote_method
-from .data_classes import (GUIResources, HTTPServerEventData, HTTPServerResourceData, RPCResourceData, 
-                            HTTPServerResourceData, FileServerData, ScadaInfoData, 
-                            ScadaInfoValidator)
+from .decorators import remote_method
+from .http_methods import get, post
+from .data_classes import (GUIResources, RemoteResource, HTTPResource, RPCResource, RemoteResourceInfoValidator,
+                           ServerSentEventInfo)
 from .api_platform_utils import postman_item, postman_itemgroup
 from .database import BaseAsyncDB, BaseSyncDB
 from .utils import create_default_logger, get_signature, wrap_text
 from .api_platform_utils import *
 from .remote_parameter import FileServer, PlotlyFigure, ReactApp, RemoteParameter, RemoteClassParameters, Image
-from .remote_parameters import (Boolean as RemoteBoolean, ClassSelector as RemoteClassSelector, 
-                                Integer as RemoteInteger )
+from .remote_parameters import (Integer, String, ClassSelector, TupleSelector, TypedDict, Boolean, 
+                                Selector, TypedKeyMappingsConstrainedDict )
 from .zmq_message_brokers import ServerTypes, EventPublisher, AsyncPollingZMQServer, Event
 
 
@@ -54,9 +53,9 @@ class StateMachine:
     Attributes: 
         exists (bool): internally computed, True if states and initial_states are valid 
     """
-    initial_state = RemoteClassSelector(default=None, allow_None=True, constant=True, class_=(Enum, str))
-    exists = RemoteBoolean(default=False)
-    states = RemoteClassSelector(default=None, allow_None=True, constant=True, class_=(EnumMeta, tuple, list)) 
+    initial_state = ClassSelector(default=None, allow_None=True, constant=True, class_=(Enum, str))
+    exists = Boolean(default=False)
+    states = ClassSelector(default=None, allow_None=True, constant=True, class_=(EnumMeta, tuple, list)) 
     on_enter = TypedDict(default=None, allow_None=True, key_type=str)
     on_exit = TypedDict(default=None, allow_None=True, key_type=str) 
     machine = TypedDict(default=None, allow_None=True, key_type=str, item_type=(list, tuple))
@@ -101,17 +100,17 @@ class StateMachine:
             if state in self:
                 for resource in objects:
                     if hasattr(resource, 'scada_info'):
-                        assert isinstance(resource.scada_info, ScadaInfoValidator) # type: ignore
-                        if resource.scada_info.iscallable and resource.scada_info.obj_name not in owner_methods: # type: ignore
+                        assert isinstance(resource._remote_info, RemoteResourceInfoValidator) # type: ignore
+                        if resource._remote_info.iscallable and resource._remote_info.obj_name not in owner_methods: # type: ignore
                             raise AttributeError("Given object {} for state machine does not belong to class {}".format(
                                                                                                 resource, owner))
-                        if resource.scada_info.isparameter and resource not in owner_parameters: # type: ignore
+                        if resource._remote_info.isparameter and resource not in owner_parameters: # type: ignore
                             raise AttributeError("Given object {} - {} for state machine does not belong to class {}".format(
                                                                                                 resource.name, resource, owner))
-                        if resource.scada_info.state is None: # type: ignore
-                            resource.scada_info.state = self._machine_compliant_state(state) # type: ignore
+                        if resource._remote_info.state is None: # type: ignore
+                            resource._remote_info.state = self._machine_compliant_state(state) # type: ignore
                         else: 
-                            resource.scada_info.state = resource.scada_info.state + (self._machine_compliant_state(state), ) # type: ignore
+                            resource._remote_info.state = resource._remote_info.state + (self._machine_compliant_state(state), ) # type: ignore
                     else: 
                         raise AttributeError(wrap_text(f"""Object {resource} not made remotely accessible. 
                                     Use state machine with remote parameters and remote methods only"""))
@@ -317,47 +316,47 @@ class RemoteObjectMetaclass(ParameterizedMetaclass):
        
 class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass): 
     """
-    Expose your python classes for HTTP methods by subclassing from here. 
+    Expose your python classes for HTTP methods & RPC clients by subclassing from here. 
     """
     __server_type__ = ServerTypes.REMOTE_OBJECT 
     state_machine : StateMachine
 
     # objects given by user which we need to validate:
-    instance_name = String(default=None, regex=r'[A-Za-z]+[A-Za-z_0-9\-\/]*', constant=True,
+    instance_name = String(default=None, regex=r'[A-Za-z]+[A-Za-z_0-9\-\/]*', constant=True, remote=False,
                         doc="""Unique string identifier of the instance. This value is used for many operations,
                         for example - creating zmq socket address, tables in databases, and to identify the instance 
                         in the HTTP Server & webdashboard clients - 
                         (http(s)://{domain and sub domain}/{instance name}). It is suggested to use  
                         the class name along with a unique name {class name}/{some unique name}. Instance names must be unique
-                        in your entire system.""") # type: ignore
-    logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, 
+                        in your entire system.""") # type: str
+    logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, remote=False, 
                         doc = """Logger object to print log messages, should be instance of logging.Logger(). default 
-                        logger is created if none is supplied.""") # type: ignore
+                        logger is created if none is supplied.""") # type: logging.Logger 
     rpc_serializer = ClassSelector(class_=(SerpentSerializer, JSONSerializer, PickleSerializer, str), # DillSerializer, 
-                                default='json',  
+                                default='json', remote=False,
                                 doc="""The serializer that will be used for passing messages in zmq. For custom data 
                                     types which have serialization problems, you can subclass the serializers and implement 
                                     your own serialization options. Recommended serializer for exchange messages between
-                                    Proxy clients and server is Serpent and for HTTP serializer and server is JSON.""") # type: ignore
-    json_serializer  = ClassSelector(class_=JSONSerializer, default=None, allow_None=True,
+                                    Proxy clients and server is Serpent and for HTTP serializer and server is JSON.""") # type: BaseSerializer
+    json_serializer  = ClassSelector(class_=JSONSerializer, default=None, allow_None=True, remote=False,
                                 doc = """Serializer used for sending messages between HTTP server and remote object,
-                                subclass JSONSerializer to implement undealt serialization options.""") # type: ignore
+                                subclass JSONSerializer to implement undealt serialization options.""") # type: JSONSerializer
     
     # remote paramaters
-    object_info = RemoteParameter(readonly=True, URL_path='/object-info',
-                        doc="obtained information about this object like the class name, script location etc.") # type: ignore
-    events : typing.Dict = RemoteParameter(readonly=True, URL_path='/events', 
-                        doc="returns a dictionary with two fields " ) # type: ignore
+    object_info = RemoteParameter(doc="contains information about this object like the class name, script location etc.",
+                        readonly=True, URL_path='/info', fget = lambda self: self._object_info) # type: RemoteObjectDB.RemoteObjectInfo
+    events = RemoteParameter(readonly=True, URL_path='/events', 
+                        doc="returns a dictionary with two fields containing event name and event information") # type: typing.Dict[str, typing.Any]
     httpserver_resources = RemoteParameter(readonly=True, URL_path='/resources/http', 
-                        doc="""""" ) # type: ignore
+                        doc="""object's resources exposed to HTTP server""", fget=lambda self: self._httpserver_resources ) # type: typing.Dict[str, typing.Dict[str, HTTPResource]]
     rpc_resources = RemoteParameter(readonly=True, URL_path='/resources/object-proxy', 
-                        doc= """object's resources exposed to ProxyClient, similar to http_resources but differs 
-                        in details.""") # type: ignore
+                        doc= """object's resources exposed to RPC client, similar to HTTP resources but differs 
+                        in details.""", fget=lambda self: self._rpc_resources) # type: typing.Dict[str, typing.Any]
     gui_resources : typing.Dict = RemoteParameter(readonly=True, URL_path='/resources/gui', 
                         doc= """object's data read by scadapy webdashboard GUI client, similar to http_resources but differs 
-                        in details.""") # type: ignore
-    GUI = RemoteClassSelector(class_=ReactApp, default=None, allow_None=True, 
-                        doc= """GUI applied here will become visible at GUI tab of dashboard tool""")
+                        in details.""") # type: typing.Dict[str, typing.Any]
+    GUI = ClassSelector(class_=ReactApp, default=None, allow_None=True, 
+                        doc= """GUI applied here will become visible at GUI tab of dashboard tool""") # type: typing.Optional[ReactApp]
     
 
     def __new__(cls, **kwargs):
@@ -379,23 +378,13 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
                 log_file : typing.Optional[str] = None, logger_remote_access : bool = True, 
                 rpc_serializer : typing.Optional[BaseSerializer] = None, json_serializer : typing.Optional[JSONSerializer] = None,
                 server_protocols : typing.Optional[typing.Union[typing.List[ZMQ_PROTOCOLS], typing.Tuple[ZMQ_PROTOCOLS], ZMQ_PROTOCOLS]] = None, 
-                db_config_file : typing.Optional[str] = None) -> None:
-        super().__init__(instance_name=instance_name, logger=logger, 
-                        rpc_serializer=rpc_serializer, json_serializer=json_serializer)
-
-        # missing type definitions
-        self.instance_name : str
-        self.logger : logging.Logger 
-        self.db_engine : RemoteObjectDB
-        self.rpc_serializer : BaseSerializer
-        self.json_serializer : JSONSerializer
-        self.object_info : RemoteObjectDB.RemoteObjectInfo
-        self.events : typing.Dict
-        self.httpserver_resources : typing.Dict
-        self.rpc_resources : typing.Dict
-        self._eventloop_name : str 
-        self._owner : typing.Optional[RemoteObject]
+                db_config_file : typing.Optional[str] = None, **params) -> None:
+        
         self._internal_fixed_attributes : typing.List[str]
+        self._owner : typing.Optional[RemoteObject]
+        
+        super().__init__(instance_name=instance_name, logger=logger, rpc_serializer=rpc_serializer, 
+                        json_serializer=json_serializer, **params)
 
         self._prepare_logger(log_file=log_file, log_level=log_level, remote_access=logger_remote_access)
         self._prepare_message_brokers(server_protocols=server_protocols, rpc_serializer=rpc_serializer, 
@@ -406,10 +395,9 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
     
     def __post_init__(self):
         # Never create events before _prepare_instance(), no checks in place
-        self._owner = None
         self._prepare_resources()
         self._write_parameters_from_DB()
-        self.logger.info("initialialised RemoteObject of class {} with instance name {}".format(
+        self.logger.info("initialialised RemoteObject class {} with instance name {}".format(
             self.__class__.__name__, self.instance_name))  
         
 
@@ -421,11 +409,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
                 super().__setattr__(__name, __value)
             else:
                 raise AttributeError(
-                    wrap_text(
-                        f"""
-                        Attempted to set {__name} more than once. cannot assign a value to this variable after creation. 
-                        """
-                ))
+                    f"Attempted to set {__name} more than once. Cannot assign a value to this variable after creation.")
         else:
             super().__setattr__(__name, __value)
 
@@ -433,29 +417,30 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
     def _prepare_logger(self, log_level : int, log_file : str, remote_access : bool = True):
         if self.logger is None:
             self.logger = create_default_logger('{}/{}'.format(self.__class__.__name__, self.instance_name), 
-                            log_level, log_file)
-        if remote_access and not any(isinstance(handler, RemoteAccessHandler) 
+                            logging.INFO if not log_level else log_level, 
+                            None if not log_file else log_file)
+        if remote_access:
+            if not any(isinstance(handler, RemoteAccessHandler) 
                                                     for handler in self.logger.handlers):
-            self._remote_access_loghandler = RemoteAccessHandler(instance_name='logger', maxlen=500, emit_interval=1)
-            self.logger.addHandler(self._remote_access_loghandler)
-        else:
-            for handler in self.logger.handlers:
-                if isinstance(handler, RemoteAccessHandler):
-                    self._remote_access_loghandler = handler        
+                self._remote_access_loghandler = RemoteAccessHandler(instance_name='logger', maxlen=500, emit_interval=1)
+                self.logger.addHandler(self._remote_access_loghandler)
+            else:
+                for handler in self.logger.handlers:
+                    if isinstance(handler, RemoteAccessHandler):
+                        self._remote_access_loghandler = handler        
 
         
-    def _prepare_message_brokers(self, protocols : typing.Optional[typing.Union[typing.List[ZMQ_PROTOCOLS], 
-                                                        typing.Tuple[ZMQ_PROTOCOLS], ZMQ_PROTOCOLS]]):
+    def _prepare_message_brokers(self, protocols : typing.Optional[typing.Union[typing.Iterable[ZMQ_PROTOCOLS], ZMQ_PROTOCOLS]]):
         self.message_broker = AsyncPollingZMQServer(
                                 instance_name=self.instance_name, 
-                                executor_thread_event=threading.Event(),
                                 server_type=self.__server_type__,
-                                protocols=self.server_protocols, json_serializer=self.json_serializer,
-                                proxy_serializer=self.proxy_serializer
+                                protocols=ZMQ_PROTOCOLS.INPROC, 
+                                json_serializer=self.json_serializer,
+                                rpc_serializer=self.rpc_serializer
                             )
         self.json_serializer = self.message_broker.json_serializer
-        self.proxy_serializer = self.message_broker.proxy_serializer
-        self.event_publisher = EventPublisher(identity=self.instance_name, proxy_serializer=self.proxy_serializer,
+        self.rpc_serializer = self.message_broker.rpc_serializer
+        self.event_publisher = EventPublisher(identity=self.instance_name, rpc_serializer=self.rpc_serializer,
                                               json_serializer=self.json_serializer)
      
 
@@ -472,62 +457,67 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
             DELETE  = dict(),
             PATCH   = dict(),
             OPTIONS = dict()
-        )
-        # The following dict will be given to the proxy client
-        rpc_resources = dict()
+        ) # type: typing.Dict[str, typing.Dict[str, HTTPResource]]
+        # The following dict will be given to the object proxy client
+        rpc_resources = dict() # type: typing.Dict[str, RPCResource]
         # The following dict will be used by the event loop
-        instance_resources : typing.Dict[str, ScadaInfoData] = dict()
+        instance_resources = dict() # type: typing.Dict[str, RemoteResource] 
         # create URL prefix
-        self.full_URL_path_prefix = f'{self._owner.full_URL_path_prefix}/{self.instance_name}' if self._owner is not None else f'/{self.instance_name}'
+        self._full_URL_path_prefix = f'{self._owner._full_URL_path_prefix}/{self.instance_name}' if self._owner is not None else f'/{self.instance_name}'
         
         # First add methods and callables
         for name, resource in inspect.getmembers(self, inspect.ismethod):
-            if hasattr(resource, 'scada_info'):
-                if not isinstance(resource.scada_info, ScadaInfoValidator): # type: ignore
-                    raise TypeError("instance member {} has unknown sub-member 'scada_info' of type {}.".format(
-                                resource, type(resource.scada_info))) # type: ignore 
-                scada_info = resource.scada_info.create_dataclass(obj=resource, bound_obj=self) # type: ignore
-                # methods are already bound though
-                fullpath = "{}{}".format(self.full_URL_path_prefix, scada_info.URL_path) 
-                if scada_info.iscallable:
-                    for http_method in scada_info.http_method:
-                        httpserver_resources[http_method][fullpath] = HTTPServerResourceData(
-                                                    what=CALLABLE,
-                                                    instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
-                                                    fullpath=fullpath,
-                                                    instruction=fullpath,
-                                                    http_request_as_argument=scada_info.http_request_as_argument 
-                                                )
-                    rpc_resources[fullpath] = RPCResourceData(
-                                                    what=CALLABLE,
-                                                    instruction=fullpath,                                                                                                                                                                                        
-                                                    module=getattr(resource, '__module__'), 
-                                                    name=getattr(resource, '__name__'),
-                                                    qualname=getattr(resource, '__qualname__'), 
-                                                    doc=getattr(resource, '__doc__'),
-                                                    kwdefaults=getattr(resource, '__kwdefaults__'),
-                                                    defaults=getattr(resource, '__defaults__'),
-                                                )
-                    instance_resources[fullpath] = scada_info 
+            if hasattr(resource, '_remote_info'):
+                if not isinstance(resource._remote_info, RemoteResourceInfoValidator):
+                    raise TypeError("instance member {} has unknown sub-member '_remote_info' of type {}.".format(
+                                resource, type(resource._remote_info))) 
+                remote_info = resource._remote_info
+                # methods are already bound
+                fullpath = "{}{}".format(self._full_URL_path_prefix, remote_info.URL_path) 
+                assert remote_info.iscallable, ("remote info from inspect.ismethod is not a callable",
+                                    "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")
+                for http_method in remote_info.http_method:
+                    httpserver_resources[http_method][fullpath] = HTTPResource(
+                                                what=CALLABLE,
+                                                instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
+                                                fullpath=fullpath,
+                                                instruction=fullpath,
+                                                request_as_argument=remote_info.request_as_argument 
+                                            )
+                rpc_resources[fullpath] = RPCResource(
+                                                what=CALLABLE,
+                                                instruction=fullpath,                                                                                                                                                                                        
+                                                module=getattr(resource, '__module__'), 
+                                                name=getattr(resource, '__name__'),
+                                                qualname=getattr(resource, '__qualname__'), 
+                                                doc=getattr(resource, '__doc__'),
+                                                kwdefaults=getattr(resource, '__kwdefaults__'),
+                                                defaults=getattr(resource, '__defaults__'),
+                                            )
+                instance_resources[fullpath] = remote_info.to_dataclass(obj=resource) 
         # Other remote objects 
-        for name, resource in inspect.getmembers(self, lambda o : isinstance(o, RemoteSubobject)):
+        for name, resource in inspect.getmembers(self, lambda o : isinstance(o, RemoteObject)):
             if name == '_owner':
                 continue
-            elif isinstance(resource, RemoteSubobject):
-                resource._owner = self 
-                resource._prepare_instance()                    
-                for http_method, resources in resource.httpserver_resources.items():
-                    httpserver_resources[http_method].update(resources)
-                rpc_resources.update(resource.rpc_resources)
-                instance_resources.update(resource.instance_resources)
+            assert isinstance(resource, RemoteObject), ("remote object children query from inspect.ismethod is not a RemoteObject",
+                                    "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")
+            # above assertion is only a typing convenience
+            resource._owner = self
+            resource._prepare_instance()                    
+            for http_method, resources in resource.httpserver_resources.items():
+                httpserver_resources[http_method].update(resources)
+            rpc_resources.update(resource.rpc_resources)
+            instance_resources.update(resource.instance_resources)
         # Events
         for name, resource in inspect.getmembers(self, lambda o : isinstance(o, Event)):
-            assert isinstance(resource, Event)
+            assert isinstance(resource, Event), ("remote object event query from inspect.ismethod is not an Event",
+                                    "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")
+            # above assertion is only a typing convenience
             resource._owner = self
-            resource.full_URL_path_prefix = self.full_URL_path_prefix
+            resource._unique_event_name = bytes(f"{self._full_URL_path_prefix}{resource.URL_path}", encoding='utf-8')
             resource.publisher = self._event_publisher                
             httpserver_resources[GET]['{}{}'.format(
-                        self.full_URL_path_prefix, resource.URL_path)] = HTTPServerEventData(
+                        self._full_URL_path_prefix, resource.URL_path)] = ServerSentEventInfo(
                                                             # event URL_path has '/' prefix
                                                             what=EVENT,
                                                             event_name=resource.name,
@@ -535,62 +525,47 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
                                                         )
         # Parameters
         for parameter in self.parameters.descriptors.values():
-            if hasattr(parameter, 'scada_info'): 
-                if not isinstance(parameter.scada_info, ScadaInfoValidator):  # type: ignore
+            if hasattr(parameter, '_remote_info'): 
+                if not isinstance(parameter._remote_info, RemoteResourceInfoValidator):  # type: ignore
                     raise TypeError("instance member {} has unknown sub-member 'scada_info' of type {}.".format(
-                                parameter, type(parameter.scada_info))) # type: ignore
+                                parameter, type(parameter._remote_info))) # type: ignore
                     # above condition is just a gaurd in case user does some unpredictable patching activities
-                scada_info = parameter.scada_info.create_dataclass(obj=parameter, bound_obj=self) # type: ignore
-                fullpath = "{}{}".format(self.full_URL_path_prefix, scada_info.URL_path) 
-                if scada_info.isparameter:
-                    read_http_method, write_http_method = scada_info.http_method
-                       
-                    httpserver_resources[read_http_method][fullpath] = HTTPServerResourceData(
-                                                        what=ATTRIBUTE, 
-                                                        instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
-                                                        fullpath=fullpath,
-                                                        instruction=fullpath + '/' + READ
-                                                    )
-                    if isinstance(parameter, Image) and parameter.streamable:
-                        parameter.event._owner = self 
-                        parameter.event.full_URL_path_prefix = self.full_URL_path_prefix
-                        parameter.event.publisher = self._event_publisher         
-                        httpserver_resources[GET]['{}{}'.format(
-                                        self.full_URL_path_prefix, parameter.event.URL_path)] = HTTPServerEventData(
-                                                        what=EVENT, 
-                                                        event_name=parameter.event.name,
-                                                        socket_address=self._event_publisher.socket_address,
-                                                    )
-                    httpserver_resources[write_http_method][fullpath] = HTTPServerResourceData(
-                                                        what=ATTRIBUTE, 
-                                                        instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
-                                                        fullpath=fullpath,
-                                                        instruction=fullpath + '/' + WRITE
-                                                    )
+                remote_info = parameter._remote_info
+                fullpath = "{}{}".format(self._full_URL_path_prefix, remote_info.URL_path) 
+                assert remote_info.isparameter, ("remote object parameter query from inspect.ismethod is not a Parameter",
+                                    "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")
+                read_http_method, write_http_method = remote_info.http_method
+                    
+                httpserver_resources[read_http_method][fullpath] = HTTPResource(
+                                                    what=ATTRIBUTE, 
+                                                    instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
+                                                    fullpath=fullpath,
+                                                    instruction=fullpath + '/' + READ
+                                                )
+                    
+                httpserver_resources[write_http_method][fullpath] = HTTPResource(
+                                                    what=ATTRIBUTE, 
+                                                    instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
+                                                    fullpath=fullpath,
+                                                    instruction=fullpath + '/' + WRITE
+                                                )
                         
-                    rpc_resources[fullpath] = RPCResourceData(
+                rpc_resources[fullpath] = RPCResource(
                                 what=ATTRIBUTE, 
                                 instruction=fullpath, 
                                 module=__file__, 
                                 doc=parameter.__doc__, 
-                                name=scada_info.obj_name,
-                                qualname=self.__class__.__name__ + '.' + scada_info.obj_name,
+                                name=remote_info.obj_name,
+                                qualname=self.__class__.__name__ + '.' + remote_info.obj_name,
                                 # qualname is not correct probably, does not respect inheritance
                                 kwdefaults=None, 
                                 defaults=None, 
                             ) 
-                    if isinstance(parameter, FileServer):
-                        read_http_method, _ = scada_info.http_method
-                        fileserverpath = "{}/files{}".format(self.full_URL_path_prefix, scada_info.URL_path)
-                        httpserver_resources[read_http_method][fileserverpath] = FileServerData(
-                                                        what=FILE, 
-                                                        directory=parameter.directory,
-                                                        fullpath=fileserverpath
-                                                    )
-                    instance_resources[fullpath+'/'+READ] = scada_info
-                    instance_resources[fullpath+'/'+WRITE] = scada_info      
+                dclass = remote_info.to_dataclass(obj=parameter) 
+                instance_resources[fullpath+'/'+READ] = dclass
+                instance_resources[fullpath+'/'+WRITE] = dclass  
         # The above for-loops can be used only once, the division is only for readability
-        # _internal_fixed_attributes - allowed to set only once
+        # following are in _internal_fixed_attributes - allowed to set only once
         self._rpc_resources = rpc_resources       
         self._httpserver_resources = httpserver_resources 
         self.instance_resources = instance_resources
@@ -620,7 +595,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
             self._object_info = self._create_object_info()
             return 
         # 1. create engine 
-        self.db_engine = RemoteObjectDB(instance_name=self.instance_name, serializer=self.rpc_serializer,
+        self.db_engine : RemoteObjectDB = RemoteObjectDB(instance_name=self.instance_name, serializer=self.rpc_serializer,
                                         config_file=config_file)
         # 2. create an object metadata to be used by different types of clients
         object_info = self.db_engine.fetch_own_info()
@@ -634,15 +609,17 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
                 You might be reusing an instance name of another subclass and did not remove the old data from database. 
                 Please clean the database using database tools to start fresh. 
                 """))
-        
+
+
     def _write_parameters_from_DB(self):
         self.db_engine.create_missing_db_parameters(self.__class__.parameters.db_init_objects)
         # 4. read db_init and db_persist objects
         for db_param in  self.db_engine.read_all_parameters():
             try:
-                setattr(self, db_param.name, self.proxy_serializer.loads(db_param.value)) # type: ignore
+                setattr(self, db_param.name, self.rpc_serializer.loads(db_param.value)) # type: ignore
             except Exception as E:
                 self.logger.error(f"could not set attribute {db_param.name} due to error {E}")
+
 
     def _prepare_state_machine(self):
         if hasattr(self, 'state_machine'):
@@ -655,25 +632,16 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
         try:
             return self.event_publisher 
         except AttributeError:
-            top_owner = self._owner 
+            top_owner = self._owner # type: RemoteObject
             while True:
                 if isinstance(top_owner, RemoteObject):
-                    self.event_publisher = top_owner.event_publisher
-                    return self.event_publisher
-                elif isinstance(top_owner, RemoteSubobject):
                     top_owner = top_owner._owner
                 else:
-                    raise RuntimeError(wrap_text("""Error while finding owner of RemoteSubobject, 
-                        RemoteSubobject must be composed only within RemoteObject or RemoteSubobject, 
-                        otherwise there can be problems."""))
-        
-    @object_info.getter
-    def _get_object_info(self): 
-        try:
-            return self._object_info
-        except AttributeError:
-            return None 
-        
+                    break;        
+            self.event_publisher = top_owner._event_publisher
+            return self.event_publisher
+            
+
     @events.getter
     def _get_events(self) -> typing.Dict[str, typing.Any]:
         return {
@@ -686,13 +654,6 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
             ) for event in self.event_publisher.events
         }
     
-    @httpserver_resources.getter 
-    def _get_httpserver_resources(self) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
-        return self._httpserver_resources
-
-    @rpc_resources.getter 
-    def _get_rpc_resources(self) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
-        return self._rpc_resources
  
     @gui_resources.getter
     def _get_gui_resources(self):
@@ -703,43 +664,43 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
             inheritance = [class_.__name__ for class_ in self.__class__.mro()],
             GUI = self.GUI,
         )
-        for instruction, scada_info in self.instance_resources.items(): 
-            if scada_info.iscallable:
+        for instruction, remote_info in self.instance_resources.items(): 
+            if remote_info.iscallable:
                 gui_resources.methods[instruction] = self.rpc_resources[instruction].json() 
-                gui_resources.methods[instruction]["scada_info"] = scada_info.json() 
+                gui_resources.methods[instruction]["remote_info"] = remote_info.json() 
                 # to check - apparently the recursive json() calling does not reach inner depths of a dict, 
                 # therefore we call json ourselves
                 gui_resources.methods[instruction]["owner"] = self.rpc_resources[instruction].qualname.split('.')[0]
-                gui_resources.methods[instruction]["owner_instance_name"] = scada_info.bound_obj.instance_name
-                gui_resources.methods[instruction]["type"] = 'classmethod' if isinstance(scada_info.obj, classmethod) else ''
-                gui_resources.methods[instruction]["signature"] = get_signature(scada_info.obj)[0]
-            elif scada_info.isparameter:
+                gui_resources.methods[instruction]["owner_instance_name"] = remote_info.bound_obj.instance_name
+                gui_resources.methods[instruction]["type"] = 'classmethod' if isinstance(remote_info.obj, classmethod) else ''
+                gui_resources.methods[instruction]["signature"] = get_signature(remote_info.obj)[0]
+            elif remote_info.isparameter:
                 path_without_RW = instruction.rsplit('/', 1)[0]
                 if path_without_RW not in gui_resources.parameters:
-                    gui_resources.parameters[path_without_RW] = self.__class__.parameters.webgui_info(scada_info.obj)[scada_info.obj.name]
+                    gui_resources.parameters[path_without_RW] = self.__class__.parameters.webgui_info(remote_info.obj)[remote_info.obj.name]
                     gui_resources.parameters[path_without_RW]["instruction"] = path_without_RW
                     """
                     The instruction part has to be cleaned up to be called as fullpath. Setting the full path back into 
-                    scada_info is not correct because the unbound method is used by multiple instances. 
+                    remote_info is not correct because the unbound method is used by multiple instances. 
                     """
-                    gui_resources.parameters[path_without_RW]["owner_instance_name"] = scada_info.bound_obj.instance_name
-                    if isinstance(scada_info.obj, PlotlyFigure):
+                    gui_resources.parameters[path_without_RW]["owner_instance_name"] = remote_info.bound_obj.instance_name
+                    if isinstance(remote_info.obj, PlotlyFigure):
                         gui_resources.parameters[path_without_RW]['default'] = None
                         gui_resources.parameters[path_without_RW]['visualization'] = {
                                 'type' : 'plotly',
-                                'plot' : scada_info.obj.__get__(self, type(self)),
-                                'sources' : scada_info.obj.data_sources,
+                                'plot' : remote_info.obj.__get__(self, type(self)),
+                                'sources' : remote_info.obj.data_sources,
                                 'actions' : {
-                                    scada_info.obj._action_stub.id : scada_info.obj._action_stub
+                                    remote_info.obj._action_stub.id : remote_info.obj._action_stub
                                 },
                         }
-                    elif isinstance(scada_info.obj, Image):
+                    elif isinstance(remote_info.obj, Image):
                         gui_resources.parameters[path_without_RW]['default'] = None
                         gui_resources.parameters[path_without_RW]['visualization'] = {
                             'type' : 'sse-video',
-                            'sources' : scada_info.obj.data_sources,
+                            'sources' : remote_info.obj.data_sources,
                             'actions' : {
-                                    scada_info.obj._action_stub.id : scada_info.obj._action_stub
+                                    remote_info.obj._action_stub.id : remote_info.obj._action_stub
                                 },
                         }
         return gui_resources
@@ -768,8 +729,8 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
         for http_method, resource in self.httpserver_resources.items():
             # i.e. this information is generated only on the httpserver accessible resrouces...
             for URL_path, httpserver_data in resource.items():
-                if isinstance(httpserver_data, HTTPServerResourceData):
-                    scada_info : ScadaInfoData
+                if isinstance(httpserver_data, HTTPResource):
+                    scada_info : RemoteResource
                     try:
                         scada_info = self.instance_resources[httpserver_data.instruction]
                     except KeyError:
@@ -791,13 +752,6 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
         self._postman_collection = collection
         return collection
     
-    @post(URL_path='/resources/postman-collection/save')
-    def save_postman_collection(self, filename : typing.Optional[str] = None) -> None:
-        if filename is None: 
-            filename = f'{self.__class__.__name__}_postman_collection.json'
-        with open(filename, 'w') as file:
-            json.dump(self.postman_collection().json(), file, indent = 4)
-
     @get('/parameters/names')
     def _parameters(self):
         return self.parameters.descriptors.keys()
@@ -885,7 +839,7 @@ class ListHandler(logging.Handler):
 
 
 
-class RemoteAccessHandler(logging.Handler, RemoteSubobject):
+class RemoteAccessHandler(logging.Handler, RemoteObject):
 
     def __init__(self, maxlen : int = 100, emit_interval : float = 1.0, **kwargs) -> None:
         logging.Handler.__init__(self)
@@ -1015,4 +969,4 @@ class RemoteAccessHandler(logging.Handler, RemoteSubobject):
 
 
 
-__all__ = ['RemoteObject', 'StateMachine', 'RemoteObjectDB', 'RemoteSubobject', 'ListHandler', 'RemoteAccessHandler']
+__all__ = ['RemoteObject', 'StateMachine', 'RemoteObjectDB', 'ListHandler', 'RemoteAccessHandler']

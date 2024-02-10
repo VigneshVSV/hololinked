@@ -7,7 +7,7 @@ from typing import Any
 from .zmq_message_brokers import SyncZMQClient, EventConsumer, PROXY
 from .utils import current_datetime_ms_str, raise_local_exception
 from .constants import PARAMETER, SERIALIZABLE_WRAPPER_ASSIGNMENTS, FUNC, CALLABLE, ATTRIBUTE, EVENT
-from .data_classes import ProxyResourceData
+
 
 
 
@@ -360,7 +360,7 @@ class _StreamResultIterator(object):
 
 __allowed_attribute_types__ = (_RemoteParameter, _RemoteMethod)
 
-def _add_method(client_obj : ObjectProxy, method : _RemoteMethod, func_info : ProxyResourceData) -> None:
+def _add_method(client_obj : ObjectProxy, method : _RemoteMethod, func_info) -> None:
     for dunder in SERIALIZABLE_WRAPPER_ASSIGNMENTS:
         if dunder == '__qualname__':
             info = '{}.{}'.format(client_obj.__class__.__name__, func_info.get_dunder_attr(dunder).split('.')[1])
@@ -369,7 +369,7 @@ def _add_method(client_obj : ObjectProxy, method : _RemoteMethod, func_info : Pr
         setattr(method, dunder, info)
     client_obj.__setattr__(method.__name__, method)
 
-def _add_parameter(client_obj : ObjectProxy, parameter : _RemoteParameter, parameter_info : ProxyResourceData) -> None:
+def _add_parameter(client_obj : ObjectProxy, parameter : _RemoteParameter, parameter_info) -> None:
     for attr in ['doc', 'name']: 
         # just to imitate _add_method logic
         setattr(parameter, attr, getattr(parameter_info, attr))
