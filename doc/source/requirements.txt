@@ -9,3 +9,15 @@ sphinxcontrib-serializinghtml==1.1.9
 pydata-sphinx-theme==0.14.3
 numpydoc==1.6.0
 sphinx-toolbox==3.5.0
+argon2==0.1.10
+ConfigParser==6.0.0
+ifaddr==0.2.0
+ipython==8.21.0
+numpy==1.26.4
+pandas==2.2.0
+pyzmq==25.1.0
+serpent==1.41
+setuptools==68.0.0
+SQLAlchemy==2.0.21
+SQLAlchemy_Utils==0.41.1
+tornado==6.3.3
