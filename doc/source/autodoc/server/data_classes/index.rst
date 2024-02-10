@@ -19,23 +19,23 @@ data classes
         :show-inheritance:
 
 
-.. collapse:: HTTPResourceInfo
+.. collapse:: HTTPResource
 
-    .. autoclass:: hololinked.server.data_classes.HTTPResourceInfo
+    .. autoclass:: hololinked.server.data_classes.HTTPResource
         :members: 
         :show-inheritance:
 
 
-.. collapse:: RPCResourceInfo
+.. collapse:: RPCResource
 
-    .. autoclass:: hololinked.server.data_classes.RPCResourceInfo
+    .. autoclass:: hololinked.server.data_classes.RPCResource
         :members: 
         :show-inheritance:
 
 
-.. collapse:: ServerSentEventInfo
+.. collapse:: ServerSentEvent
 
-    .. autoclass:: hololinked.server.data_classes.ServerSentEventInfo
+    .. autoclass:: hololinked.server.data_classes.ServerSentEvent
         :members: 
         :show-inheritance:
 
