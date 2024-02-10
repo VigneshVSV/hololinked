@@ -154,10 +154,10 @@ def dashed_URL(word : str) -> str:
     return word.lower().replace('_', '-')
 
 
-def create_default_logger(name : str, log_level : int = logging.INFO, logfile = None,
+def create_default_logger(name : str, log_level : int = logging.INFO, log_file = None,
                 format : str = '%(levelname)-8s - %(asctime)s:%(msecs)03d - %(name)s - %(message)s' ) -> logging.Logger:
     """
-    the default logger used by most of scadapy package. StreamHandler is always created, pass logfile for a FileHandler
+    the default logger used by most of hololinked package. StreamHandler is always created, pass log_file for a FileHandler
     as well.
     """
     logger = logging.getLogger(name) 
@@ -165,8 +165,8 @@ def create_default_logger(name : str, log_level : int = logging.INFO, logfile = 
     default_handler = logging.StreamHandler(sys.stdout)
     default_handler.setFormatter(logging.Formatter(format, datefmt='%Y-%m-%dT%H:%M:%S'))
     logger.addHandler(default_handler)
-    if logfile:
-        file_handler = logging.FileHandler(logfile)
+    if log_file:
+        file_handler = logging.FileHandler(log_file)
         file_handler.setFormatter(logging.Formatter(format, datefmt='%Y-%m-%dT%H:%M:%S'))
         logger.addHandler(file_handler)
     return logger

@@ -18,7 +18,6 @@ from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector,
 
 from .utils import create_default_logger
 from .decorators import get, put, post, delete, remote_method
-from .data_classes import HTTPServerResourceData
 from .serializers import JSONSerializer
 from .constants import GET, PUT, POST, OPTIONS, DELETE, USE_OBJECT_NAME, CALLABLE
 from .webserver_utils import log_request, update_resources

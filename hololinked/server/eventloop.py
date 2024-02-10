@@ -3,7 +3,10 @@ import asyncio
 import traceback
 import importlib
 import typing 
-
+import zmq
+import threading
+import time
+from collections import deque
 
 from .utils import unique_id, wrap_text
 from .constants import *
@@ -11,7 +14,7 @@ from .remote_parameters import TypedDict
 from .exceptions import *
 from .decorators import post, get
 from .remote_object import *
-from .zmq_message_brokers import AsyncPollingZMQServer, ZMQServerPool, ServerTypes
+from .zmq_message_brokers import AsyncPollingZMQServer, ZMQServerPool, ServerTypes, AsyncZMQClient
 from .remote_parameter import RemoteParameter
 from ..param.parameters import Boolean, ClassSelector, TypedList, List as PlainList
 
@@ -42,9 +45,7 @@ class EventLoop(RemoteObject):
 
     remote_objects = TypedList(item_type=(RemoteObject, Consumer), bounds=(0,100), allow_None=True, default=None,
                         doc="""list of RemoteObjects which are being executed""")
-    threaded = Boolean(default=False, doc="""by default False, set to True to use thread pool executor instead of 
-                        of simple asyncio. Default executor is a single-threaded asyncio loop. Thread pool executor creates 
-                        each thread with its own asyncio loop.""" )
+  
     # Remote Parameters
     uninstantiated_remote_objects = TypedDict(default=None, allow_None=True, key_type=str,
                         item_type=(Consumer, str)) #, URL_path = '/uninstantiated-remote-objects')
@@ -140,8 +141,20 @@ class EventLoop(RemoteObject):
         async_loop.call_soon(lambda : asyncio.create_task(self.run_single_target(instance)))
 
     def run(self):
+        self._message_listener = threading.Thread(target=self._run_external_message_listener)
+        self._message_listener.start()
+        self._remote_object_executor = threading.Thread(target=self._run_remote_object_executor)
+        self._remote_object_executor.start()
+
+    def _run_external_message_listener(self):
         async_loop = asyncio.get_event_loop()
-        # while True:
+        async_loop.run_until_complete(
+            asyncio.gather())
+        self.logger.info("exiting event loop {}".format(self.instance_name))
+        async_loop.close()
+    
+    def _run_remote_object_executor(self):
+        async_loop = asyncio.get_event_loop()
         async_loop.run_until_complete(
             asyncio.gather(
                 *[self.run_single_target(instance) 
