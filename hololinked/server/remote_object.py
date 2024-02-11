@@ -25,7 +25,7 @@ from .exceptions import BreakInnerLoop
 from .decorators import remote_method
 from .http_methods import get, post
 from .data_classes import (GUIResources, RemoteResource, HTTPResource, RPCResource, RemoteResourceInfoValidator,
-                           ServerSentEventInfo)
+                        ServerSentEvent)
 from .api_platform_utils import postman_item, postman_itemgroup
 from .database import BaseAsyncDB, BaseSyncDB
 from .utils import create_default_logger, get_signature, wrap_text
@@ -517,7 +517,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
             resource._unique_event_name = bytes(f"{self._full_URL_path_prefix}{resource.URL_path}", encoding='utf-8')
             resource.publisher = self._event_publisher                
             httpserver_resources[GET]['{}{}'.format(
-                        self._full_URL_path_prefix, resource.URL_path)] = ServerSentEventInfo(
+                        self._full_URL_path_prefix, resource.URL_path)] = ServerSentEvent(
                                                             # event URL_path has '/' prefix
                                                             what=EVENT,
                                                             event_name=resource.name,
@@ -865,7 +865,7 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
         self._critical_logs = deque(maxlen=value)
         self._execution_logs = deque(maxlen=value)
 
-    maxlen = RemoteInteger(default=100, bounds=(1, None), crop_to_bounds=True, URL_path='/maxlen',
+    maxlen = Integer(default=100, bounds=(1, None), crop_to_bounds=True, URL_path='/maxlen',
             fget=get_maxlen, fset=set_maxlen )
 
 

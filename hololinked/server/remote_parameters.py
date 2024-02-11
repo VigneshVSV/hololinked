@@ -38,7 +38,7 @@ class String(RemoteParameter):
 
     def __init__(self, default : typing.Optional[str] = "", *, regex : typing.Optional[str] = None, 
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 		    per_instance_descriptor : bool = False, deepcopy_default : bool = False, class_member : bool = False, 
@@ -140,7 +140,7 @@ class IPAddress(RemoteParameter):
     def __init__(self, default : typing.Optional[str] = "0.0.0.0", *, allow_ipv4 : bool = True, allow_ipv6 : bool = True, 
             allow_localhost : bool = True,
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 		    allow_None : bool = False, per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
@@ -369,7 +369,7 @@ class Number(RemoteParameter):
     def __init__(self, default : typing.Optional[typing.Union[float, int]] = 0.0, *, bounds : typing.Optional[typing.Tuple] = None, 
             crop_to_bounds : bool = False, inclusive_bounds : typing.Tuple = (True,True), step : typing.Any = None, 
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
             per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
@@ -504,7 +504,7 @@ class Integer(Number):
     def __init__(self, default : typing.Optional[int] = 0, *, bounds : typing.Optional[typing.Tuple] = None, 
             crop_to_bounds : bool = False, inclusive_bounds : typing.Tuple = (True,True), step : typing.Any = None, 
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 			
@@ -530,7 +530,7 @@ class Boolean(RemoteParameter):
 
     def __init__(self, default : typing.Optional[bool] = False, *, 
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 			
@@ -558,7 +558,7 @@ class Iterable(RemoteParameter):
     def __init__(self, default : typing.Any, *, bounds : typing.Optional[typing.Tuple[int, int]] = None, 
             length : typing.Optional[int] = None, item_type : typing.Optional[typing.Tuple] = None, deepcopy_default : bool = False, 
             allow_None : bool = False, doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 			
@@ -626,7 +626,7 @@ class Tuple(Iterable):
             length: typing.Optional[int] = None, item_type : typing.Optional[typing.Tuple] = None, 
             accept_list : bool = False, deepcopy_default : bool = False, 
             allow_None : bool = False, doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 			
@@ -681,7 +681,7 @@ class List(Iterable):
             length : typing.Optional[int] = None, item_type : typing.Optional[typing.Tuple] = None, 
             accept_tuple : bool = False, deepcopy_default : bool = False, 
             allow_None : bool = False, doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 			
@@ -742,7 +742,7 @@ class Composite(RemoteParameter):
 
     def __init__(self, attribs : typing.List[typing.Union[str, Parameter]], *, 
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 			
@@ -828,7 +828,7 @@ class Selector(SelectorBase):
     # existing objects, therefore instantiate is False by default.
     def __init__(self, *, objects : typing.List[typing.Any], default : typing.Any, empty_default : bool = False,  
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 			
@@ -891,7 +891,7 @@ class ClassSelector(SelectorBase):
 
     def __init__(self, *, class_ , default : typing.Any, isinstance : bool = True, deepcopy_default : bool = False,  
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 			
@@ -960,7 +960,7 @@ class TupleSelector(Selector):
 
     def __init__(self, *, objects : typing.List, default : typing.Any, accept_list : bool = True,
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 			
@@ -1024,7 +1024,7 @@ class Path(RemoteParameter):
 
     def __init__(self, default : typing.Any = '', *, search_paths : typing.Optional[str] = None, 
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 			
@@ -1133,7 +1133,7 @@ class FileSelector(Selector):
 
     def __init__(self, default : typing.Any, *, objects : typing.List, path : str = "", 
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 			
@@ -1173,7 +1173,7 @@ class MultiFileSelector(FileSelector):
 
     def __init__(self, default : typing.Any, *, path : str = "", 
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 			
@@ -1203,7 +1203,7 @@ class Date(Number):
     def __init__(self, default, *, bounds : typing.Union[typing.Tuple, None] = None, 
             crop_to_bounds : bool = False, inclusive_bounds : typing.Tuple = (True,True), step : typing.Any = None, 
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 			
@@ -1247,7 +1247,7 @@ class CalendarDate(Number):
     def __init__(self, default, *, bounds : typing.Union[typing.Tuple, None] = None, 
             crop_to_bounds : bool = False, inclusive_bounds : typing.Tuple = (True,True), step : typing.Any = None, 
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 			
@@ -1327,7 +1327,7 @@ class CSS3Color(RemoteParameter):
     __slots__ = ['allow_named']
 
     def __init__(self, default, *, allow_named : bool = True,  doc : typing.Optional[str] = None, constant : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 			
@@ -1367,12 +1367,11 @@ class Range(Tuple):
 
     def __init__(self, default : typing.Optional[typing.Tuple] = None, *, bounds: typing.Optional[typing.Tuple[int, int]] = None, 
             length : typing.Optional[int] = None, item_type : typing.Optional[typing.Tuple] = None, 
-            softbounds=None, inclusive_bounds=(True,True), step=None, 
+            softbounds=None, inclusive_bounds=(True,True), step=None,  
             doc : typing.Optional[str] = None, constant : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
             readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None,  
             per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
             class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
@@ -1519,10 +1518,9 @@ class TypedList(ClassSelector):
     def __init__(self, default : typing.Optional[typing.List[typing.Any]] = None, *, item_type : typing.Any = None, 
             deepcopy_default : bool = True, allow_None : bool = True,  bounds : tuple = (0,None), 
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
+			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,			
             per_instance_descriptor : bool = False, class_member : bool = False, 
             fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
             fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
@@ -1563,7 +1561,7 @@ class TypedDict(ClassSelector):
     def __init__(self, default : typing.Optional[typing.Dict] = None, *, key_type : typing.Any = None, 
             item_type : typing.Any = None, deepcopy_default : bool = True, allow_None : bool = True,
             bounds : tuple = (0, None), doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 			
@@ -1607,7 +1605,7 @@ class TypedKeyMappingsDict(ClassSelector):
             allow_unspecified_keys : bool = True, bounds : tuple = (0, None), 
             deepcopy_default : bool = True, allow_None : bool = True,
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT),
+			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
 			

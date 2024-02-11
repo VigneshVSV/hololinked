@@ -1,5 +1,9 @@
 .. _apiref:
 
+.. |br| raw:: html
+
+    <br />
+
 API Reference
 =============
 

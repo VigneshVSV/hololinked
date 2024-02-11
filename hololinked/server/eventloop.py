@@ -12,7 +12,7 @@ from .utils import unique_id, wrap_text
 from .constants import *
 from .remote_parameters import TypedDict
 from .exceptions import *
-from .decorators import post, get
+from .http_methods import post, get
 from .remote_object import *
 from .zmq_message_brokers import AsyncPollingZMQServer, ZMQServerPool, ServerTypes, AsyncZMQClient
 from .remote_parameter import RemoteParameter

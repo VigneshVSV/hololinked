@@ -253,7 +253,7 @@ class RPCResource:
 
 
 @dataclass
-class ServerSentEventInfo:
+class ServerSentEvent:
     """
     event name and socket address of events to be consumed by clients. 
     This class is generally not for consumption by the package-end-user. 
