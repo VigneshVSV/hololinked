@@ -24,8 +24,9 @@ See documentation of ``RPCServer`` for details.
     :maxdepth: 1
 
     base_zmq
-    base_zmq_server
+    zmq_server
     rpc_server
+    zmq_client
 
 
 
