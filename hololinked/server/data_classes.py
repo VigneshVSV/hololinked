@@ -66,7 +66,7 @@ class RemoteResourceInfoValidator:
         for key, value in kwargs.items(): 
             setattr(self, key, value)
     
-    def to_dataclass(self, obj : typing.Optional[typing.Any] = None) -> "RemoteResource":
+    def to_dataclass(self, obj : typing.Any = None, bound_obj : typing.Any = None) -> "RemoteResource":
         """
         For a plain, faster and uncomplicated access, a dataclass in created & used by the
         event loop. 
@@ -80,11 +80,10 @@ class RemoteResourceInfoValidator:
         RemoteResource
             dataclass equivalent of this object
         """
-        return RemoteResource(URL_path=self.URL_path, http_method=self.http_method, 
+        return RemoteResource(
                     state=tuple(self.state) if self.state is not None else None, 
                     obj_name=self.obj_name, iscallable=self.iscallable, iscoroutine=self.iscoroutine,
-                    isparameter=self.isparameter, http_request_as_argument=self.http_request_as_argument, 
-                    obj=obj) 
+                    isparameter=self.isparameter, obj=obj, bound_obj=bound_obj) 
         # http method is manually always stored as a tuple
 
 
@@ -108,8 +107,8 @@ class RemoteResource:
     iscallable : bool 
     iscoroutine : bool
     isparameter : bool
-    request_as_argument : bool
     obj : typing.Any
+    bound_obj : typing.Any
   
     def json(self):
         """
@@ -156,6 +155,7 @@ class HTTPResource:
     what : str 
     instance_name : str 
     instruction : str
+    fullpath : str
     request_as_argument : bool = field(default=False)
     path_format : typing.Optional[str] = field(default=None) 
     path_regex : typing.Optional[typing.Pattern] = field(default=None)
@@ -234,11 +234,10 @@ class RPCResource:
     qualname : str
     doc : typing.Optional[str]
 
-    def __init__(self, *, what : str, instance_name : str, fullpath : str, instruction : str, name : str,
+    def __init__(self, *, what : str, instance_name : str, instruction : str, name : str,
                 qualname : str, doc : str) -> None:
         self.what = what 
         self.instance_name = instance_name
-        self.fullpath = fullpath
         self.instruction = instruction
         self.name = name 
         self.qualname = qualname

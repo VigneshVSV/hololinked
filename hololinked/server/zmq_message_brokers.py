@@ -165,8 +165,8 @@ class BaseZMQ:
             else:
                 raise RuntimeError(f"Socket must be either bound or connected. No operation is being carried out for this socket {identity}")
         elif protocol == ZMQ_PROTOCOLS.INPROC or protocol == "INPROC":
-            inproc_instance_name = instance_name.replace('/', '_').replace('-', '_')
-            socket_address = f'inproc://{inproc_instance_name}'
+            # inproc_instance_name = instance_name.replace('/', '_').replace('-', '_')
+            socket_address = f'inproc://{instance_name}'
             if bind:
                 self.socket.bind(socket_address)
             else:
@@ -635,7 +635,7 @@ class AsyncPollingZMQServer(AsyncZMQServer):
                 poll_timeout = 25, **kwargs) -> None:
         super().__init__(instance_name=instance_name, server_type=server_type, context=context, protocol=protocol,
                         socket_type=socket_type, **kwargs)
-        self._instructions = []
+      
         self.poller = zmq.asyncio.Poller()
         self.poller.register(self.socket, zmq.POLLIN)
         self.poll_timeout = poll_timeout
@@ -851,23 +851,23 @@ class RPCServer(BaseZMQServer):
         super().__init__(server_type, kwargs.get('json_serializer', None), kwargs.get('rpc_serializer', None))
         kwargs["json_serializer"] = self.json_serializer
         kwargs["rpc_serializer"] = self.rpc_serializer
-        self.context = zmq.asyncio.Context()
+        self.context = context or zmq.asyncio.Context()
         self.poller = zmq.asyncio.Poller()
-        if ZMQ_PROTOCOLS.TCP in protocols:
-            self.tcp_server = AsyncPollingZMQServer(instance_name=instance_name, server_type=server_type, context=context, 
-                                    protocol=ZMQ_PROTOCOLS.TCP, poll_timeout=poll_timeout, **kwargs)
+        if ZMQ_PROTOCOLS.TCP in protocols or "TCP" in protocols:
+            self.tcp_server = AsyncPollingZMQServer(instance_name=instance_name, server_type=server_type, 
+                                    context=self.context, protocol=ZMQ_PROTOCOLS.TCP, poll_timeout=poll_timeout, **kwargs)
             self.poller.register(self.tcp_server.socket)
-        if ZMQ_PROTOCOLS.IPC in protocols: 
-            self.ipc_server = AsyncPollingZMQServer(instance_name=instance_name, server_type=server_type, context=context, 
-                                    protocol=ZMQ_PROTOCOLS.IPC, poll_timeout=poll_timeout, **kwargs)
+        if ZMQ_PROTOCOLS.IPC in protocols or "IPC" in protocols: 
+            self.ipc_server = AsyncPollingZMQServer(instance_name=instance_name, server_type=server_type, 
+                                    context=self.context, protocol=ZMQ_PROTOCOLS.IPC, poll_timeout=poll_timeout, **kwargs)
             self.poller.register(self.ipc_server.socket)
-        if ZMQ_PROTOCOLS.INPROC in protocols: 
-            self.inproc_server = AsyncPollingZMQServer(instance_name=instance_name, server_type=server_type, context=context, 
-                                    protocol=ZMQ_PROTOCOLS.INPROC, poll_timeout=poll_timeout, **kwargs)
+        if ZMQ_PROTOCOLS.INPROC in protocols or "INPROC" in protocols: 
+            self.inproc_server = AsyncPollingZMQServer(instance_name=instance_name, server_type=server_type, 
+                                    context=self.context, protocol=ZMQ_PROTOCOLS.INPROC, poll_timeout=poll_timeout, **kwargs)
             self.poller.register(self.inproc_server.socket)
         self.poll_timeout = poll_timeout
-        self.inproc_client = AsyncZMQClient(server_instance_name=f'{instance_name}/real', identity=f'{instance_name}/tunneler',
-                                client_type=TUNNELER, context=context, protocol=ZMQ_PROTOCOLS.INPROC)
+        self.inproc_client = AsyncZMQClient(server_instance_name=f'{instance_name}/inner', identity=f'{instance_name}/tunneler',
+                                client_type=TUNNELER, context=self.context, protocol=ZMQ_PROTOCOLS.INPROC, handshake=False)
         self._instructions = deque() # type: typing.Iterable[typing.Tuple[typing.List[bytes], asyncio.Event, asyncio.Future, zmq.Socket]]
         self._instructions_event = asyncio.Event()
         self.identity = f"{instance_name}/rpc-server"
@@ -924,6 +924,8 @@ class RPCServer(BaseZMQServer):
         """
         self.stop_poll = False
         eventloop = asyncio.get_event_loop()
+        self.inproc_client.handshake()
+        await self.inproc_client.handshake_complete()
         while not self.stop_poll:
             sockets : typing.Tuple[zmq.Socket, int] = await self.poller.poll(self._poll_timeout) # type
             for socket, _ in sockets:
@@ -1926,7 +1928,7 @@ class CriticalEvent(Event):
 class EventPublisher(BaseZMQServer):
 
     def __init__(self,  identity : str, context : typing.Union[zmq.Context, None] = None, **serializer) -> None:
-        super().__init__(server_type = ServerTypes.UNKNOWN_TYPE.value, **serializer)
+        super().__init__(server_type=ServerTypes.UNKNOWN_TYPE.value, **serializer)
         self.context = context or zmq.Context()
         self.identity = identity
         self.socket = self.context.socket(zmq.PUB)
@@ -1941,7 +1943,7 @@ class EventPublisher(BaseZMQServer):
                     print("Following error while atttempting to bind to socket address : {}".format(self.socket_address))
                     raise ex from None
             else:
-                self.logger = self.get_logger(identity, self.socket_address, logging.DEBUG, self.__class__.__name__)
+                self.logger = self.get_logger(identity, "PUB", "TCP", logging.DEBUG)
                 self.logger.info("created event publishing socket at {}".format(self.socket_address))
                 break
         self.events = set() # type: typing.Set[Event] 
@@ -1949,12 +1951,12 @@ class EventPublisher(BaseZMQServer):
 
     def register_event(self, event : Event) -> None:
         # unique_str_bytes = bytes(unique_str, encoding = 'utf-8') 
-        if event._event_unique_str in self.events:
+        if event._unique_event_name in self.events:
             raise AttributeError(wrap_text(
                 """event {} already found in list of events, please use another name. 
                 Also, Remotesubobject and RemoteObject cannot share event names.""".format(event.name))
             )
-        self.event_ids.add(event._event_unique_str)
+        self.event_ids.add(event._unique_event_name)
         self.events.add(event) 
         self.logger.info("registered event '{}' serving at PUB socket with address : {}".format(event.name, self.socket_address))
                

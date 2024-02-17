@@ -14,6 +14,7 @@ from dataclasses import asdict, dataclass
 from sqlalchemy import (Integer as DBInteger, String as DBString, JSON as DB_JSON, LargeBinary as DBBinary)
 from sqlalchemy import select
 from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, MappedAsDataclass
+import zmq
 
 
 from ..param.parameterized import Parameterized, ParameterizedMetaclass 
@@ -33,7 +34,7 @@ from .api_platform_utils import *
 from .remote_parameter import FileServer, PlotlyFigure, ReactApp, RemoteParameter, RemoteClassParameters, Image
 from .remote_parameters import (Integer, String, ClassSelector, TupleSelector, TypedDict, Boolean, 
                                 Selector, TypedKeyMappingsConstrainedDict )
-from .zmq_message_brokers import ServerTypes, EventPublisher, AsyncPollingZMQServer, Event
+from .zmq_message_brokers import RPCServer, ServerTypes, EventPublisher, AsyncPollingZMQServer, Event
 
 
 
@@ -313,15 +314,9 @@ class RemoteObjectMetaclass(ParameterizedMetaclass):
         return mcs._param_container
     
 
-       
-class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass): 
-    """
-    Expose your python classes for HTTP methods & RPC clients by subclassing from here. 
-    """
-    __server_type__ = ServerTypes.REMOTE_OBJECT 
-    state_machine : StateMachine
+class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
 
-    # objects given by user which we need to validate:
+    # local parameters
     instance_name = String(default=None, regex=r'[A-Za-z]+[A-Za-z_0-9\-\/]*', constant=True, remote=False,
                         doc="""Unique string identifier of the instance. This value is used for many operations,
                         for example - creating zmq socket address, tables in databases, and to identify the instance 
@@ -329,32 +324,19 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
                         (http(s)://{domain and sub domain}/{instance name}). It is suggested to use  
                         the class name along with a unique name {class name}/{some unique name}. Instance names must be unique
                         in your entire system.""") # type: str
-    logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, remote=False, 
-                        doc = """Logger object to print log messages, should be instance of logging.Logger(). default 
-                        logger is created if none is supplied.""") # type: logging.Logger 
-    rpc_serializer = ClassSelector(class_=(SerpentSerializer, JSONSerializer, PickleSerializer, str), # DillSerializer, 
-                                default='json', remote=False,
-                                doc="""The serializer that will be used for passing messages in zmq. For custom data 
-                                    types which have serialization problems, you can subclass the serializers and implement 
-                                    your own serialization options. Recommended serializer for exchange messages between
-                                    Proxy clients and server is Serpent and for HTTP serializer and server is JSON.""") # type: BaseSerializer
-    json_serializer  = ClassSelector(class_=JSONSerializer, default=None, allow_None=True, remote=False,
-                                doc = """Serializer used for sending messages between HTTP server and remote object,
-                                subclass JSONSerializer to implement undealt serialization options.""") # type: JSONSerializer
-    
-    # remote paramaters
-    object_info = RemoteParameter(doc="contains information about this object like the class name, script location etc.",
-                        readonly=True, URL_path='/info', fget = lambda self: self._object_info) # type: RemoteObjectDB.RemoteObjectInfo
-    events = RemoteParameter(readonly=True, URL_path='/events', 
-                        doc="returns a dictionary with two fields containing event name and event information") # type: typing.Dict[str, typing.Any]
     httpserver_resources = RemoteParameter(readonly=True, URL_path='/resources/http', 
                         doc="""object's resources exposed to HTTP server""", fget=lambda self: self._httpserver_resources ) # type: typing.Dict[str, typing.Dict[str, HTTPResource]]
     rpc_resources = RemoteParameter(readonly=True, URL_path='/resources/object-proxy', 
                         doc= """object's resources exposed to RPC client, similar to HTTP resources but differs 
                         in details.""", fget=lambda self: self._rpc_resources) # type: typing.Dict[str, typing.Any]
+    # remote paramerters
+    events = RemoteParameter(readonly=True, URL_path='/events', 
+                        doc="returns a dictionary with two fields containing event name and event information") # type: typing.Dict[str, typing.Any]
     gui_resources : typing.Dict = RemoteParameter(readonly=True, URL_path='/resources/gui', 
                         doc= """object's data read by scadapy webdashboard GUI client, similar to http_resources but differs 
                         in details.""") # type: typing.Dict[str, typing.Any]
+    object_info = RemoteParameter(doc="contains information about this object like the class name, script location etc.",
+                        readonly=True, URL_path='/info', fget = lambda self: self._object_info) # type: RemoteObjectDB.RemoteObjectInfo
     GUI = ClassSelector(class_=ReactApp, default=None, allow_None=True, 
                         doc= """GUI applied here will become visible at GUI tab of dashboard tool""") # type: typing.Optional[ReactApp]
     
@@ -373,33 +355,16 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
         obj._internal_fixed_attributes = ['_internal_fixed_attributes', 'instance_resources', '_owner']        
         # objects given by user which we need to validate (mostly descriptors)
         return obj
+    
 
-    def __init__(self, instance_name : str, logger : typing.Optional[logging.Logger] = None, log_level : typing.Optional[int] = None, 
-                log_file : typing.Optional[str] = None, logger_remote_access : bool = True, 
-                rpc_serializer : typing.Optional[BaseSerializer] = None, json_serializer : typing.Optional[JSONSerializer] = None,
-                server_protocols : typing.Optional[typing.Union[typing.List[ZMQ_PROTOCOLS], typing.Tuple[ZMQ_PROTOCOLS], ZMQ_PROTOCOLS]] = None, 
-                db_config_file : typing.Optional[str] = None, **params) -> None:
+    def __init__(self, instance_name : str, **params):
+        super().__init__(instance_name=instance_name, **params)
         
+
+    def __post_init__(self):
         self._internal_fixed_attributes : typing.List[str]
         self._owner : typing.Optional[RemoteObject]
-        
-        super().__init__(instance_name=instance_name, logger=logger, rpc_serializer=rpc_serializer, 
-                        json_serializer=json_serializer, **params)
 
-        self._prepare_logger(log_file=log_file, log_level=log_level, remote_access=logger_remote_access)
-        self._prepare_message_brokers(server_protocols=server_protocols, rpc_serializer=rpc_serializer, 
-                                    json_serializer=json_serializer)
-        self._prepare_state_machine()  
-        self._prepare_DB(db_config_file)   
-
-    
-    def __post_init__(self):
-        # Never create events before _prepare_instance(), no checks in place
-        self._prepare_resources()
-        self._write_parameters_from_DB()
-        self.logger.info("initialialised RemoteObject class {} with instance name {}".format(
-            self.__class__.__name__, self.instance_name))  
-        
 
     def __setattr__(self, __name: str, __value: typing.Any) -> None:
         if  __name == '_internal_fixed_attributes' or __name in self._internal_fixed_attributes: 
@@ -413,36 +378,6 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
         else:
             super().__setattr__(__name, __value)
 
-
-    def _prepare_logger(self, log_level : int, log_file : str, remote_access : bool = True):
-        if self.logger is None:
-            self.logger = create_default_logger('{}/{}'.format(self.__class__.__name__, self.instance_name), 
-                            logging.INFO if not log_level else log_level, 
-                            None if not log_file else log_file)
-        if remote_access:
-            if not any(isinstance(handler, RemoteAccessHandler) 
-                                                    for handler in self.logger.handlers):
-                self._remote_access_loghandler = RemoteAccessHandler(instance_name='logger', maxlen=500, emit_interval=1)
-                self.logger.addHandler(self._remote_access_loghandler)
-            else:
-                for handler in self.logger.handlers:
-                    if isinstance(handler, RemoteAccessHandler):
-                        self._remote_access_loghandler = handler        
-
-        
-    def _prepare_message_brokers(self, protocols : typing.Optional[typing.Union[typing.Iterable[ZMQ_PROTOCOLS], ZMQ_PROTOCOLS]]):
-        self.message_broker = AsyncPollingZMQServer(
-                                instance_name=self.instance_name, 
-                                server_type=self.__server_type__,
-                                protocols=ZMQ_PROTOCOLS.INPROC, 
-                                json_serializer=self.json_serializer,
-                                rpc_serializer=self.rpc_serializer
-                            )
-        self.json_serializer = self.message_broker.json_serializer
-        self.rpc_serializer = self.message_broker.rpc_serializer
-        self.event_publisher = EventPublisher(identity=self.instance_name, rpc_serializer=self.rpc_serializer,
-                                              json_serializer=self.json_serializer)
-     
 
     def _prepare_resources(self):
         """
@@ -486,24 +421,22 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
                                             )
                 rpc_resources[fullpath] = RPCResource(
                                                 what=CALLABLE,
+                                                instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
                                                 instruction=fullpath,                                                                                                                                                                                        
-                                                module=getattr(resource, '__module__'), 
                                                 name=getattr(resource, '__name__'),
                                                 qualname=getattr(resource, '__qualname__'), 
                                                 doc=getattr(resource, '__doc__'),
-                                                kwdefaults=getattr(resource, '__kwdefaults__'),
-                                                defaults=getattr(resource, '__defaults__'),
                                             )
-                instance_resources[fullpath] = remote_info.to_dataclass(obj=resource) 
+                instance_resources[fullpath] = remote_info.to_dataclass(obj=resource, bound_obj=self) 
         # Other remote objects 
-        for name, resource in inspect.getmembers(self, lambda o : isinstance(o, RemoteObject)):
+        for name, resource in inspect.getmembers(self, lambda o : isinstance(o, RemoteSubobject)):
             if name == '_owner':
                 continue
-            assert isinstance(resource, RemoteObject), ("remote object children query from inspect.ismethod is not a RemoteObject",
+            assert isinstance(resource, RemoteSubobject), ("remote object children query from inspect.ismethod is not a RemoteObject",
                                     "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")
             # above assertion is only a typing convenience
             resource._owner = self
-            resource._prepare_instance()                    
+            resource._prepare_resources()                 
             for http_method, resources in resource.httpserver_resources.items():
                 httpserver_resources[http_method].update(resources)
             rpc_resources.update(resource.rpc_resources)
@@ -552,25 +485,23 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
                         
                 rpc_resources[fullpath] = RPCResource(
                                 what=ATTRIBUTE, 
+                                instance_name=self._owner.instance_name if self._owner is not None else self.instance_name, 
                                 instruction=fullpath, 
-                                module=__file__, 
                                 doc=parameter.__doc__, 
                                 name=remote_info.obj_name,
                                 qualname=self.__class__.__name__ + '.' + remote_info.obj_name,
                                 # qualname is not correct probably, does not respect inheritance
-                                kwdefaults=None, 
-                                defaults=None, 
                             ) 
-                dclass = remote_info.to_dataclass(obj=parameter) 
+                dclass = remote_info.to_dataclass(obj=parameter, bound_obj=self) 
                 instance_resources[fullpath+'/'+READ] = dclass
                 instance_resources[fullpath+'/'+WRITE] = dclass  
         # The above for-loops can be used only once, the division is only for readability
         # following are in _internal_fixed_attributes - allowed to set only once
         self._rpc_resources = rpc_resources       
         self._httpserver_resources = httpserver_resources 
-        self.instance_resources = instance_resources
+        self.instance_resources = instance_resources    
 
-        
+    
     def _create_object_info(self, script_path : typing.Optional[str] = None):
         if not script_path:
             try:
@@ -584,62 +515,28 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
                     http_server    = ConfigInfo.USER_MANAGED.name, 
                     args           = ConfigInfo.USER_MANAGED.name, 
                     kwargs         = ConfigInfo.USER_MANAGED.name,  
-                    eventloop_name = self.eventloop_name, 
-                    level          = 0, 
+                    eventloop_name = ConfigInfo.USER_MANAGED.name, 
+                    level          = ConfigInfo.USER_MANAGED.name, 
                     level_type     = ConfigInfo.USER_MANAGED.name, 
                 )  
-
-
-    def _prepare_DB(self, config_file : str = None):
-        if not config_file:
-            self._object_info = self._create_object_info()
-            return 
-        # 1. create engine 
-        self.db_engine : RemoteObjectDB = RemoteObjectDB(instance_name=self.instance_name, serializer=self.rpc_serializer,
-                                        config_file=config_file)
-        # 2. create an object metadata to be used by different types of clients
-        object_info = self.db_engine.fetch_own_info()
-        if object_info is None:
-            object_info = self._create_object_info()
-        self._object_info = object_info
-        # 3. enter parameters to DB if not already present 
-        if self.object_info.class_name != self.__class__.__name__:
-            raise ValueError(wrap_text(f"""
-                Fetched instance name and class name from database not matching with the current RemoteObject class/subclass.
-                You might be reusing an instance name of another subclass and did not remove the old data from database. 
-                Please clean the database using database tools to start fresh. 
-                """))
-
-
-    def _write_parameters_from_DB(self):
-        self.db_engine.create_missing_db_parameters(self.__class__.parameters.db_init_objects)
-        # 4. read db_init and db_persist objects
-        for db_param in  self.db_engine.read_all_parameters():
-            try:
-                setattr(self, db_param.name, self.rpc_serializer.loads(db_param.value)) # type: ignore
-            except Exception as E:
-                self.logger.error(f"could not set attribute {db_param.name} due to error {E}")
-
-
-    def _prepare_state_machine(self):
-        if hasattr(self, 'state_machine'):
-            self.state_machine._prepare(self)
-            self.logger.debug("setup state machine")
-
+    
 
     @property
     def _event_publisher(self) -> EventPublisher:
         try:
             return self.event_publisher 
         except AttributeError:
-            top_owner = self._owner # type: RemoteObject
+            top_owner = self._owner 
             while True:
                 if isinstance(top_owner, RemoteObject):
+                    self.event_publisher = top_owner.event_publisher
+                    return self.event_publisher
+                elif isinstance(top_owner, RemoteSubobject):
                     top_owner = top_owner._owner
                 else:
-                    break;        
-            self.event_publisher = top_owner._event_publisher
-            return self.event_publisher
+                    raise RuntimeError("Error while finding owner of RemoteSubobject.", 
+                        "RemoteSubobject must be composed only within RemoteObject or RemoteSubobject, ",  
+                        "otherwise there can be problems.")
             
 
     @events.getter
@@ -654,7 +551,6 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
             ) for event in self.event_publisher.events
         }
     
- 
     @gui_resources.getter
     def _get_gui_resources(self):
         gui_resources = GUIResources(
@@ -704,7 +600,130 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
                                 },
                         }
         return gui_resources
-   
+
+       
+class RemoteObject(RemoteSubobject): 
+    """
+    Expose your python classes for HTTP methods & RPC clients by subclassing from here. 
+    """
+    __server_type__ = ServerTypes.REMOTE_OBJECT 
+    state_machine : StateMachine
+
+    # local parameters
+    logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, remote=False, 
+                        doc = """Logger object to print log messages, should be instance of logging.Logger(). default 
+                        logger is created if none is supplied.""") # type: logging.Logger
+    rpc_serializer = ClassSelector(class_=(SerpentSerializer, JSONSerializer, PickleSerializer, str), # DillSerializer, 
+                                allow_None=True, default='serpent', remote=False,
+                                doc="""The serializer that will be used for passing messages in zmq. For custom data 
+                                    types which have serialization problems, you can subclass the serializers and implement 
+                                    your own serialization options. Recommended serializer for exchange messages between
+                                    Proxy clients and server is Serpent and for HTTP serializer and server is JSON.""") # type: BaseSerializer
+    json_serializer  = ClassSelector(class_=JSONSerializer, default=None, allow_None=True, remote=False,
+                                doc = """Serializer used for sending messages between HTTP server and remote object,
+                                subclass JSONSerializer to implement undealt serialization options.""") # type: JSONSerializer
+ 
+    
+    def __init__(self, instance_name : str, logger : typing.Optional[logging.Logger] = None, log_level : typing.Optional[int] = None, 
+                log_file : typing.Optional[str] = None, logger_remote_access : bool = True, 
+                rpc_serializer : typing.Optional[BaseSerializer] = 'serpent', json_serializer : typing.Optional[JSONSerializer] = None,
+                server_protocols : typing.Optional[typing.Union[typing.List[ZMQ_PROTOCOLS], 
+                                typing.Tuple[ZMQ_PROTOCOLS], ZMQ_PROTOCOLS]] = [ZMQ_PROTOCOLS.IPC, ZMQ_PROTOCOLS.TCP, ZMQ_PROTOCOLS.INPROC], 
+                db_config_file : typing.Optional[str] = None, **params) -> None:
+        
+        super().__init__(instance_name=instance_name, logger=logger, rpc_serializer=rpc_serializer, 
+                        json_serializer=json_serializer, **params)
+
+        self._prepare_logger(log_file=log_file, log_level=log_level, remote_access=logger_remote_access)
+        self._prepare_message_brokers(protocols=server_protocols)
+        self._prepare_state_machine()  
+        self._prepare_DB(db_config_file)   
+
+    
+    def __post_init__(self):
+        # Never create events before _prepare_instance(), no checks in place
+        super().__post_init__()
+        self._owner = None
+        self._prepare_resources()
+        self._write_parameters_from_DB()
+        self.logger.info("initialialised RemoteObject class {} with instance name {}".format(
+            self.__class__.__name__, self.instance_name))  
+        
+
+    def _prepare_logger(self, log_level : int, log_file : str, remote_access : bool = True):
+        if self.logger is None:
+            self.logger = create_default_logger(self.instance_name, 
+                            logging.INFO if not log_level else log_level, 
+                            None if not log_file else log_file)
+        if remote_access:
+            if not any(isinstance(handler, RemoteAccessHandler) 
+                                                    for handler in self.logger.handlers):
+                self._remote_access_loghandler = RemoteAccessHandler(instance_name='logger', maxlen=500, emit_interval=1)
+                self.logger.addHandler(self._remote_access_loghandler)
+            else:
+                for handler in self.logger.handlers:
+                    if isinstance(handler, RemoteAccessHandler):
+                        self._remote_access_loghandler = handler        
+
+        
+    def _prepare_message_brokers(self, protocols : typing.Optional[typing.Union[typing.Iterable[ZMQ_PROTOCOLS], ZMQ_PROTOCOLS]]):
+        context = zmq.asyncio.Context()
+        self.message_broker = AsyncPollingZMQServer(
+                                instance_name=f'{self.instance_name}/inner',  # hardcoded be very careful
+                                server_type=self.__server_type__.value,
+                                context=context,
+                                protocol=ZMQ_PROTOCOLS.INPROC, 
+                                json_serializer=self.json_serializer,
+                                rpc_serializer=self.rpc_serializer
+                            )
+        self.json_serializer = self.message_broker.json_serializer
+        self.rpc_serializer = self.message_broker.rpc_serializer
+        self._rpc_server = RPCServer(instance_name=self.instance_name, server_type=self.__server_type__.value, 
+                                    context=context, protocols=protocols, json_serializer=self.json_serializer, 
+                                    rpc_serializer=self.rpc_serializer) 
+        self.event_publisher = EventPublisher(identity=self.instance_name, rpc_serializer=self.rpc_serializer,
+                                              json_serializer=self.json_serializer)
+     
+
+    def _prepare_DB(self, config_file : str = None):
+        if not config_file:
+            self._object_info = self._create_object_info()
+            return 
+        # 1. create engine 
+        self.db_engine : RemoteObjectDB = RemoteObjectDB(instance_name=self.instance_name, serializer=self.rpc_serializer,
+                                        config_file=config_file)
+        # 2. create an object metadata to be used by different types of clients
+        object_info = self.db_engine.fetch_own_info()
+        if object_info is None:
+            object_info = self._create_object_info()
+        self._object_info = object_info
+        # 3. enter parameters to DB if not already present 
+        if self.object_info.class_name != self.__class__.__name__:
+            raise ValueError(wrap_text(f"""
+                Fetched instance name and class name from database not matching with the current RemoteObject class/subclass.
+                You might be reusing an instance name of another subclass and did not remove the old data from database. 
+                Please clean the database using database tools to start fresh. 
+                """))
+
+
+    def _write_parameters_from_DB(self):
+        if not hasattr(self, 'db_engine'):
+            return
+        self.db_engine.create_missing_db_parameters(self.__class__.parameters.db_init_objects)
+        # 4. read db_init and db_persist objects
+        for db_param in  self.db_engine.read_all_parameters():
+            try:
+                setattr(self, db_param.name, self.rpc_serializer.loads(db_param.value)) # type: ignore
+            except Exception as E:
+                self.logger.error(f"could not set attribute {db_param.name} due to error {E}")
+
+
+    def _prepare_state_machine(self):
+        if hasattr(self, 'state_machine'):
+            self.state_machine._prepare(self)
+            self.logger.debug("setup state machine")
+
+
     @get(URL_path='/resources/postman-collection')
     def postman_collection(self, domain_prefix : str) -> postman_collection:
         try:
@@ -816,10 +835,13 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMetaclass):
     def query(self, info : typing.Union[str, typing.List[str]]) -> typing.Any:
         raise NotImplementedError("arbitrary quering of {} currently not possible".format(self.__class__.__name__))
 
-    def run(self):
+    def run(self, expose_eventloop : bool = False):
         from .eventloop import EventLoop
-        _eventloop = asyncio.get_event_loop()
-        _eventloop.run_until_complete(EventLoop.run_single_target(self))
+        e = EventLoop(instance_name=f'{self.instance_name}/eventloop', remote_objects=[self], log_level=self.logger.level,
+                    rpc_serializer=self.rpc_serializer, json_serializer=self.json_serializer)
+        if not expose_eventloop:
+            e.remote_objects = [self] # remote event loop from list of remote objects
+        e.run()
        
 
 
@@ -838,11 +860,11 @@ class ListHandler(logging.Handler):
         })
 
 
-
-class RemoteAccessHandler(logging.Handler, RemoteObject):
+class RemoteAccessHandler(logging.Handler, RemoteSubobject):
 
     def __init__(self, maxlen : int = 100, emit_interval : float = 1.0, **kwargs) -> None:
         logging.Handler.__init__(self)
+        RemoteSubobject.__init__(self, **kwargs)
         # self._last_time = datetime.datetime.now()
         if not isinstance(emit_interval, (float, int)) or emit_interval < 1.0:
             raise TypeError("Specify log emit interval as number greater than 1.0") 
