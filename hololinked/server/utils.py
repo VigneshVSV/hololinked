@@ -6,9 +6,6 @@ import re
 import asyncio
 import inspect
 import typing
-import builtins
-import types
-from typing import List
 from ..param.exceptions import wrap_error_text as wrap_text
 
 
@@ -184,7 +181,7 @@ def run_coro_sync(coro):
         eventloop.run_until_complete(coro)
 
 
-def run_coro_somehow(coro):
+def run_method_somehow(coro):
     """
     either schedule the coroutine or run it until its complete
     """
@@ -210,19 +207,6 @@ def get_signature(function : typing.Callable):
     return arg_names, arg_types
 
 
-
-def raise_local_exception(exception : typing.Dict[str, typing.Any]):
-    exc = getattr(builtins, exception["type"], None)
-    message = f"server raised exception, check following for server side traceback & above for client side traceback : "
-    # tb = types.TracebackType()
-    if exc is None:
-        E = Exception(message)
-    else: 
-        E = exc(message)
-    # E.with_traceback()
-    E.__notes__ = exception["traceback"]
-    raise E 
-    
 
 
 __all__ = ['current_datetime_ms_str', 'wrap_text', 'copy_parameters', 'dashed_URL']
