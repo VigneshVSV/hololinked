@@ -150,7 +150,7 @@ class EventLoop(RemoteObject):
         self._remote_object_executor.start()
         self._run_external_message_listener()
         self._remote_object_executor.join()
-
+      
     def _run_external_message_listener(self):
         """
         Runs ZMQ's sockets which are visible to clients
@@ -261,8 +261,9 @@ class EventLoop(RemoteObject):
                 # Note that because we actually find the resource within __prepare_instance__, its already bound
                 # and we dont have to separately bind it. 
                 func = resource.obj
+                args = arguments.pop('__args__')
                 if resource.iscoroutine:
-                    return await func(**arguments)
+                    return await func(*args, **arguments)
                 else:
                     return func(**arguments)
             else: 

@@ -4,8 +4,6 @@ import os.path
 import datetime as dt
 import typing 
 import numbers
-import sys
-import functools
 import collections.abc
 from enum import Enum
 from collections import OrderedDict
@@ -27,11 +25,11 @@ class String(RemoteParameter):
 
     Example of using a regex to implement IPv4 address matching::
 
-      class IPAddress(String):
+    class IPAddress(String):
         '''IPv4 address as a string (dotted decimal notation)'''
-       def __init__(self, default="0.0.0.0", allow_None=False, **kwargs):
-           ip_regex = r'^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
-           super(IPAddress, self).__init__(default=default, regex=ip_regex, **kwargs)
+        def __init__(self, default="0.0.0.0", allow_None=False, **kwargs):
+            ip_regex = r'^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
+            super(IPAddress, self).__init__(default=default, regex=ip_regex, **kwargs)
     """
 
     __slots__ = ['regex']
@@ -49,7 +47,7 @@ class String(RemoteParameter):
             deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel,
             precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
         self.regex = regex
     
     def validate_and_adapt(self, value : typing.Any) -> str: 
@@ -151,7 +149,7 @@ class IPAddress(RemoteParameter):
             deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
             precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
         self.allow_localhost = allow_localhost 
         self.allow_ipv4 = allow_ipv4
         self.allow_ipv6 = allow_ipv6
@@ -379,7 +377,7 @@ class Number(RemoteParameter):
             allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default, 
             class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
         self.bounds = bounds
         self.crop_to_bounds = crop_to_bounds
         self.inclusive_bounds = inclusive_bounds
@@ -507,7 +505,6 @@ class Integer(Number):
 			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
             per_instance_descriptor : bool = False, deepcopy_default : bool = False, class_member : bool = False, 
             fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
             fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
@@ -516,7 +513,7 @@ class Integer(Number):
             deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
             precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
         self.dtype = (int,)
 
     def _validate_step(self, step : int):
@@ -533,7 +530,6 @@ class Boolean(RemoteParameter):
 			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
             per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
             class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
             fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
@@ -541,7 +537,7 @@ class Boolean(RemoteParameter):
             allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default, 
             class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
 
     def validate_and_adapt(self, value : typing.Any) -> bool:
         if not isinstance(value, bool):
@@ -561,7 +557,6 @@ class Iterable(RemoteParameter):
 			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
             per_instance_descriptor : bool = False,  class_member : bool = False, 
             fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
             fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
@@ -575,7 +570,7 @@ class Iterable(RemoteParameter):
             allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default, 
             class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
         self.bounds = bounds 
         self.length = length
         self.item_type = item_type
@@ -629,7 +624,6 @@ class Tuple(Iterable):
 			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
             per_instance_descriptor : bool = False, class_member : bool = False, 
             fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
             fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
@@ -638,7 +632,7 @@ class Tuple(Iterable):
             deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
             precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
         self.accept_list = accept_list
         self.dtype = (tuple,) # re-assigned
       
@@ -684,7 +678,6 @@ class List(Iterable):
 			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
             per_instance_descriptor : bool = False, 
             class_member : bool = False, fget : typing.Optional[typing.Callable] = None,
             fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None,
@@ -694,7 +687,7 @@ class List(Iterable):
             per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default, 
             class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
         self.accept_tuple = accept_tuple
         self.dtype = list
 
@@ -745,7 +738,6 @@ class Composite(RemoteParameter):
 			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
             per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
             class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
             fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
@@ -753,7 +745,7 @@ class Composite(RemoteParameter):
             per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default, 
             class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
         self.attribs = [] 
         if attribs is not None:
             for attrib in attribs:
@@ -830,8 +822,7 @@ class Selector(SelectorBase):
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
 			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
+			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,		
             per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
             class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
             fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None, 
@@ -840,7 +831,7 @@ class Selector(SelectorBase):
             allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default, 
             class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
         if objects is None:
             objects = []
             autodefault = None
@@ -894,7 +885,6 @@ class ClassSelector(SelectorBase):
 			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
             per_instance_descriptor : bool = False, class_member : bool = False, 
             fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
             fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
@@ -902,7 +892,7 @@ class ClassSelector(SelectorBase):
             allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default, 
             class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
         self.class_ = class_
         self.isinstance = isinstance
 
@@ -963,7 +953,6 @@ class TupleSelector(Selector):
 			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
             per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
             class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
             fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
@@ -972,7 +961,7 @@ class TupleSelector(Selector):
             deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
             precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
         self.accept_list = accept_list
 
     def validate_and_adapt(self, value : typing.Any):
@@ -1027,7 +1016,6 @@ class Path(RemoteParameter):
 			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
             per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
             class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
             fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
@@ -1036,7 +1024,7 @@ class Path(RemoteParameter):
             deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
             precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
         if isinstance(search_paths, str):
             self.search_paths = [search_paths]
         elif isinstance(search_paths, list):
@@ -1136,7 +1124,6 @@ class FileSelector(Selector):
 			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
             per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
             class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
             fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
@@ -1145,7 +1132,7 @@ class FileSelector(Selector):
             deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
             precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
         self.path = path # update is automatically called
 
     def _post_slot_set(self, slot: str, old : typing.Any, value : typing.Any) -> None:
@@ -1176,7 +1163,6 @@ class MultiFileSelector(FileSelector):
 			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
             label : typing.Optional[str] = None, per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
             class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
             fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
@@ -1185,7 +1171,7 @@ class MultiFileSelector(FileSelector):
             deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, 
             fdel=fdel, precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
        
     def update(self):
         self.objects = sorted(glob.glob(self.path))
@@ -1205,8 +1191,7 @@ class Date(Number):
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
 			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
+			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,		
             per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
             class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
             fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
@@ -1216,7 +1201,7 @@ class Date(Number):
             deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
             precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
         self.dtype = dt_types
 
     def _validate_step(self, val):
@@ -1249,8 +1234,7 @@ class CalendarDate(Number):
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
 			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
+			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,	
             per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
             class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
             fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
@@ -1260,7 +1244,7 @@ class CalendarDate(Number):
             deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
             precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
         self.dtype = dt.date
 
     def _validate_step(self, step):
@@ -1330,7 +1314,6 @@ class CSS3Color(RemoteParameter):
 			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
             readonly : bool = False, allow_None : bool = False,
             per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
             class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
@@ -1340,7 +1323,7 @@ class CSS3Color(RemoteParameter):
             deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel,  
             precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
         self.allow_named = allow_named
     
     def validate_and_adapt(self, value : typing.Any):
@@ -1384,7 +1367,7 @@ class Range(Tuple):
             deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
             precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
 
     def validate_and_adapt(self, value : typing.Any) -> typing.Tuple:
         raise NotImplementedError("Range validation not implemented")
@@ -1532,7 +1515,7 @@ class TypedList(ClassSelector):
             per_instance_descriptor=per_instance_descriptor, class_member=class_member, fget=fget, fset=fset, 
             fdel=fdel, precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
         self.item_type = item_type
         self.bounds    = bounds
 
@@ -1564,7 +1547,6 @@ class TypedDict(ClassSelector):
 			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
 			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
             per_instance_descriptor : bool = False, 
             class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
             fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None,
@@ -1579,7 +1561,7 @@ class TypedDict(ClassSelector):
             doc=doc, constant=constant, readonly=readonly, allow_None=allow_None, fget=fget, fset=fset, fdel=fdel, 
             per_instance_descriptor=per_instance_descriptor, class_member=class_member, precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
 
     def __set__(self, obj, value):
         if value is not None:
@@ -1607,8 +1589,7 @@ class TypedKeyMappingsDict(ClassSelector):
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, 
 			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-			
+			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,	
             per_instance_descriptor : bool = False, class_member : bool = False, 
             fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
             fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
@@ -1624,7 +1605,7 @@ class TypedKeyMappingsDict(ClassSelector):
             allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, class_member=class_member, 
             fget=fget, fset=fset, fdel=fdel, precedence=precedence, 
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit)
+			db_init=db_init, db_commit=db_commit, remote=remote)
                        
     def __set__(self, obj, value):
         if value is not None:

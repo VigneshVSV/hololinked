@@ -59,23 +59,36 @@ class RemoteParameter(Parameter):
         allowed. If the default value is defined as None, allow_None
         is set to True automatically.
 
-    db_memorized: bool, default False
+    URL_path: str, uses object name by default
+        resource locator under which the attribute is accessible through 
+        HTTP. when remote is True and no value is supplied, the variable name 
+        is used and underscores and replaced with dash
+
+    remote: bool, default True
+        set to false to make the parameter local
+
+    http_method: tuple, default (GET, PUT)
+        http methods for read and write respectively 
+
+    state: str | Enum, default None
+        state of state machine where write can be executed
+
+    db_persist: bool, default False
         if True, every read and write is stored in database 
         and persists instance destruction and creation. 
     
-    db_firstload: bool, default False
+    db_init: bool, default False
         if True, only the first read is loaded from database.
-        further reads and writes not written to database. if db_memorized 
+        Further reads and writes not written to database. if db_persist
+        is True, this value is ignored. 
+
+    db_commit: bool,
+        if True, all write values are stored to database. if db_persist
         is True, this value is ignored. 
 
     remote: bool, default True
         set False to avoid exposing the variable for remote read 
         and write
-
-    URL_path: str, uses object name by default
-        resource locator under which the attribute is accessible through 
-        HTTP. when remote is True and no value is supplied, the variable name 
-        is used and underscores and replaced with dash
 
     metadata: dict, default None
         store your own JSON compatible metadata for the parameter 
@@ -86,6 +99,15 @@ class RemoteParameter(Parameter):
         shown in a listing. If no label is supplied, the attribute name
         for this parameter in the owning Parameterized object is used.
 
+    fget: Callable, default None
+        custom getter method, mandatory when setter method is also custom.
+
+    fset: Callable, default None
+        custom setter method
+    
+    fdel: Callable, default None
+        custom deleter method
+        
     per_instance_descriptor: bool, default False 
         whether a separate Parameter instance will be
         created for every Parameterized instance. True by default.
@@ -116,6 +138,7 @@ class RemoteParameter(Parameter):
         independently deepcopied value.
 
     class_member : bool, default False
+        when True, parameter is set on class instead of instance. 
 
     precedence: float, default None
         a numeric value, usually in the range 0.0 to 1.0,
@@ -123,9 +146,6 @@ class RemoteParameter(Parameter):
         a listing or e.g. in GUI menus. A negative precedence indicates
         a parameter that should be hidden in such listings.
 
-    default, doc, and precedence all default to None, which allows
-    inheritance of Parameter slots (attributes) from the owning-class'
-    class hierarchy (see ParameterizedMetaclass).
     """
 
     __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', '_remote_info']
@@ -162,9 +182,10 @@ class RemoteParameter(Parameter):
         
     def _post_slot_set(self, slot : str, old : typing.Any, value : typing.Any) -> None:
         if slot == 'owner' and self.owner is not None:
-            if self._remote_info.URL_path == USE_OBJECT_NAME:
-                self._remote_info.URL_path = '/' + self.name
-            self._remote_info.obj_name = self.name
+            if self._remote_info is not None:
+                if self._remote_info.URL_path == USE_OBJECT_NAME:
+                    self._remote_info.URL_path = '/' + self.name
+                self._remote_info.obj_name = self.name
             # In principle the above could be done when setting name itself however to simplify
             # we do it with owner. So we should always remember order of __set_name__ -> 1) attrib_name, 
             # 2) name and then 3) owner

@@ -4,33 +4,32 @@ import typing
 import logging
 from typing import Any
 
+from  .data_classes import RPCResource
 from .zmq_message_brokers import SyncZMQClient, EventConsumer, PROXY
-from .utils import current_datetime_ms_str, raise_local_exception
-from .constants import PARAMETER, SERIALIZABLE_WRAPPER_ASSIGNMENTS, FUNC, CALLABLE, ATTRIBUTE, EVENT
+from .utils import current_datetime_ms_str
+from .constants import (SERIALIZABLE_WRAPPER_ASSIGNMENTS, Instructions, ServerMessage, ServerMessageData, ResourceType)
 
-
-
-
-SingleLevelNestedJSON = typing.Dict[str, typing.Dict[str, typing.Any]]
-
-
+from .zmq_message_brokers import (CM_INDEX_ADDRESS, CM_INDEX_ARGUMENTS, CM_INDEX_CLIENT_TYPE, CM_INDEX_EXECUTION_CONTEXT,
+                        CM_INDEX_INSTRUCTION, CM_INDEX_MESSAGE_ID, CM_INDEX_MESSAGE_TYPE, CM_INDEX_TIMEOUT)
+from .zmq_message_brokers import (SM_INDEX_ADDRESS, SM_INDEX_DATA, SM_INDEX_MESSAGE_ID, SM_INDEX_MESSAGE_TYPE, 
+                        SM_INDEX_SERVER_TYPE)
 
 class ObjectProxy:
 
-    __own_attrs__ = frozenset([
-        '_client', '_client_ID', '__annotations__',
+    _own_attrs = frozenset([
+        '_client', 'identity', '__annotations__',
         'instance_name', 'logger', 'timeout', '_timeout', 
     ])
 
-    def __init__(self, instance_name : str, timeout : float = 5, load_remote_object = True, protocol : str = 'TCP', **serializer) -> None:
+    def __init__(self, instance_name : str, timeout : float = 5, load_remote_object = True, protocol : str = 'TCP', **kwargs) -> None:
         self.instance_name = instance_name
-        self._client_ID = instance_name + current_datetime_ms_str()
-        self.logger = logging.Logger(self._client_ID)
         self.timeout = timeout
+        self.identity = instance_name + current_datetime_ms_str()
+        self.logger = logging.Logger(self.identity)
         # compose ZMQ client in Proxy client so that all sending and receiving is
         # done by the ZMQ client and not by the Proxy client directly. Proxy client only 
         # bothers mainly about __setattr__ and _getattr__
-        self._client = SyncZMQClient(instance_name, self._client_ID, client_type=PROXY, **serializer)
+        self._client = SyncZMQClient(instance_name, self.identity, client_type=PROXY, protocol=protocol, **kwargs)
         if load_remote_object:
             self.load_remote_object()
 
@@ -44,7 +43,7 @@ class ObjectProxy:
         return obj
 
     def __setattr__(self, __name : str, __value : typing.Any):
-        if __name in ObjectProxy.__own_attrs__ or (__name not in self.__dict__ and isinstance(__value, __allowed_attribute_types__)):
+        if __name in ObjectProxy._own_attrs or (__name not in self.__dict__ and isinstance(__value, __allowed_attribute_types__)):
             print(f"setting {__name}")
             return super(ObjectProxy, self).__setattr__(__name, __value)
         elif __name in self.__dict__:
@@ -59,10 +58,11 @@ class ObjectProxy:
         return f'ObjectProxy {self.instance_name}'
 
     def __enter__(self):
+        raise NotImplementedError("with statement is not completely implemented yet. Avoid.")
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        raise NotImplementedError("with statement exit is not yet implemented. Avoid.")
+        raise NotImplementedError("with statement is not completely implemented yet. Avoid.")
     
     def __bool__(self): return True
 
@@ -77,7 +77,7 @@ class ObjectProxy:
         return True
 
     def __hash__(self):
-        return hash(self._client_ID)
+        return hash(self.identity)
     
     @property
     def timeout(self) -> typing.Union[float, int]:
@@ -104,7 +104,7 @@ class ObjectProxy:
             return method(**kwargs)
 
     async def async_invoke(self, method : str, **kwargs):
-        method : _RemoteMethod = getattr(self, method, None)
+        method = getattr(self, method, None) # type: _RemoteMethod 
         if not method:
             raise AttributeError(f"No remote method named {method}")
         return await method.async_call(**kwargs)
@@ -188,19 +188,20 @@ class ObjectProxy:
         Usually this will already be known due to the default behavior of the connect handshake, where the
         connect response also includes the metadata.
         """
-        fetch = _RemoteMethod(self._client, f'/{self.instance_name}/resources/object-proxy/read')
-        reply : SingleLevelNestedJSON = fetch()[5]["returnValue"]
+        fetch = _RemoteMethod(self._client, f'/{self.instance_name}{Instructions.RPC_RESOURCES}', 
+                                    self._timeout) # type: _RemoteMethod
+        reply = fetch()[ServerMessage.DATA][ServerMessageData.RETURN_VALUE] # type: typing.Dict[str, typing.Dict[str, typing.Any]]
 
         for name, data in reply.items():
             if isinstance(data, dict):
-                data = ProxyResourceData(**data)
-            elif not isinstance(data, ProxyResourceData):
-                raise RuntimeError("Logic error - unpickled info about server not instance of ProxyResourceData")
-            if data.what == CALLABLE:
-                _add_method(self, _RemoteMethod(self._client, data.instruction), data)
-            elif data.what == ATTRIBUTE:
-                _add_parameter(self, _RemoteParameter(self._client, data.instruction), data)
-            elif data.what == EVENT:
+                data = RPCResource(**data)
+            elif not isinstance(data, RPCResource):
+                raise RuntimeError("Logic error - desieralized info about server not instance of ProxyResourceData")
+            if data.what == ResourceType.CALLABLE:
+                _add_method(self, _RemoteMethod(self._client, data.instruction, self.timeout), data)
+            elif data.what == ResourceType.PARAMETER:
+                _add_parameter(self, _RemoteParameter(self._client, data.instruction, self.timeout), data)
+            elif data.what == ResourceType.EVENT:
                 pass 
        
     # def _pyroInvokeBatch(self, calls, oneway=False):
@@ -214,37 +215,36 @@ class ObjectProxy:
 class _RemoteMethod:
     """method call abstraction"""
 
-    def __init__(self, client : SyncZMQClient, instruction : str) -> None:
+    def __init__(self, client : SyncZMQClient, instruction : str, timeout : typing.Optional[float] = None) -> None:
         self._client = client
         self._instruction = instruction
+        self._timeout = timeout
         self._loop = asyncio.get_event_loop()
     
-    def __del__(self):
-        self._client = None # remove ref, as of now weakref is not used. 
-
     @property # i.e. cannot have setter
     def last_return_value(self):
         return self._last_return_value
     
     def oneway(self, *args, **kwargs) -> None:
-        self._client.execute(self._instruction, kwargs)
+        kwargs["__args__"] = args 
+        self._client.send_instruction(self._instruction, kwargs, self._timeout)
 
     def __call__(self, *args, **kwargs) -> typing.Any:
-        self._last_return_value : typing.Dict = self._client.execute(self._instruction, kwargs, 
-                                                                raise_client_side_exception=True)
+        kwargs["__args__"] = args 
+        self._last_return_value = self._client.execute(self._instruction, 
+                                        kwargs, raise_client_side_exception=True)
         return self._last_return_value
            
-    async def async_call(self, *args, **kwargs) -> typing.Any:
-        self._last_return_value : typing.Dict = self._client.execute(self._instruction, kwargs, 
-                                                                raise_client_side_exception=True)
-        return self._last_return_value
+    
 
     
 class _RemoteParameter:
     """parameter set & get abstraction"""
 
-    def __init__(self, client : SyncZMQClient, instruction : str):
+    def __init__(self, client : SyncZMQClient, instruction : str, 
+                                timeout : typing.Optional[float] = None) -> None:
         self._client = client
+        self._timeout = timeout
         self._read_instruction = instruction + '/read'
         self._write_instruction = instruction + '/write'
 
@@ -262,7 +262,7 @@ class _RemoteParameter:
     def get(self):
         self._last_value : typing.Dict = self._client.execute(self._read_instruction,
                                                 raise_client_side_exception=True)
-        return self._last_value
+        return self._last_value[SM_INDEX_DATA]
     
     async def async_set(self, value : typing.Any) -> typing.Any:
         self._last_value : typing.Dict = await self._client.execute(self._write_instruction, dict(value=value),
@@ -360,16 +360,24 @@ class _StreamResultIterator(object):
 
 __allowed_attribute_types__ = (_RemoteParameter, _RemoteMethod)
 
-def _add_method(client_obj : ObjectProxy, method : _RemoteMethod, func_info) -> None:
+def _add_method(client_obj : ObjectProxy, method : _RemoteMethod, func_info : RPCResource) -> None:
+    if isinstance(func_info, list):
+        raise TypeError(f"got list instead of RPC resource for {func_info.name}")
+    if not func_info.top_owner:
+        return
     for dunder in SERIALIZABLE_WRAPPER_ASSIGNMENTS:
         if dunder == '__qualname__':
             info = '{}.{}'.format(client_obj.__class__.__name__, func_info.get_dunder_attr(dunder).split('.')[1])
         else:
             info = func_info.get_dunder_attr(dunder)
         setattr(method, dunder, info)
-    client_obj.__setattr__(method.__name__, method)
+    client_obj.__setattr__(func_info.name, method)
 
-def _add_parameter(client_obj : ObjectProxy, parameter : _RemoteParameter, parameter_info) -> None:
+def _add_parameter(client_obj : ObjectProxy, parameter : _RemoteParameter, parameter_info : RPCResource) -> None:
+    if isinstance(parameter_info, list):
+        raise TypeError(f"got list instead of RPC resource for {parameter_info.name}")
+    if not parameter_info.top_owner:
+        return
     for attr in ['doc', 'name']: 
         # just to imitate _add_method logic
         setattr(parameter, attr, getattr(parameter_info, attr))

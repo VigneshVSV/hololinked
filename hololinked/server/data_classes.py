@@ -181,9 +181,6 @@ class HTTPResource:
         for key, value in values.items():
             setattr(self, key, value)
     
-    def get_dunder_attr(self, __dunder_name : str):
-        return getattr(self, __dunder_name.strip('_'))
-
     def json(self):
         """
         Set use_json_method=True in ``serializers.JSONSerializer`` instance and pass the object to the 
@@ -233,22 +230,27 @@ class RPCResource:
     name : str
     qualname : str
     doc : typing.Optional[str]
+    top_owner : bool 
 
     def __init__(self, *, what : str, instance_name : str, instruction : str, name : str,
-                qualname : str, doc : str) -> None:
+                qualname : str, doc : str, top_owner : bool) -> None:
         self.what = what 
         self.instance_name = instance_name
         self.instruction = instruction
         self.name = name 
         self.qualname = qualname
         self.doc = doc
+        self.top_owner = top_owner
 
     def json(self):
         """
         Set use_json_method=True in ``serializers.JSONSerializer`` instance and pass the object to the 
         serializer directly to get the JSON.  
         """
-        return asdict(self)    
+        return asdict(self) 
+
+    def get_dunder_attr(self, __dunder_name : str):
+        return getattr(self, __dunder_name.strip('_'))
 
 
 @dataclass

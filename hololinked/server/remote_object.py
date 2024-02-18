@@ -20,7 +20,7 @@ import zmq
 from ..param.parameterized import Parameterized, ParameterizedMetaclass 
 
 from .constants import (EVENT, GET, IMAGE_STREAM, JSONSerializable, CallableType, CALLABLE, 
-                        ATTRIBUTE, READ, WRITE, log_levels, POST, ZMQ_PROTOCOLS, FILE)
+                        PARAMETER, READ, WRITE, log_levels, POST, ZMQ_PROTOCOLS, FILE)
 from .serializers import *
 from .exceptions import BreakInnerLoop
 from .decorators import remote_method
@@ -426,6 +426,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
                                                 name=getattr(resource, '__name__'),
                                                 qualname=getattr(resource, '__qualname__'), 
                                                 doc=getattr(resource, '__doc__'),
+                                                top_owner=self._owner is None
                                             )
                 instance_resources[fullpath] = remote_info.to_dataclass(obj=resource, bound_obj=self) 
         # Other remote objects 
@@ -458,7 +459,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
                                                         )
         # Parameters
         for parameter in self.parameters.descriptors.values():
-            if hasattr(parameter, '_remote_info'): 
+            if hasattr(parameter, '_remote_info') and parameter._remote_info is not None: 
                 if not isinstance(parameter._remote_info, RemoteResourceInfoValidator):  # type: ignore
                     raise TypeError("instance member {} has unknown sub-member 'scada_info' of type {}.".format(
                                 parameter, type(parameter._remote_info))) # type: ignore
@@ -470,27 +471,28 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
                 read_http_method, write_http_method = remote_info.http_method
                     
                 httpserver_resources[read_http_method][fullpath] = HTTPResource(
-                                                    what=ATTRIBUTE, 
+                                                    what=PARAMETER, 
                                                     instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
                                                     fullpath=fullpath,
                                                     instruction=fullpath + '/' + READ
                                                 )
                     
                 httpserver_resources[write_http_method][fullpath] = HTTPResource(
-                                                    what=ATTRIBUTE, 
+                                                    what=PARAMETER, 
                                                     instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
                                                     fullpath=fullpath,
                                                     instruction=fullpath + '/' + WRITE
                                                 )
                         
                 rpc_resources[fullpath] = RPCResource(
-                                what=ATTRIBUTE, 
+                                what=PARAMETER, 
                                 instance_name=self._owner.instance_name if self._owner is not None else self.instance_name, 
                                 instruction=fullpath, 
                                 doc=parameter.__doc__, 
                                 name=remote_info.obj_name,
                                 qualname=self.__class__.__name__ + '.' + remote_info.obj_name,
                                 # qualname is not correct probably, does not respect inheritance
+                                 top_owner=self._owner is None
                             ) 
                 dclass = remote_info.to_dataclass(obj=parameter, bound_obj=self) 
                 instance_resources[fullpath+'/'+READ] = dclass
@@ -810,18 +812,14 @@ class RemoteObject(RemoteSubobject):
         return True
 
     @get('/test/speed')    
-    def _test_speed(self, value : typing.Any):
+    def test_speed(self, value : typing.Any):
         """
         This method returns whatever you give allowing speed test of different data types. 
         The message sent is first serialized by the client, deserialized by the server and in return direction
         again serialized by server and deserialized by the client. oneway speed is twice the measured value.  
         """
         return value
-    
-    @get('/test/args/{int_arg:int}/{float_arg:float}/{str_arg:str}')
-    def _test_path_arguments(self, int_arg, float_arg, str_arg):
-        self.logger.info(f"passed arguments : int - {int_arg}, float - {float_arg}, str - {str_arg}")
-          
+             
     # example of remote_method decorator
     @remote_method(URL_path='/log/console', http_method = POST)
     def log_to_console(self, data : typing.Any = None, level : typing.Any = 'DEBUG') -> None:
