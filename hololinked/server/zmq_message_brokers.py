@@ -913,7 +913,7 @@ class RPCServer(BaseZMQServer):
             return self.json_serializer.loads(message[CM_INDEX_TIMEOUT])
        
 
-    async def poll(self, server : AsyncZMQServer):
+    async def poll(self):
         """
         poll for instructions and append them to instructions list to pass them to ``Eventloop``/``RemoteObject``'s inproc 
         server using an inner inproc client. Registers the messages for timeout calculation.
@@ -922,14 +922,19 @@ class RPCServer(BaseZMQServer):
         eventloop = asyncio.get_event_loop()
         self.inproc_client.handshake()
         await self.inproc_client.handshake_complete()
+        eventloop.call_soon(lambda : asyncio.create_task(self.recv_instruction(self.inproc_server)))
+        eventloop.call_soon(lambda : asyncio.create_task(self.recv_instruction(self.tcp_server)))
+        eventloop.call_soon(lambda : asyncio.create_task(self.recv_instruction(self.ipc_server)))
         # while not self.stop_poll:
         #     sockets : typing.Tuple[zmq.Socket, int] = await self.poller.poll(-1) # self._poll_timeout) # type
         #     for socket, _ in sockets:
         #         print("here")
+
+    async def recv_instruction(self, server : AsyncZMQServer):
+        eventloop = asyncio.get_event_loop()
         socket = server.socket
         while True:
             try:
-                # print("polling remaining")
                 original_instruction = await socket.recv_multipart()
                 if original_instruction[CM_INDEX_MESSAGE_TYPE] == HANDSHAKE:
                     handshake_task = asyncio.create_task(self._handshake(original_instruction, socket))
@@ -943,8 +948,6 @@ class RPCServer(BaseZMQServer):
                     timeout_task = asyncio.create_task(self.process_timeouts(original_instruction, 
                                                 ready_to_process_event, timeout, socket))
                     eventloop.call_soon(lambda : timeout_task)
-            except zmq.Again:
-                continue     
             except Exception as ex:
                 # handle invalid message
                 self.logger.error(f"exception occurred for message id {original_instruction[CM_INDEX_MESSAGE_ID]} - {str(ex)}")
