@@ -26,7 +26,7 @@ from .remote_parameters import TypedList
 from .zmq_message_brokers import MessageMappedZMQClientPool
 from .webserver_utils import get_IP_from_interface, update_resources_using_client
 from .utils import unique_id
-from .decorators import post, get, put, delete
+from .http_methods import post, get, put, delete
 from .eventloop import Consumer, EventLoop, fork_empty_eventloop
 from .remote_object import RemoteObject, RemoteObjectDB, RemoteObjectMetaclass
 from .database import BaseAsyncDB, create_DB_URL

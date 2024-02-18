@@ -1,7 +1,7 @@
 import logging
 import functools 
 import typing
-from enum import Enum
+from enum import Enum, StrEnum, IntEnum
 from types import MethodType, FunctionType
 
 
@@ -12,6 +12,16 @@ USE_OBJECT_NAME : str = "USE_OBJECT_NAME"
 ANY_STATE   : str = "ANY_STATE"
 UNSPECIFIED : str = "UNSPECIFIED"
 # types
+class ResourceType(StrEnum):
+    FUNC  = "FUNC"
+    ATTRIBUTE = "ATTRIBUTE"
+    PARAMETER = "PARAMETER"
+    IMAGE_STREAM = "IMAGE_STREAM"
+    CALLABLE = "CALLABLE"
+    FILE = "FILE"
+    EVENT = "EVENT"
+
+
 FUNC  = "FUNC"
 ATTRIBUTE = "ATTRIBUTE"
 PARAMETER = "PARAMETER"
@@ -24,11 +34,11 @@ WRITE = "write"
 
 # logic
 WRAPPER_ASSIGNMENTS = functools.WRAPPER_ASSIGNMENTS + ('__kwdefaults__', '__defaults__', )
-SERIALIZABLE_WRAPPER_ASSIGNMENTS = ('__module__', '__name__', '__qualname__', '__doc__', '__kwdefaults__', '__defaults__', )
+SERIALIZABLE_WRAPPER_ASSIGNMENTS = ('__name__', '__qualname__', '__doc__' )
 # regex logic
 states_regex : str = '[A-Za-z_]+[A-Za-z_ 0-9]*'
 url_regex : str = r'[\-a-zA-Z0-9@:%._\/\+~#=]{1,256}' 
-instance_name_regex : str = r'[A-Za-z]+[A-Za-z_0-9\-\/]*'
+
 
 # HTTP request methods
 GET : str = 'GET'
@@ -57,4 +67,39 @@ CallableType = (FunctionType, MethodType)
 JSONSerializable = typing.Union[typing.Dict[str, typing.Any], list, str, int, float, None]
 
 # ZMQ
-ZMQ_PROTOCOLS = Enum('ZMQ_PROTOCOLS', 'TCP IPC')
+class ZMQ_PROTOCOLS(Enum):
+    TCP = "TCP"
+    IPC = "IPC"
+    INPROC = "INPROC"
+
+class Instructions(StrEnum):
+    RPC_RESOURCES = '/resources/object-proxy/read'
+    HTTP_RESOURCES = '/resources/http-server/read'
+
+class ClientMessage(IntEnum):
+    ADDRESS = 0
+    CLIENT_TYPE = 2
+    MESSAGE_TYPE = 3
+    MESSAGE_ID = 4
+    TIMEOUT = 5
+    INSTRUCTION = 6
+    ARGUMENTS = 7
+    EXECUTION_CONTEXT = 8
+
+class ServerMessage(IntEnum):
+    ADDRESS = 0
+    SERVER_TYPE = 2
+    MESSAGE_TYPE = 3
+    MESSAGE_ID = 4
+    DATA = 5
+
+class ServerMessageData(StrEnum):
+    RETURN_VALUE = "returnValue"
+
+class ServerTypes(Enum):
+    UNKNOWN_TYPE = b'UNKNOWN_TYPE'
+    EVENTLOOP = b'EVENTLOOP'
+    REMOTE_OBJECT = b'REMOTE_OBJECT'
+    POOL = b'POOL'
+       
+

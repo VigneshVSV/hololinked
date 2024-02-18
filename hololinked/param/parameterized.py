@@ -503,6 +503,10 @@ class Parameter(metaclass=ParameterMetaclass):
         self.overloads['fdel'] = func
         return func
     
+    def __call__(self, func: typing.Callable) -> "Parameter":
+        self.getter(func)
+        return self
+
     @classmethod
     def serialize(cls, value : typing.Any) -> typing.Any:
         "Given the parameter value, return a Python value suitable for serialization"

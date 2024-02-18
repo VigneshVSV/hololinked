@@ -1,13 +1,12 @@
+import typing
 from types import FunctionType
 from inspect import iscoroutinefunction, getfullargspec
-from typing import Any, Optional, Union, Callable
-import typing
 from enum import Enum
 from functools import wraps
 from dataclasses import dataclass, asdict, field, fields
 
 
-from .data_classes import ScadaInfoValidator, ScadaInfoData
+from .data_classes import RemoteResourceInfoValidator, RemoteResource
 from .constants import (USE_OBJECT_NAME, UNSPECIFIED, GET, POST, PUT, DELETE, PATCH, WRAPPER_ASSIGNMENTS)
 from .utils import wrap_text
 from .path_converter import compile_path
@@ -27,7 +26,7 @@ def wrap_method(method : FunctionType):
     """
    
     @wraps(method, WRAPPER_ASSIGNMENTS)
-    def wrapped_method(*args, **kwargs) -> Any:
+    def wrapped_method(*args, **kwargs) -> typing.Any:
         self = args[0]
         self.logger.debug("called {} of instance {}".format(method.__qualname__, self.instance_name))
         return method(*args, **kwargs)
@@ -49,7 +48,7 @@ def is_private_attribute(attr_name: str) -> bool:
 
     
 def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = POST, 
-            state : Optional[Union[str, Enum]] = None) -> Callable:
+            state : typing.Optional[typing.Union[str, Enum]] = None) -> typing.Callable:
     """Use this function to decorate your methods to be accessible remotely.  
     
     Args:
@@ -67,58 +66,55 @@ def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = POST,
         if isinstance(obj, classmethod):
             obj = obj.__func__
         if callable(obj):
-            if hasattr(obj, 'scada_info') and not isinstance(obj.scada_info, ScadaInfoValidator): 
+            if hasattr(obj, '_remote_info') and not isinstance(obj._remote_info, RemoteResourceInfoValidator): 
                 raise NameError(
                     wrap_text(
                     """
-                    variable name 'scada_info' reserved for scadapy library. 
-                    Please do not assign this variable to any other object except scadapy.server.scada_info.ScadaInfoValidator.
+                    variable name '_remote_info' reserved for scadapy library. 
+                    Please do not assign this variable to any other object except scadapy.server.data_classes.RemoteResourceInfoValidator.
                     """
                     )
                 )             
             else:
-                obj.scada_info = ScadaInfoValidator() 
+                obj._remote_info = RemoteResourceInfoValidator() 
             obj_name = obj.__qualname__.split('.')
             if len(obj_name) > 1: # i.e. its a bound method, used by RemoteObject
                 if URL_path == USE_OBJECT_NAME: 
-                    obj.scada_info.URL_path = f'/{obj_name[1]}'
+                    obj._remote_info.URL_path = f'/{obj_name[1]}'
                 else:
                     assert URL_path.startswith('/'), f"URL_path should start with '/', please add '/' before '{URL_path}'"
-                    obj.scada_info.URL_path = URL_path
-                obj.scada_info.obj_name = obj_name[1] 
+                    obj._remote_info.URL_path = URL_path
+                obj._remote_info.obj_name = obj_name[1] 
             elif len(obj_name) == 1 and isinstance(obj, FunctionType):  # normal unbound function - used by HTTPServer instance
                 if URL_path is USE_OBJECT_NAME:
-                    obj.scada_info.URL_path = '/{}'.format(obj_name[0])
+                    obj._remote_info.URL_path = '/{}'.format(obj_name[0])
                 else:
                     assert URL_path.startswith('/'), f"URL_path should start with '/', please add '/' before '{URL_path}'"
-                    obj.scada_info.URL_path = URL_path
-                obj.scada_info.obj_name = obj_name[0] 
+                    obj._remote_info.URL_path = URL_path
+                obj._remote_info.obj_name = obj_name[0] 
             else:
                 raise RuntimeError(f"Undealt option for decorating {obj} or decorators wrongly used")
             if http_method is not UNSPECIFIED:  
                 if isinstance(http_method, str):
-                    obj.scada_info.http_method = (http_method,)
+                    obj._remote_info.http_method = (http_method,)
                 else:
-                    obj.scada_info.http_method = http_method 
+                    obj._remote_info.http_method = http_method 
             if state is not None:
                 if isinstance(state, (Enum, str)):
-                    obj.scada_info.state = (state,)
+                    obj._remote_info.state = (state,)
                 else:
-                    obj.scada_info.state = state     
+                    obj._remote_info.state = state     
             if 'request' in getfullargspec(obj).kwonlyargs:
-                obj.scada_info.http_request_as_argument = True
-            obj.scada_info.iscallable = True
-            obj.scada_info.iscoroutine = iscoroutinefunction(obj)
+                obj._remote_info.http_request_as_argument = True
+            obj._remote_info.iscallable = True
+            obj._remote_info.iscoroutine = iscoroutinefunction(obj)
             return original
         else:
             raise TypeError(
-                wrap_text(
-                f"""
-                target for get()/post()/remote_method() or http method decorator is not a function/method.
-                Given type {type(obj)}
-                """
-                )
+                "target for get()/post()/remote_method() or http method decorator is not a function/method.",
+                f"Given type {type(obj)}"
             )
+            
     return inner 
 
 
@@ -127,51 +123,15 @@ def remote_parameter(**kwargs):
     return RemoteParameter(*kwargs)
 
 
-def get(URL_path = USE_OBJECT_NAME):
-    """
-    use it on RemoteObject subclass methods to be available with GET HTTP request. 
-    method is also by default accessible to proxy clients. 
-    """
-    return remote_method(URL_path=URL_path, http_method=GET)
-    
-def post(URL_path = USE_OBJECT_NAME):
-    """
-    use it on RemoteObject subclass methods to be available with POST HTTP request. 
-    method is also by default accessible to proxy clients. 
-    """
-    return remote_method(URL_path=URL_path, http_method=POST)
-
-def put(URL_path = USE_OBJECT_NAME):
-    """
-    use it on RemoteObject subclass methods to be available with PUT HTTP request. 
-    method is also by default accessible to proxy clients. 
-    """
-    return remote_method(URL_path=URL_path, http_method=PUT)
-    
-def delete(URL_path = USE_OBJECT_NAME):
-    """
-    use it on RemoteObject subclass methods to be available with DELETE HTTP request. 
-    method is also by default accessible to proxy clients. 
-    """
-    return remote_method(URL_path=URL_path, http_method=DELETE)
-
-def patch(URL_path = USE_OBJECT_NAME):
-    """
-    use it on RemoteObject subclass methods to be available with PATCH HTTP request. 
-    method is also by default accessible to proxy clients. 
-    """
-    return remote_method(URL_path=URL_path, http_method=PATCH)
-
-
 @dataclass 
 class FuncInfo:
     module : str
     name : str
     qualname : str
     doc : str
-    kwdefaults : Any
-    defaults : Any 
-    scadapy : ScadaInfoData
+    kwdefaults : typing.Any
+    defaults : typing.Any 
+    scadapy : RemoteResource
 
     def json(self):
         return asdict(self)
@@ -218,6 +178,6 @@ class FuncInfo:
 
 
 
-__all__ = ['get', 'put', 'post', 'delete', 'patch', 'remote_method', 'remote_parameter']
+__all__ = ['remote_method', 'remote_parameter']
 
 

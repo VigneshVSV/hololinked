@@ -16,15 +16,14 @@ from .webserver_utils import log_request
 from .remote_object import RemoteObject
 from .eventloop import EventLoop
 from .utils import current_datetime_ms_str
-from .data_classes import (HTTPServerResourceData, HTTPServerEventData,
-                            HTTPServerResourceData, FileServerData)
+from .data_classes import FileServerData
 
-UnknownHTTPServerData = HTTPServerResourceData(
-    what = 'unknown', 
-    instance_name = 'unknown',
-    fullpath='unknown',
-    instruction = 'unknown'
-)
+# UnknownHTTPServerData = HTTPServerResourceData(
+#     what = 'unknown', 
+#     instance_name = 'unknown',
+#     fullpath='unknown',
+#     instruction = 'unknown'
+# )
 
 
 
@@ -54,8 +53,8 @@ class BaseRequestHandler(RequestHandler):
     """  
     zmq_client_pool : Union[MessageMappedZMQClientPool, None] = None 
     json_serializer : JSONSerializer
-    resources       : Dict[str, Dict[str, Union[HTTPServerResourceData, HTTPServerEventData, 
-                                               FileServerData]]]
+    resources       : Dict[str, Dict[str, Union[FileServerData, typing.Any]]]
+                                                # HTTPServerResourceData, HTTPServerEventData, 
     own_resources   : dict 
     local_objects   : Dict[str, RemoteObject]
    
@@ -93,7 +92,7 @@ class BaseRequestHandler(RequestHandler):
                 "returnValue"        : func(**arguments) 
             })
        
-    async def handle_bound_method(self, info : HTTPServerResourceData, arguments):
+    async def handle_bound_method(self, info, arguments):
         instance = self.local_objects[info.instance_name]
         return self.json_serializer.dumps({
                 "responseStatusCode" : 200,
@@ -104,7 +103,7 @@ class BaseRequestHandler(RequestHandler):
                 }
             })
             
-    async def handle_instruction(self, info : HTTPServerResourceData, path_arguments : typing.Optional[typing.Dict] = None) -> None:
+    async def handle_instruction(self, info, path_arguments : typing.Optional[typing.Dict] = None) -> None:
         self.set_status(200)
         self.add_header("Access-Control-Allow-Origin", self.client_address)
         self.set_header("Content-Type" , "application/json")  
