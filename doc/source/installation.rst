@@ -3,7 +3,8 @@
 Installation
 ============
 
-As |module-highlighted| is still in idealogical & development state, it is recommended to clone it from github & install in develop mode. 
+As |module-highlighted| is still in idealogical & development state, it is only possible to clone it from github & install 
+directly (in develop mode). 
 
 .. code:: shell 
 
@@ -32,5 +33,12 @@ Also check out:
      - https://github.com/VigneshVSV/hololinked-portal.git
      - GUI to access RemoteObjects & Data Visualization helper. 
 
+To build & host docs locally, in top directory:
 
+.. code:: shell 
 
+    conda activate hololinked
+    cd doc
+    make clean 
+    make html
+    python -m http.server --directory build\html

@@ -925,10 +925,7 @@ class RPCServer(BaseZMQServer):
         eventloop.call_soon(lambda : asyncio.create_task(self.recv_instruction(self.inproc_server)))
         eventloop.call_soon(lambda : asyncio.create_task(self.recv_instruction(self.tcp_server)))
         eventloop.call_soon(lambda : asyncio.create_task(self.recv_instruction(self.ipc_server)))
-        # while not self.stop_poll:
-        #     sockets : typing.Tuple[zmq.Socket, int] = await self.poller.poll(-1) # self._poll_timeout) # type
-        #     for socket, _ in sockets:
-        #         print("here")
+       
 
     async def recv_instruction(self, server : AsyncZMQServer):
         eventloop = asyncio.get_event_loop()
@@ -972,18 +969,13 @@ class RPCServer(BaseZMQServer):
                 if ready_to_process_event is not None: 
                     ready_to_process_event.set()
                     timeout = await timeout_task
-                    # print("timeout result - ", timeout)
                 if ready_to_process_event is None or not timeout:
                     original_address = message[CM_INDEX_ADDRESS]
                     message[CM_INDEX_ADDRESS] = self.inproc_client.server_address # replace address
-                    # print("original address", original_address, "inproc address", message[0])
                     await self.inproc_client.socket.send_multipart(message)
-                    # print("*********sent message to inproc")
                     reply = await self.inproc_client.socket.recv_multipart()
-                    # print("--------received message from inproc")
                     reply[SM_INDEX_ADDRESS] = original_address
                     await origin_socket.send_multipart(reply)
-                    # print("###### sent message to client")
             else:
                 await self._instructions_event.wait()
                 self._instructions_event.clear()
