@@ -29,16 +29,22 @@ from .data_classes import FileServerData, HTTPResource
 
 class RPCHandler(RequestHandler):
 
-    def initialize(self, resource : HTTPResource, client_address : str, 
-                   start_time : float) -> None:
+    zmq_client_pool : MessageMappedZMQClientPool
+
+    def initialize(self, resource : HTTPResource) -> None:
         self.resource = resource
-        self.client_address = client_address
-        self.start_time = start_time
 
     async def get(self):
         if not self.resource.method == 'GET':
             self.set_status(404, "not found")
+        self.set_status(200, "Exists")
+        self.write("""
+            <p>I am alive</p><br/>{}
+            <p>This is my resource - {}
+            <br/>""".format(self.request, self.resource.json()))
 
+        self.finish()
+        
     async def post(self):
         if not self.resource.method == 'GET':
             self.set_status(404, "not found")
@@ -62,8 +68,6 @@ class RPCHandler(RequestHandler):
         self.set_header("Access-Control-Allow-Methods", ', '.join(self.resource.method))
         self.finish()
     
-
-
 
 
 class FileHandlerResource(StaticFileHandler):

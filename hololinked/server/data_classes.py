@@ -184,10 +184,16 @@ class HTTPResource:
     
     def json(self):
         """
-        Set use_json_method=True in ``serializers.JSONSerializer`` instance and pass the object to the 
-        serializer directly to get the JSON.  
+        Set use_json_method=True in ``serializers.JSONSerializer`` instance and pass the 
+        object to the serializer directly to get the JSON.  
         """
-        return asdict(self)
+        return  {
+            "what" : self.what, 
+            "instance_name" : self.instance_name,
+            'fullpath' : self.fullpath,
+            "instruction" : self.instruction,
+            "request_as_argument" : self.request_as_argument
+        }
     
     def compile_path(self):
         path_regex, self.path_format, param_convertors = compile_path(self.fullpath)

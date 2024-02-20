@@ -4,10 +4,8 @@ import asyncio
 import traceback
 import importlib
 import typing 
-import zmq
 import threading
-import time
-from collections import deque
+
 
 from .utils import unique_id, wrap_text
 from .constants import *
@@ -15,16 +13,17 @@ from .remote_parameters import TypedDict
 from .exceptions import *
 from .http_methods import post, get
 from .remote_object import *
-from .zmq_message_brokers import AsyncPollingZMQServer, ZMQServerPool, ServerTypes, AsyncZMQClient
+from .zmq_message_brokers import AsyncPollingZMQServer, ServerTypes 
 from .remote_parameter import RemoteParameter
-from ..param.parameters import Boolean, ClassSelector, TypedList, List as PlainList
+from .remote_parameters import ClassSelector, TypedList, List
 
 
 
 class Consumer:
-    consumer = ClassSelector(default=None, allow_None=True, class_=RemoteObject, isinstance=False)
-    args = PlainList(default=None, allow_None=True, accept_tuple=True)
-    kwargs = TypedDict(default=None, allow_None=True, key_type=str)
+    consumer = ClassSelector(default=None, allow_None=True, class_=RemoteObject, isinstance=False,
+                            remote=False)
+    args = List(default=None, allow_None=True, accept_tuple=True, remote=False)
+    kwargs = TypedDict(default=None, allow_None=True, key_type=str, remote=False)
    
     def __init__(self, consumer : typing.Type[RemoteObject], args : typing.Tuple = tuple(), **kwargs) -> None:
         if consumer is not None:
@@ -45,7 +44,7 @@ class EventLoop(RemoteObject):
     server_type = ServerTypes.EVENTLOOP
 
     remote_objects = TypedList(item_type=(RemoteObject, Consumer), bounds=(0,100), allow_None=True, default=None,
-                        doc="""list of RemoteObjects which are being executed""") #type: typing.List[RemoteObject]
+                        doc="list of RemoteObjects which are being executed", remote=False) #type: typing.List[RemoteObject]
   
     # Remote Parameters
     uninstantiated_remote_objects = TypedDict(default=None, allow_None=True, key_type=str,
@@ -200,8 +199,8 @@ class EventLoop(RemoteObject):
                     list_handler.setFormatter(instance.logger.handlers[0].formatter)
                     instance.logger.addHandler(list_handler)
                 try:
-                    instance.logger.debug("""client {} of client type {} issued instruction {} with message id {}. 
-                                starting execution""".format(client, client_type, instruction_str, msg_id))
+                    instance.logger.debug("client {} of client type {} issued instruction {} with message id {}. \
+                                starting execution".format(client, client_type, instruction_str, msg_id))
                     return_value = await cls.execute_once(instance_name, instance, instruction_str, arguments) #type: ignore 
                     if not plain_reply:
                         return_value = {
