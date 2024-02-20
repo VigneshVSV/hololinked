@@ -1005,7 +1005,7 @@ class RPCServer(BaseZMQServer):
         await originating_socket.send_multipart(self.craft_reply_from_arguments(
                 original_client_message[CM_INDEX_ADDRESS], 
                 original_client_message[CM_INDEX_CLIENT_TYPE], HANDSHAKE, original_client_message[CM_INDEX_MESSAGE_ID],
-                EMPTY_BYTE))
+                EMPTY_DICT))
 
     def exit(self):
         self.stop_poll = True
@@ -1158,10 +1158,11 @@ class BaseZMQClient(BaseZMQ):
         if self.client_type == HTTP_SERVER:
             timeout : bytes = self.json_serializer.dumps(timeout)
             instruction : bytes = self.json_serializer.dumps(instruction)
-            # if arguments == b'':
-            #     arguments : bytes = self.json_serializer.dumps({}) 
-            # elif not isinstance(arguments, bytes):
-            arguments : bytes = self.json_serializer.dumps(arguments) 
+            # TODO - following can be improved
+            if arguments == b'':
+                arguments : bytes = self.json_serializer.dumps({}) 
+            elif not isinstance(arguments, bytes):
+                arguments : bytes = self.json_serializer.dumps(arguments) 
             context : bytes = self.json_serializer.dumps(context)
         elif self.client_type == PROXY:
             timeout : bytes = self.rpc_serializer.dumps(timeout)

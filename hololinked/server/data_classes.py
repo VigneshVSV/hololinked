@@ -160,6 +160,7 @@ class HTTPResource:
     path_format : typing.Optional[str] = field(default=None) 
     path_regex : typing.Optional[typing.Pattern] = field(default=None)
     param_convertors : typing.Optional[typing.Dict] = field(default=None)
+    method : str = field(default="GET")
     # below are all dunders, when something else is added, be careful to remember to edit ObjectProxy logic when necessary
     
     # 'what' can be an 'ATTRIBUTE' or 'CALLABLE' (based on isparameter or iscallable) and 'instruction' 

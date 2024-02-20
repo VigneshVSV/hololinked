@@ -3,7 +3,7 @@ import traceback
 import typing
 from typing import List, Dict, Any, Union, Callable, Tuple
 from types import FunctionType
-from tornado.web import RequestHandler, StaticFileHandler
+from tornado.web import Application, RequestHandler, StaticFileHandler
 from tornado.iostream import StreamClosedError
 from tornado.httputil import HTTPServerRequest
 from time import perf_counter
@@ -16,7 +16,7 @@ from .webserver_utils import log_request
 from .remote_object import RemoteObject
 from .eventloop import EventLoop
 from .utils import current_datetime_ms_str
-from .data_classes import FileServerData
+from .data_classes import FileServerData, HTTPResource
 
 # UnknownHTTPServerData = HTTPServerResourceData(
 #     what = 'unknown', 
@@ -24,6 +24,45 @@ from .data_classes import FileServerData
 #     fullpath='unknown',
 #     instruction = 'unknown'
 # )
+
+
+
+class RPCHandler(RequestHandler):
+
+    def initialize(self, resource : HTTPResource, client_address : str, 
+                   start_time : float) -> None:
+        self.resource = resource
+        self.client_address = client_address
+        self.start_time = start_time
+
+    async def get(self):
+        if not self.resource.method == 'GET':
+            self.set_status(404, "not found")
+
+    async def post(self):
+        if not self.resource.method == 'GET':
+            self.set_status(404, "not found")
+    
+    async def patch(self):
+        if not self.resource.method == 'GET':
+            self.set_status(404, "not found")
+    
+    async def put(self):
+        if not self.resource.method == 'GET':
+            self.set_status(404, "not found")
+    
+    async def delete(self):
+        if not self.resource.method == 'GET':
+            self.set_status(404, "not found")
+
+    async def options(self):
+        self.set_status(204)
+        self.set_header("Access-Control-Allow-Origin", "*")
+        self.set_header("Access-Control-Allow-Headers", "*")
+        self.set_header("Access-Control-Allow-Methods", ', '.join(self.resource.method))
+        self.finish()
+    
+
 
 
 
