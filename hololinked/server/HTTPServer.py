@@ -2,9 +2,8 @@ import logging
 import ssl
 import typing
 from tornado import ioloop
-from tornado.web import _HandlerDelegate, Application, RequestHandler
+from tornado.web import Application
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
-from tornado.httputil import HTTPServerRequest
 # from tornado_http2.server import Server as TornadoHTTP2Server 
 
 from ..param import Parameterized
@@ -20,32 +19,6 @@ from .handlers import RPCHandler
 from .remote_object import RemoteObject, RemoteObjectDB
 
 
-
-
-
-# class CustomRouter(Application):   
-
-#     remote_object_http_resources : typing.Dict[str, HTTPResource]
-
-#     def get_handler_delegate(self, 
-#             request: HTTPServerRequest, 
-#             target_class: type[RequestHandler], 
-#             target_kwargs: typing.Dict[str, typing.Any] | None = None, 
-#             path_args: typing.List[bytes] | None = None, 
-#             path_kwargs: typing.Dict[str, bytes] | None = None
-#         ) -> _HandlerDelegate:
-#         try:
-#             if target_kwargs is None:
-#                 target_kwargs = dict(resource=self.remote_object_http_resources.get(request.path))
-#             else:
-#                 target_kwargs.update('resource', self.remote_object_http_resources.get(request.path))
-#         except Exception as ex:
-#             target_class = ExceptionHandler
-#             target_kwargs = None 
-#         return super().get_handler_delegate(request, target_class, 
-#                     target_kwargs, path_args, path_kwargs)
-      
-     
 
 class HTTPServer(Parameterized):
 
