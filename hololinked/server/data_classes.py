@@ -160,6 +160,7 @@ class HTTPResource:
     path_format : typing.Optional[str] = field(default=None) 
     path_regex : typing.Optional[typing.Pattern] = field(default=None)
     param_convertors : typing.Optional[typing.Dict] = field(default=None)
+    method : str = field(default="GET")
     # below are all dunders, when something else is added, be careful to remember to edit ObjectProxy logic when necessary
     
     # 'what' can be an 'ATTRIBUTE' or 'CALLABLE' (based on isparameter or iscallable) and 'instruction' 
@@ -183,10 +184,16 @@ class HTTPResource:
     
     def json(self):
         """
-        Set use_json_method=True in ``serializers.JSONSerializer`` instance and pass the object to the 
-        serializer directly to get the JSON.  
+        Set use_json_method=True in ``serializers.JSONSerializer`` instance and pass the 
+        object to the serializer directly to get the JSON.  
         """
-        return asdict(self)
+        return  {
+            "what" : self.what, 
+            "instance_name" : self.instance_name,
+            'fullpath' : self.fullpath,
+            "instruction" : self.instruction,
+            "request_as_argument" : self.request_as_argument
+        }
     
     def compile_path(self):
         path_regex, self.path_format, param_convertors = compile_path(self.fullpath)

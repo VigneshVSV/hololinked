@@ -151,9 +151,12 @@ class StateMachine:
         return state 
     
     def get_state(self) -> typing.Union[str, Enum, None]:
-        """return the current state. one can also access the property `current state`.
-        Returns:
-            str: current state
+        """
+        return the current state. one can also access the property `current state`.
+        
+        Returns
+        -------
+        current state: str
         """
         return self._state
         
@@ -324,7 +327,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
                         (http(s)://{domain and sub domain}/{instance name}). It is suggested to use  
                         the class name along with a unique name {class name}/{some unique name}. Instance names must be unique
                         in your entire system.""") # type: str
-    httpserver_resources = RemoteParameter(readonly=True, URL_path='/resources/http', 
+    httpserver_resources = RemoteParameter(readonly=True, URL_path='/resources/http-server', 
                         doc="""object's resources exposed to HTTP server""", fget=lambda self: self._httpserver_resources ) # type: typing.Dict[str, typing.Dict[str, HTTPResource]]
     rpc_resources = RemoteParameter(readonly=True, URL_path='/resources/object-proxy', 
                         doc= """object's resources exposed to RPC client, similar to HTTP resources but differs 

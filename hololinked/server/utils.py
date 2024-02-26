@@ -6,6 +6,7 @@ import re
 import asyncio
 import inspect
 import typing
+import asyncio
 from ..param.exceptions import wrap_error_text as wrap_text
 
 
@@ -181,15 +182,21 @@ def run_coro_sync(coro):
         eventloop.run_until_complete(coro)
 
 
-def run_method_somehow(coro):
+def run_method_somehow(method : typing.Union[typing.Callable, typing.Coroutine]) -> typing.Any:
     """
     either schedule the coroutine or run it until its complete
     """
+    if not asyncio.iscoroutinefunction(method):
+        return method()
+    elif not asyncio.iscoroutine(method):
+        task = lambda : asyncio.create_task(method) #check later if lambda is necessary
+    else:
+        task = method
     eventloop = asyncio.get_event_loop()
     if eventloop.is_running():    
-        eventloop.call_soon(lambda : asyncio.create_task(coro))
+        eventloop.call_soon(task)
     else:
-        eventloop.run_until_complete(coro)
+        eventloop.run_until_complete(task)
 
 
 def get_signature(function : typing.Callable): 
@@ -205,8 +212,6 @@ def get_signature(function : typing.Callable):
         arg_types.append(arg_type)
 
     return arg_names, arg_types
-
-
 
 
 __all__ = ['current_datetime_ms_str', 'wrap_text', 'copy_parameters', 'dashed_URL']

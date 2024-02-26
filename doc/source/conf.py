@@ -57,6 +57,10 @@ html_sidebars = {
     "**": ["sidebar-nav-bs"]
 }
 
+html_theme_options = {
+    "secondary_sidebar_items": ["page-toc", "sourcelink"]
+}
+
 pygments_style = 'vs'
 
 # Add any paths that contain custom static files (such as style sheets) here,

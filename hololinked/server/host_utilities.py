@@ -336,7 +336,9 @@ def create_primary_host(config_file : str, ssl_context : ssl.SSLContext, **serve
         (r"/settings", AppSettingsHandler),
         (r"/subscribers", SubscribersHandler),
         (r"/login", LoginHandler)
-    ], cookie_secret=base64.b64encode(os.urandom(32)).decode('utf-8') , **server_settings)
+    ], cookie_secret=base64.b64encode(os.urandom(32)).decode('utf-8') , 
+    **server_settings)
+    
     return TornadoHTTP1Server(app, ssl_options=ssl_context)
  
 
