@@ -1,15 +1,14 @@
 """
-The following is a list of all dataclasses used to store information on the exposed resources on the network
+The following is a list of all dataclasses used to store information on the exposed 
+resources on the network
 """
-
-
 import typing
 import platform
 from enum import Enum
 from dataclasses import dataclass, asdict, field, fields
 
 from ..param.parameters import String, Boolean, Tuple, TupleSelector
-from .constants import (USE_OBJECT_NAME, POST, states_regex, url_regex, http_methods)
+from .constants import (USE_OBJECT_NAME, HTTP_METHODS, REGEX, http_methods)
 from .path_converter import compile_path
 
 
@@ -50,7 +49,7 @@ class RemoteResourceInfoValidator:
         generally. 
     """
     URL_path = String(default=USE_OBJECT_NAME) #, regex=url_regex)
-    http_method = TupleSelector(default=POST, objects=http_methods, accept_list=True)
+    http_method = TupleSelector(default=HTTP_METHODS.POST, objects=http_methods, accept_list=True)
     state = Tuple(default=None, item_type=(Enum, str), allow_None=True, accept_list=True, accept_item=True)
     obj_name = String(default=USE_OBJECT_NAME)
     iscoroutine = Boolean(default=False)

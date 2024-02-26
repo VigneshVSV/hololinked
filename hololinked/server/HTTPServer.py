@@ -11,11 +11,10 @@ from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector,
                     TypedList, String)
 from .utils import create_default_logger, run_coro_sync, run_method_somehow
 from .serializers import JSONSerializer
-from .constants import Instructions
+from .constants import CommonInstructions
 from .webserver_utils import log_request, update_resources
 from .zmq_message_brokers import MessageMappedZMQClientPool
 from .handlers import RPCHandler, BaseHandler, EventHandler
-from .remote_object import RemoteObject, RemoteObjectDB
 
 
 
@@ -164,7 +163,7 @@ class HTTPServer(Parameterized):
         for client in self.zmq_client_pool:
             await client.handshake_complete()
             _, _, _, _, _, reply = await client.async_execute(
-                        f'/{client.server_instance_name}{Instructions.HTTP_RESOURCES}', 
+                        f'/{client.server_instance_name}{CommonInstructions.HTTP_RESOURCES}', 
                         raise_client_side_exception=True)
             update_resources(self.resources, reply["returnValue"]) # type: ignore
             # _, _, _, _, _, reply = await client.read_attribute('/'+client.server_instance_name + '/object-info', raise_client_side_exception = True)

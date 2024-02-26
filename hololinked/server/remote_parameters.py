@@ -15,7 +15,10 @@ from ..param.parameterized import  Parameterized, dt_types, Parameter
 from ..param.parameters import (TypeConstrainedList, TypeConstrainedDict, abbreviate_paths,
                        TypedKeyMappingsConstrainedDict, resolve_path, concrete_descendents, named_objs)
 from .remote_parameter import RemoteParameter
-from .constants import USE_OBJECT_NAME, GET, PUT
+from .constants import USE_OBJECT_NAME, HTTP_METHODS
+
+GET = HTTP_METHODS.GET 
+PUT = HTTP_METHODS.PUT
 
 
 

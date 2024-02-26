@@ -1,9 +1,11 @@
 import logging
-import functools 
 import typing
-from enum import Enum, StrEnum, IntEnum
-from types import MethodType, FunctionType
+from types import FunctionType, MethodType
+from enum import StrEnum, IntEnum, Enum
 
+# types
+JSONSerializable = typing.Union[typing.Dict[str, typing.Any], list, str, int, float, None]
+CallableType = (FunctionType, MethodType)
 
 # decorator constants 
 # naming
@@ -12,6 +14,7 @@ USE_OBJECT_NAME : str = "USE_OBJECT_NAME"
 ANY_STATE   : str = "ANY_STATE"
 UNSPECIFIED : str = "UNSPECIFIED"
 # types
+
 class ResourceType(StrEnum):
     FUNC  = "FUNC"
     ATTRIBUTE = "ATTRIBUTE"
@@ -21,62 +24,53 @@ class ResourceType(StrEnum):
     FILE = "FILE"
     EVENT = "EVENT"
 
-
-FUNC  = "FUNC"
-ATTRIBUTE = "ATTRIBUTE"
-PARAMETER = "PARAMETER"
-IMAGE_STREAM = "IMAGE_STREAM"
-CALLABLE = "CALLABLE"
-FILE = "FILE"
-# operation
-READ  = "read"
-WRITE = "write"
-
-# logic
-WRAPPER_ASSIGNMENTS = functools.WRAPPER_ASSIGNMENTS + ('__kwdefaults__', '__defaults__', )
-SERIALIZABLE_WRAPPER_ASSIGNMENTS = ('__name__', '__qualname__', '__doc__' )
 # regex logic
-states_regex : str = '[A-Za-z_]+[A-Za-z_ 0-9]*'
-url_regex : str = r'[\-a-zA-Z0-9@:%._\/\+~#=]{1,256}' 
-
+class REGEX(StrEnum):
+    states = '[A-Za-z_]+[A-Za-z_ 0-9]*'
+    url = r'[\-a-zA-Z0-9@:%._\/\+~#=]{1,256}' 
 
 # HTTP request methods
-GET : str = 'GET'
-POST : str = 'POST'
-PUT : str = 'PUT'
-DELETE : str = 'DELETE'
-PATCH : str = 'PATCH'
-OPTIONS : str = 'OPTIONS'
-http_methods = [GET, PUT, POST, DELETE, PATCH]
-# HTTP Handler related 
-EVENT : str = 'event'
-INSTRUCTION : str = 'INSTRUCTION'
+class HTTP_METHODS(StrEnum):
+    GET = 'GET'
+    POST = 'POST'
+    PUT = 'PUT'
+    DELETE = 'DELETE'
+    PATCH = 'PATCH'
+    OPTIONS = 'OPTIONS'
+
+http_methods = [member for member in HTTP_METHODS._member_map_]
 
 # Logging 
-log_levels = dict(
-    DEBUG    = logging.DEBUG,
-    INFO     = logging.INFO,
-    CRITICAL = logging.CRITICAL,
-    ERROR    = logging.ERROR,
-    WARN     = logging.WARN,
+class LOGLEVEL(IntEnum):
+    """
+    ``logging.Logger`` log levels
+    """
+    DEBUG    = logging.DEBUG
+    INFO     = logging.INFO
+    CRITICAL = logging.CRITICAL
+    ERROR    = logging.ERROR
+    WARN     = logging.WARN
     FATAL    = logging.FATAL
-)
-
-# types
-CallableType = (FunctionType, MethodType)
-JSONSerializable = typing.Union[typing.Dict[str, typing.Any], list, str, int, float, None]
 
 # ZMQ
-class ZMQ_PROTOCOLS(Enum):
+class ZMQ_PROTOCOLS(StrEnum):
+    """
+    protocols of ZMQ supported by this package
+    """
     TCP = "TCP"
     IPC = "IPC"
     INPROC = "INPROC"
 
-class Instructions(StrEnum):
+# Some common instructions
+class CommonInstructions(StrEnum):
     RPC_RESOURCES = '/resources/object-proxy/read'
     HTTP_RESOURCES = '/resources/http-server/read'
 
 class ClientMessage(IntEnum):
+    """
+    client sent message index for accessing message indices with names 
+    instead of numbers
+    """
     ADDRESS = 0
     CLIENT_TYPE = 2
     MESSAGE_TYPE = 3
@@ -87,6 +81,10 @@ class ClientMessage(IntEnum):
     EXECUTION_CONTEXT = 8
 
 class ServerMessage(IntEnum):
+    """
+    server sent message index for accessing message indices with names 
+    instead of numbers
+    """
     ADDRESS = 0
     SERVER_TYPE = 2
     MESSAGE_TYPE = 3
@@ -97,6 +95,9 @@ class ServerMessageData(StrEnum):
     RETURN_VALUE = "returnValue"
 
 class ServerTypes(Enum):
+    """
+    type of ZMQ server
+    """
     UNKNOWN_TYPE = b'UNKNOWN_TYPE'
     EVENTLOOP = b'EVENTLOOP'
     REMOTE_OBJECT = b'REMOTE_OBJECT'

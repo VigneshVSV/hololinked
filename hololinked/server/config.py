@@ -23,7 +23,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-
+import sys
 import asyncio
 import tempfile
 import os 
@@ -31,7 +31,9 @@ import platform
 from . import __version__
 
 
-asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+if sys.platform.startswith('win'):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 
 
 class Configuration:
@@ -48,7 +50,7 @@ class Configuration:
         self.reset_actions()
 
 
-    def reset_variables(self, use_environment : bool = True):
+    def reset_variables(self, use_environment : bool = False):
         """
         Reset to default config items.
         If use_environment is False, won't read environment variables settings (useful if you can't trust your env).
@@ -57,12 +59,11 @@ class Configuration:
         self.TCP_SOCKET_SEARCH_START_PORT = 60000
         self.TCP_SOCKET_SEARCH_END_PORT = 65535
 
-        return 
         # qualname is not defined
         if use_environment:
             # environment variables overwrite config items
-            prefix = __qualname__.split('.')[0]
-            for item, envvalue in (e for e in os.environ.items() if e[0].startswith(prefix)):
+            prefix = 'hololinked'
+            for item, envvalue in (e for e in os.environ.items() if e[0].lower().startswith(prefix)):
                 item = item[len(prefix):]
                 if item not in self.__slots__:
                     raise ValueError(f"invalid environment config variable: {prefix}{item}")

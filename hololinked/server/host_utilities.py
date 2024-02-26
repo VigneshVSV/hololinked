@@ -29,7 +29,7 @@ from .utils import unique_id
 from .http_methods import post, get, put, delete
 from .eventloop import Consumer, EventLoop, fork_empty_eventloop
 from .remote_object import RemoteObject, RemoteObjectDB, RemoteObjectMetaclass
-from .database import BaseAsyncDB, create_DB_URL
+from .database import BaseAsyncDB
 
 
 SERVER_INSTANCE_NAME = 'server-util'
@@ -311,7 +311,7 @@ class MainHandler(PrimaryHostHandler):
 
 
 def create_primary_host(config_file : str, ssl_context : ssl.SSLContext, **server_settings) -> TornadoHTTP1Server:
-    URL = f"{create_DB_URL(config_file)}/hololinked-host"
+    URL = f"{DB.create_DB_URL(config_file)}/hololinked-host"
     if not database_exists(URL): 
         try:
             create_database(URL)
@@ -324,7 +324,7 @@ def create_primary_host(config_file : str, ssl_context : ssl.SSLContext, **serve
             raise ex from None
 
     global global_engine, global_session
-    URL = f"{create_DB_URL(config_file, True)}/hololinked-host"
+    URL = f"{DB.create_DB_URL(config_file, True)}/hololinked-host"
     global_engine = asyncio_ext.create_async_engine(URL, echo=True)
     global_session = sessionmaker(global_engine, expire_on_commit=True, 
                                     class_=asyncio_ext.AsyncSession) # type: ignore
@@ -450,7 +450,7 @@ class HTTPServerUtilities(BaseAsyncDB, RemoteObject):
 
     type : str = 'NORMAL_REMOTE_OBJECT_SERVER'
 
-    remote_object_info = TypedList(default=None, allow_None=True, item_type=(RemoteObjectDB.RemoteObjectInfo),
+    remote_object_info = TypedList(default=None, allow_None=True, 
                                 URL_path='/remote-object-info') 
 
     def __init__(self, db_config_file : typing.Union[str, None], zmq_client_pool : MessageMappedZMQClientPool, 

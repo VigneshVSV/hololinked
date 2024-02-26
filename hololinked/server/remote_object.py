@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging 
 import inspect
 import os
@@ -7,20 +6,14 @@ import threading
 import time
 import typing
 import datetime
+import zmq
 from collections import deque
 from enum import EnumMeta, Enum
-from dataclasses import asdict, dataclass
-
-from sqlalchemy import (Integer as DBInteger, String as DBString, JSON as DB_JSON, LargeBinary as DBBinary)
-from sqlalchemy import select
-from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, MappedAsDataclass
-import zmq
 
 
 from ..param.parameterized import Parameterized, ParameterizedMetaclass 
-
-from .constants import (EVENT, GET, IMAGE_STREAM, JSONSerializable, CallableType, CALLABLE, 
-                        PARAMETER, READ, WRITE, log_levels, POST, ZMQ_PROTOCOLS, FILE)
+from .database import RemoteObjectDB
+from .constants import (JSONSerializable, CallableType, LOGLEVEL, ZMQ_PROTOCOLS, HTTP_METHODS)
 from .serializers import *
 from .exceptions import BreakInnerLoop
 from .decorators import remote_method
@@ -28,7 +21,6 @@ from .http_methods import get, post
 from .data_classes import (GUIResources, RemoteResource, HTTPResource, RPCResource, RemoteResourceInfoValidator,
                         ServerSentEvent)
 from .api_platform_utils import postman_item, postman_itemgroup
-from .database import BaseAsyncDB, BaseSyncDB
 from .utils import create_default_logger, get_signature, wrap_text
 from .api_platform_utils import *
 from .remote_parameter import FileServer, PlotlyFigure, ReactApp, RemoteParameter, RemoteClassParameters, Image
@@ -192,92 +184,7 @@ class StateMachine:
     
 
 
-class RemoteObjectDB(BaseSyncDB):
 
-    class TableBase(DeclarativeBase):
-        pass 
-
-    class RemoteObjectInfo(MappedAsDataclass, TableBase):
-        __tablename__ = "remote_objects"
-
-        instance_name  : Mapped[str] = mapped_column(DBString, primary_key = True)
-        class_name     : Mapped[str] = mapped_column(DBString)
-        http_server    : Mapped[str] = mapped_column(DBString)
-        script         : Mapped[str] = mapped_column(DBString)
-        args           : Mapped[JSONSerializable] = mapped_column(DB_JSON)
-        kwargs         : Mapped[JSONSerializable] = mapped_column(DB_JSON)
-        eventloop_name : Mapped[str] = mapped_column(DBString)
-        level          : Mapped[int] = mapped_column(DBInteger)
-        level_type     : Mapped[str] = mapped_column(DBString)
-
-        def json(self):
-            return asdict(self)
-        
-    class Parameter(TableBase):
-        __tablename__ = "parameters"
-
-        id : Mapped[int] = mapped_column(DBInteger, primary_key = True, autoincrement = True)
-        instance_name  : Mapped[str] = mapped_column(DBString)
-        name : Mapped[str] = mapped_column(DBString)
-        serialized_value : Mapped[bytes] = mapped_column(DBBinary) 
-
-    @dataclass 
-    class ParameterData:
-        name : str 
-        value : typing.Any
-
-    def __init__(self, instance_name : str, serializer : BaseSerializer,
-                    config_file: typing.Union[str, None] = None ) -> None:
-        super().__init__(database = 'scadapyserver', serializer = serializer, config_file = config_file)
-        self.instance_name = instance_name
-        
-    def fetch_own_info(self) -> RemoteObjectInfo:
-        with self.sync_session() as session:
-            stmt = select(self.RemoteObjectInfo).filter_by(instance_name = self.instance_name)
-            data = session.execute(stmt)
-            data = data.scalars().all()
-            if len(data) == 0:
-                return None 
-            return data[0]
-            
-    def read_all_parameters(self, deserialized : bool = True) -> typing.Sequence[typing.Union[Parameter,
-                                                                                ParameterData]]:
-        with self.sync_session() as session:
-            stmt = select(self.Parameter).filter_by(instance_name = self.instance_name)
-            data = session.execute(stmt)
-            existing_params = data.scalars().all()
-            if not deserialized:
-                return existing_params
-            else:
-                params_data = []
-                for param in existing_params:
-                    params_data.append(self.ParameterData(
-                        name = param.name, 
-                        value = self.serializer.loads(param.serialized_value)
-                    ))
-                return params_data
-          
-    def edit_parameter(self, parameter : RemoteParameter, value : typing.Any) -> None:
-        with self.sync_session() as session:
-            stmt = select(self.Parameter).filter_by(instance_name = self.instance_name, name = parameter.name)
-            data = session.execute(stmt)
-            param = data.scalar()
-            param.serialized_value = self.serializer.dumps(value)
-            session.commit()
-
-    def create_missing_db_parameters(self, parameters : typing.Dict[str, RemoteParameter]) -> None:
-        with self.sync_session() as session:
-            existing_params = self.read_all_parameters()
-            existing_names = [p.name for p in existing_params]
-            for name, new_param in parameters.items():
-                if name not in existing_names: 
-                    param = self.Parameter(
-                        instance_name = self.instance_name, 
-                        name = new_param.name, 
-                        serialized_value = self.serializer.dumps(new_param.default)
-                    )
-                    session.add(param)
-            session.commit()
                 
 
 
@@ -453,7 +360,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
             resource._owner = self
             resource._unique_event_name = bytes(f"{self._full_URL_path_prefix}{resource.URL_path}", encoding='utf-8')
             resource.publisher = self._event_publisher                
-            httpserver_resources[GET]['{}{}'.format(
+            httpserver_resources[HTTP_METHODS.GET]['{}{}'.format(
                         self._full_URL_path_prefix, resource.URL_path)] = ServerSentEvent(
                                                             # event URL_path has '/' prefix
                                                             what=EVENT,
@@ -824,7 +731,7 @@ class RemoteObject(RemoteSubobject):
         return value
              
     # example of remote_method decorator
-    @remote_method(URL_path='/log/console', http_method = POST)
+    @remote_method(URL_path='/log/console', http_method = HTTP_METHODS.POST)
     def log_to_console(self, data : typing.Any = None, level : typing.Any = 'DEBUG') -> None:
         if level not in log_levels.keys():
             self.logger.error("log level {} invalid. logging with level INFO.".format(level))

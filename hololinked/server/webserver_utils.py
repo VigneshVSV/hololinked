@@ -6,7 +6,7 @@ import ifaddr
 # from tabulate import tabulate
 from tornado.httputil import HTTPServerRequest
 
-from .constants import CALLABLE, ATTRIBUTE, EVENT, FILE, IMAGE_STREAM
+from .constants import ResourceType
 from .data_classes import FileServerData, ServerSentEvent, HTTPResource
 from .zmq_message_brokers import AsyncZMQClient, SyncZMQClient
 

@@ -1,7 +1,7 @@
 from typing import Dict, List, Any, Union
 from dataclasses import dataclass, field, asdict
 
-from .constants import POST
+from .constants import HTTP_METHODS
 from .serializers import JSONSerializer
 
 
@@ -58,7 +58,7 @@ class postman_http_request:
     url : str 
     header : Union[List[Dict[str, Any]], None] = field(default=None)  
     body : Union[Dict[str, Any], None] = field(default=None)
-    method : str = field(default=POST) 
+    method : str = field(default=HTTP_METHODS.POST) 
     description : Union[str, None] = field(default=None)
 
     def json(self):

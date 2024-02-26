@@ -1,6 +1,5 @@
 import builtins
 import os
-from typing import List
 import zmq
 import zmq.asyncio
 import asyncio
@@ -14,8 +13,9 @@ from enum import Enum
 from .utils import create_default_logger, run_method_somehow, wrap_text
 from .config import global_config
 from .constants import ZMQ_PROTOCOLS, ServerTypes
-from .serializers import (JSONSerializer, PickleSerializer, BaseSerializer, SerpentSerializer, # DillSerializer, 
-                        serializers)
+from .serializers import (JSONSerializer, PickleSerializer, BaseSerializer, 
+                        SerpentSerializer, serializers)
+                        # DillSerializer, 
 from ..param.parameterized import Parameterized
 
 
@@ -707,11 +707,11 @@ class ZMQServerPool(BaseZMQServer):
         self.poller = zmq.asyncio.Poller()
         if instance_names:
             for instance_name in instance_names:
-                self.pool[instance_name] = AsyncZMQServer(instance_name, ServerTypes.UNKNOWN_TYPE.value, self.context, 
+                self.pool[instance_name] = AsyncZMQServer(instance_name, ServerTypes.UNKNOWN_TYPE, self.context, 
                                                         **kwargs)
             for server in self.pool.values():
                 self.poller.register(server.socket, zmq.POLLIN)
-        super().__init__(server_type = ServerTypes.POOL.value, json_serializer = kwargs.get('json_serializer'), 
+        super().__init__(server_type = ServerTypes.POOL, json_serializer = kwargs.get('json_serializer'), 
                     rpc_serializer = kwargs.get('rpc_serializer', None))
 
     def register_server(self, server : typing.Union[AsyncZMQServer, AsyncPollingZMQServer]) -> None:
@@ -1074,7 +1074,7 @@ class BaseZMQClient(BaseZMQ):
         if server_instance_name:
             self.server_address = bytes(server_instance_name, encoding='utf-8')
         self.server_instance_name = server_instance_name
-        self.server_type = ServerTypes.UNKNOWN_TYPE.value
+        self.server_type = ServerTypes.UNKNOWN_TYPE
         super().__init__()
 
 
@@ -1928,7 +1928,7 @@ class CriticalEvent(Event):
 class EventPublisher(BaseZMQServer):
 
     def __init__(self,  identity : str, context : typing.Union[zmq.Context, None] = None, **serializer) -> None:
-        super().__init__(server_type=ServerTypes.UNKNOWN_TYPE.value, **serializer)
+        super().__init__(server_type=ServerTypes.UNKNOWN_TYPE, **serializer)
         self.context = context or zmq.Context()
         self.identity = identity
         self.socket = self.context.socket(zmq.PUB)
@@ -2018,5 +2018,5 @@ class EventConsumer(BaseZMQClient):
             
 
 
-__all__ = ['ServerTypes', 'AsyncZMQServer', 'AsyncPollingZMQServer', 'ZMQServerPool', 'RPCServer',
+__all__ = ['AsyncZMQServer', 'AsyncPollingZMQServer', 'ZMQServerPool', 'RPCServer',
            'SyncZMQClient', 'AsyncZMQClient', 'MessageMappedZMQClientPool', 'Event', 'CriticalEvent']

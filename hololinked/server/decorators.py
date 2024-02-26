@@ -1,17 +1,16 @@
+import functools
 import typing
+from enum import Enum
 from types import FunctionType
 from inspect import iscoroutinefunction, getfullargspec
-from enum import Enum
-from functools import wraps
-from dataclasses import dataclass, asdict, field, fields
 
-
-from .data_classes import RemoteResourceInfoValidator, RemoteResource
-from .constants import (USE_OBJECT_NAME, UNSPECIFIED, GET, POST, PUT, DELETE, PATCH, WRAPPER_ASSIGNMENTS)
+from .data_classes import RemoteResourceInfoValidator
+from .constants import (USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS)
 from .utils import wrap_text
-from .path_converter import compile_path
 
 
+
+WRAPPER_ASSIGNMENTS = functools.WRAPPER_ASSIGNMENTS + ('__kwdefaults__', '__defaults__', )
 
 def wrap_method(method : FunctionType):
     """wraps a methods with useful operations before and after calling a method.
@@ -25,7 +24,7 @@ def wrap_method(method : FunctionType):
             as much as possible
     """
    
-    @wraps(method, WRAPPER_ASSIGNMENTS)
+    @functools.wraps(method, WRAPPER_ASSIGNMENTS)
     def wrapped_method(*args, **kwargs) -> typing.Any:
         self = args[0]
         self.logger.debug("called {} of instance {}".format(method.__qualname__, self.instance_name))
@@ -47,7 +46,7 @@ def is_private_attribute(attr_name: str) -> bool:
     return False
 
     
-def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = POST, 
+def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.POST, 
             state : typing.Optional[typing.Union[str, Enum]] = None) -> typing.Callable:
     """Use this function to decorate your methods to be accessible remotely.  
     
@@ -118,65 +117,37 @@ def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = POST,
     return inner 
 
 
-def remote_parameter(**kwargs):
-    from .remote_parameter import RemoteParameter
-    return RemoteParameter(*kwargs)
+def remote_parameter(default: typing.Any = None, *, doc : typing.Optional[str] = None, 
+        constant : bool = False, readonly : bool = False, allow_None : bool = False, 
+        URL_path : str = USE_OBJECT_NAME, remote : bool = True, 
+        http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (HTTP_METHODS.GET, HTTP_METHODS.PUT), 
+        state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+        db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+        class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
+        fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None, 
+        deepcopy_default : bool = False, per_instance_descriptor : bool = False, 
+        precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None,
+        parameter_type : typing.Optional["RemoteParameter"] = None, **kwargs
+    ) -> "RemoteParameter":
+    """
+    use like python ``property`` without declaring a remote parameter explicity.       
+    """
+    if type is not None and not isinstance(type, RemoteParameter):
+        raise TypeError(f"type argument must be a RemoteParameter if supplied, given type {parameter_type(type)}")
+    else:
+        parameter_type = RemoteParameter 
+        # will raise import error when specified in argument
+
+    return parameter_type(default=default, constant=constant, readonly=readonly,
+            allow_None=allow_None, URL_path=URL_path, remote=remote, http_method=http_method,
+            state=state, db_persist=db_persist, db_init=db_init, db_commit=db_commit,
+            class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
+            deepcopy_default=deepcopy_default, per_instance_descriptor=per_instance_descriptor,
+            precedence=precedence, metadata=metadata, **kwargs)
 
 
-@dataclass 
-class FuncInfo:
-    module : str
-    name : str
-    qualname : str
-    doc : str
-    kwdefaults : typing.Any
-    defaults : typing.Any 
-    scadapy : RemoteResource
 
-    def json(self):
-        return asdict(self)
-    
-    
-# @dataclass
-# class DB_registration_info:
-#     script : str 
-#     instance_name : str
-#     http_server   : str = field(default = '')
-#     args          : Tuple[Any] = field(default = tuple())
-#     kwargs        : Dict[str, Any] = field(default = dict()) 
-#     eventloop     : str = field(default = '')
-#     level         : int = field(default = 1)
-#     level_type    : str = field(default = '')
-
-
-# def parse_request_args(*args, method : str):  
-#     """
-#     This method is useful when linters figure out conditional returns on decorators
-#     """ 
-#     arg_len = len(args)
-#     if arg_len > 2 or arg_len == 0: 
-#         raise ValueError(
-#             """
-#             method {}() accepts only two argument, URL and/or a function/method.
-#             Given length of arguments : {}.
-#             """.format(method.lower(), arg_len)
-#         )
-#     if isinstance(args[0], FunctionType):
-#         target = args[0] 
-#     elif len(args) > 1 and isinstance(args[1], FunctionType):
-#         target = args[1]
-#     else:
-#         target = None         
-#     if isinstance(args[0], str):
-#         URL = args[0]
-#     elif len(args) > 1 and isinstance(args[1], str):
-#         URL = args[1]
-#     else:   
-#         URL = USE_OBJECT_NAME 
-#     return target, URL
-    
-
-
+from .remote_parameter import RemoteParameter
 
 __all__ = ['remote_method', 'remote_parameter']
 

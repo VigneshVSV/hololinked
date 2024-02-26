@@ -142,21 +142,21 @@ class JSONSerializer(BaseSerializer):
         return json.load(file_desc)
 
     @classmethod
-    def general_dumps(cls, data) -> bytes:
-        data = json.dumps(data, ensure_ascii=False, allow_nan = True)
+    def generic_dumps(cls, data) -> bytes:
+        data = json.dumps(data, ensure_ascii=False, allow_nan=True)
         return data.encode("utf-8")
 
     @classmethod
-    def general_dump(cls, data : typing.Dict[str, typing.Any], file_desc) -> None:
-        json.dump(data, file_desc, ensure_ascii = False, allow_nan = True)
+    def generic_dump(cls, data : typing.Dict[str, typing.Any], file_desc) -> None:
+        json.dump(data, file_desc, ensure_ascii=False, allow_nan=True)
     
     @classmethod
-    def general_loads(cls, data : typing.Union[bytearray, memoryview, bytes]) -> typing.Dict[str, typing.Any]:
+    def generic_loads(cls, data : typing.Union[bytearray, memoryview, bytes]) -> typing.Dict[str, typing.Any]:
         data = cls._convertToBytes(data).decode("utf-8") # type: ignore
         return json.loads(data)
     
     @classmethod
-    def general_load(cls, file_desc) -> typing.Dict[str, typing.Any]:
+    def generic_load(cls, file_desc) -> typing.Dict[str, typing.Any]:
         return json.load(file_desc)
 
     def default(self, obj):

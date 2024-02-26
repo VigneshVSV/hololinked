@@ -4,7 +4,7 @@ from enum import Enum
 
 from ..param.parameterized import Parameter, Parameterized, ClassParameters
 from .decorators import RemoteResourceInfoValidator
-from .constants import GET, PUT, USE_OBJECT_NAME
+from .constants import USE_OBJECT_NAME, HTTP_METHODS
 from .zmq_message_brokers import Event
 
 try: 
@@ -12,7 +12,7 @@ try:
 except:
     go = None 
 
-__default_parameter_write_method__ = PUT 
+__default_parameter_write_method__ = HTTP_METHODS.PUT 
 
 __parameter_info__ = [
                 'allow_None' , 'class_member', 'constant', 'db_init', 'db_persist', 
@@ -153,7 +153,7 @@ class RemoteParameter(Parameter):
     def __init__(self, default: typing.Any = None, *, doc : typing.Optional[str] = None, constant : bool = False, 
                 readonly : bool = False, allow_None : bool = False, 
                 URL_path : str = USE_OBJECT_NAME, remote : bool = True, 
-                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (GET, PUT), 
+                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (HTTP_METHODS.GET, HTTP_METHODS.PUT), 
                 state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
                 db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
                 class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
@@ -240,8 +240,7 @@ class PlotlyFigure(VisualizationParameter):
                 polled : bool = False, refresh_interval : typing.Optional[int] = None, 
                 update_event_name : typing.Optional[str] = None, doc: typing.Union[str, None] = None, 
                 URL_path : str = USE_OBJECT_NAME) -> None:
-        super().__init__(default=default_figure, doc=doc, constant=True, readonly=True, URL_path=URL_path, 
-                        http_method=(GET, PUT))
+        super().__init__(default=default_figure, doc=doc, constant=True, readonly=True, URL_path=URL_path)
         self.data_sources = data_sources    
         self.refresh_interval = refresh_interval
         self.update_event_name = update_event_name
@@ -290,7 +289,7 @@ class PlotlyFigure(VisualizationParameter):
         if not go:
             raise ImportError("plotly was not found/imported, install plotly to suport PlotlyFigure paramater")
         if not isinstance(value, go.Figure):
-            raise_TypeError(f"figure arguments accepts only plotly.graph_objects.Figure, not type {type(value)}",
+            raise TypeError(f"figure arguments accepts only plotly.graph_objects.Figure, not type {type(value)}",
                             self)
         return value
         
@@ -307,7 +306,7 @@ class Image(VisualizationParameter):
     def __init__(self, default : typing.Any = None, *, streamable : bool = True, doc : typing.Optional[str] = None, 
                 constant : bool = False, readonly : bool = False, allow_None : bool = False,  
                 URL_path : str = USE_OBJECT_NAME, 
-                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (GET, PUT), 
+                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (HTTP_METHODS.GET, HTTP_METHODS.PUT), 
                 state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
                 db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
                 class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
@@ -354,9 +353,9 @@ class FileServer(RemoteParameter):
     
     def validate_and_adapt_directory(self, value : str):
         if not isinstance(value, str):
-            raise_TypeError(f"FileServer parameter not a string, but type {type(value)}", self) 
+            raise TypeError(f"FileServer parameter not a string, but type {type(value)}", self) 
         if not os.path.isdir(value):
-            raise_ValueError(f"FileServer parameter directory '{value}' not a valid directory", self)
+            raise ValueError(f"FileServer parameter directory '{value}' not a valid directory", self)
         if not value.endswith('\\'):
             value += '\\'
         return value 
