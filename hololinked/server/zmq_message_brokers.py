@@ -1732,7 +1732,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             return reply
 
     async def async_execute(self, instance_name : str, instruction : str, arguments : typing.Dict[str, typing.Any] = EMPTY_DICT, 
-                    context : typing.Dict[str, typing.Any] = EMPTY_DICT, raise_client_side_exception = False, 
+                    *, context : typing.Dict[str, typing.Any] = EMPTY_DICT, raise_client_side_exception = False, 
                     server_timeout : typing.Optional[float] = 3, client_timeout : typing.Optional[float] = None) -> typing.Dict[str, typing.Any]:
         """
         sends message and receives reply.

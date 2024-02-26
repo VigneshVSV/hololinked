@@ -1,9 +1,9 @@
 # routing ideas from https://www.tornadoweb.org/en/branch6.3/routing.html
 import typing
+import logging
 from json import JSONDecodeError
 from tornado.web import RequestHandler, StaticFileHandler
 from tornado.iostream import StreamClosedError
-from time import perf_counter
 
 from .serializers import JSONSerializer
 from .zmq_message_brokers import MessageMappedZMQClientPool, EventConsumer
@@ -13,14 +13,42 @@ from .data_classes import HTTPResource, ServerSentEvent
 
 
 
-class RPCHandler(RequestHandler):
+class BaseHandler(RequestHandler):
 
     zmq_client_pool : MessageMappedZMQClientPool
     json_serializer : JSONSerializer
     clients : str
+    logger : logging.Logger
 
     def initialize(self, resource : typing.Union[HTTPResource, ServerSentEvent]) -> None:
         self.resource = resource
+
+    def set_headers(self):
+        raise NotImplementedError("implement set headers in child class to call it",
+                            " before directing the request to RemoteObject")
+    
+    def prepare_arguments(self) -> typing.Dict[str, typing.Any]:
+        """
+        merges all arguments to a single JSON body (for example, to provide it to 
+        method execution as parameters)
+        """
+        try:
+            arguments = self.json_serializer.loads(self.request.arguments)
+        except JSONDecodeError:
+            arguments = {}
+        if len(self.request.query_arguments) >= 1:
+            for key, value in self.request.query_arguments.items():
+                if len(value) == 1:
+                    arguments[key] = self.json_serializer.loads(value[0]) 
+                else:
+                    arguments[key] = [self.json_serializer.loads(val) for val in value]
+        if len(self.request.body) > 0:
+            arguments.update(self.json_serializer.loads(self.request.body))
+        return arguments
+
+
+
+class RPCHandler(BaseHandler):
 
     def set_headers(self):
         self.set_status(200)
@@ -75,28 +103,6 @@ class RPCHandler(RequestHandler):
         self.finish()
     
 
-    def prepare_arguments(self, 
-            path_arguments : typing.Optional[typing.Dict] = None
-        ) -> typing.Dict[str, typing.Any]:
-        """
-        merges all arguments to a single JSON body (for example, to provide it to 
-        method execution as parameters)
-        """
-        try:
-            arguments = self.json_serializer.loads(self.request.arguments)
-        except JSONDecodeError:
-            arguments = {}
-        if len(self.request.query_arguments) >= 1:
-            for key, value in self.request.query_arguments.items():
-                if len(value) == 1:
-                    arguments[key] = self.json_serializer.loads(value[0]) 
-                else:
-                    arguments[key] = [self.json_serializer.loads(val) for val in value]
-        if len(self.request.body) > 0:
-            arguments.update(self.json_serializer.loads(self.request.body))
-        return arguments
-
-    
     async def handle_through_remote_object(self) -> None:
         try:
             arguments = self.prepare_arguments()
@@ -117,7 +123,7 @@ class RPCHandler(RequestHandler):
         
 
 
-class EventHandler(RequestHandler):
+class EventHandler(BaseHandler):
 
     def initialize(self, resource : typing.Union[HTTPResource, ServerSentEvent]) -> None:
         self.resource = resource
@@ -132,13 +138,13 @@ class EventHandler(RequestHandler):
         await self.handle_datastream()
         self.finish()
 
-    def options(self):
+    async def options(self):
         self.set_status(204)
-        self.add_header("Access-Control-Allow-Origin", self.clients)
+        self.set_header("Access-Control-Allow-Origin", self.clients)
         self.set_header("Access-Control-Allow-Methods", 'GET')
         self.finish()
 
-        
+
     async def handle_datastream(self) -> None:    
         try:                        
             event_consumer = EventConsumer(self.request.path, self.resource.socket_address, 
@@ -149,9 +155,9 @@ class EventHandler(RequestHandler):
                     data = await event_consumer.receive_event()
                     if data:
                         # already JSON serialized 
-                        # print(f"data sent")
                         self.write(data_header % data)
                         await self.flush()
+                        self.logger.debug(f"new data sent - {self.resource.event_name}")
                 except StreamClosedError:
                     break 
                 except Exception as ex:
@@ -178,8 +184,8 @@ class EventHandler(RequestHandler):
                         # already serialized 
                         self.write(delimiter)
                         self.write(data_header % data)
-                        # print(f"image data sent {data[0:100]}")
                         await self.flush()
+                        self.logger.debug(f"new image sent - {self.resource.event_name}")
                 except StreamClosedError:
                     break 
                 except Exception as ex:

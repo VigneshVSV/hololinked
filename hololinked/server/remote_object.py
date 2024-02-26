@@ -151,9 +151,12 @@ class StateMachine:
         return state 
     
     def get_state(self) -> typing.Union[str, Enum, None]:
-        """return the current state. one can also access the property `current state`.
-        Returns:
-            str: current state
+        """
+        return the current state. one can also access the property `current state`.
+        
+        Returns
+        -------
+        current state: str
         """
         return self._state
         
