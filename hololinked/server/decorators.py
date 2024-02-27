@@ -50,14 +50,20 @@ def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_MET
             state : typing.Optional[typing.Union[str, Enum]] = None) -> typing.Callable:
     """Use this function to decorate your methods to be accessible remotely.  
     
-    Args:
-        URL_path (str, optional): The path of URL under which the object is accessible. defaults to name of the object.
-        http_method (str, optional)  : HTTP method (GET, POST, PUT etc.). defaults to POST.
-        state (Union[str, Tuple[str]], optional): state under which the object can executed or written. When not provided,
-            its accessible or can be executed under any state.
+    Parameters
+    ----------
+    URL_path: str, optional 
+        The path of URL under which the object is accessible. defaults to name of the object.
+    http_method: str, optional
+        HTTP method (GET, POST, PUT etc.). defaults to POST.
+    state: str | Tuple[str], optional 
+        state under which the object can executed or written. When not provided,
+        its accessible or can be executed under any state.
 
-    Returns:
-        Callable: returns the callable object as it is or wrapped within loggers
+    Returns
+    -------
+    callable: Callable
+        returns the callable object as it is or wrapped within loggers
     """
     
     def inner(obj):

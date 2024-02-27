@@ -190,8 +190,8 @@ class RemoteObjectDB(BaseSyncDB):
         create any and all missing remote parameters of ``RemoteObject`` instance
         in database.
 
-        Parameter
-        ---------
+        Parameters
+        ----------
         parameters: Dict[str, RemoteParamater]
             descriptors of the parameters
         """
@@ -213,8 +213,8 @@ class RemoteObjectDB(BaseSyncDB):
         """
         change the parameter value of an already existing parameter
 
-        Parameter
-        ---------
+        Parameters
+        ----------
         parameter: RemoteParameter
             descriptor of the parameter
         value: Any

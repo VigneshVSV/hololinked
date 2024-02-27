@@ -35,16 +35,23 @@ class StateMachine:
     A container class for state machine related logic, this is intended to be used by the 
     RemoteObject and its descendents.  
     	
-    Args:
-        initial_state (str): initial state of machine 
-        states (Enum): Enum type holding enumeration of states 
-        on_enter (Dict[str, Union[Callable, RemoteParameter]]): callbacks to be invoked when a certain state is entered. 
-            It is to be specified as a dictionary with the states being the keys
-        on_exit  (Dict[str, Union[Callable, RemoteParameter]]): callbacks to be invoked when a certain state is exited. 
-            It is to be specified as a dictionary with the states being the keys
+    Parameters
+    ----------
+    initial_state: str 
+        initial state of machine 
+    states: Enum
+        enumeration of states 
+    on_enter: Dict[str, Callable | RemoteParameter] 
+        callbacks to be invoked when a certain state is entered. It is to be specified 
+        as a dictionary with the states being the keys
+    on_exit: Dict[str, Callable | RemoteParameter]
+        callbacks to be invoked when a certain state is exited. 
+        It is to be specified as a dictionary with the states being the keys
         
-    Attributes: 
-        exists (bool): internally computed, True if states and initial_states are valid 
+    Attributes
+    ----------
+    exists: bool
+        internally computed, True if states and initial_states are valid 
     """
     initial_state = ClassSelector(default=None, allow_None=True, constant=True, class_=(Enum, str))
     exists = Boolean(default=False)

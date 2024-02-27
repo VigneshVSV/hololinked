@@ -1030,6 +1030,7 @@ class BaseZMQClient(BaseZMQ):
 
     server's reply to client
     ::
+
         [address, bytes(), server type , message_type, message id, content or response or reply]
         [   0   ,   1    ,    2        ,     3       ,     4     ,            5                ]
 
@@ -1040,11 +1041,10 @@ class BaseZMQClient(BaseZMQ):
    client_type: str
         RPC or HTTP Server
     **kwargs:
-        rpc_serializer: 
+        rpc_serializer: BaseSerializer
             custom implementation of RPC serializer if necessary
-        json_serializer:
+        json_serializer: JSONSerializer
             custom implementation of JSON serializer if necessary
-
     """
 
     def __init__(self, server_instance_name : str, client_type : bytes, **kwargs) -> None:
@@ -1246,6 +1246,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
 
         client's message to server:
         ::
+        
             [address, bytes(), client type, message type, messsage id, 
             [   0   ,   1    ,     2      ,      3      ,      4     , 
             
