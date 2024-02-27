@@ -6,7 +6,7 @@
 
 .. _note:
 
-development notes
+Development Notes
 =================
 
 In the interest of information to software engineers and web developers, the main difference of |module-highlighted| to a conventional 
