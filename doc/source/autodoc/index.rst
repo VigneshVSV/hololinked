@@ -17,6 +17,8 @@ hololinked.server
     server/eventloop
     server/http_server
     server/remote_parameter/index
+    server/decorators
+    server/database/index
     server/zmq_message_brokers/index
     server/data_classes/index
 

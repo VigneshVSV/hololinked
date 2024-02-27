@@ -19,9 +19,9 @@ based tools. |module-highlighted| is being developed with the following features
  
 * being truly pythonic - all code in python & all features of python
 * easy to understand & setup
-* reasonable integration with HTTP to take advantage of browser based GUI frameworks (like ReactJS)
+* reasonable integration with HTTP to take advantage of modern web practices and Javascript GUI frameworks like React
 * agnostic to system size & flexibility in topology
-* 30FPS 1280*1080*3 image streaming over HTTP
+* 30FPS 1280*1080*3 (8 bit) image streaming over HTTP
 
 In short - to use it in your home/hobby, in a lab or in a research facility & industry.
 
@@ -32,15 +32,15 @@ and/or TCP after implementation by the |module-highlighted| developer. Interproc
 available for restriction to single-computer applications. Remote methods can be used to run control and measurement 
 operations on your instruments or arbitrary python logic. Remote parameters are type-checked object attributes with 
 getter-setter options (identical to python ``property`` with added network access). Events allow to asynchronously push 
-arbitrary data to clients. Once such a ``RemoteObject`` is instantiated, it can be connected with the server of choice. 
+arbitrary data to clients. Once such a ``RemoteObject`` is instantiated, it can be connected with a server of choice (one or many). 
+
+Please follow the documentation for examples & tutorials, how-to's and API reference.
 
 .. warning::
    This project is under development and is an idealogical state. Please use it only for playtesting or exploring.
 
 .. note::
    web developers & software engineers, consider reading the :ref:`note <note>` section
-
-Please follow the documentation for examples & tutorials, how-to's and API reference.
 
 .. toctree::
    :maxdepth: 1
