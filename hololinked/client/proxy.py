@@ -2,6 +2,7 @@ import threading
 import asyncio
 import typing 
 import logging
+import uuid
 from typing import Any
 
 from ..server.data_classes import RPCResource
@@ -20,12 +21,13 @@ class ObjectProxy:
     _own_attrs = frozenset([
         '_zmq_client', 'identity', '__annotations__',
         'instance_name', 'logger', 'timeout', '_timeout', 
+        '_events'
     ])
 
     def __init__(self, instance_name : str, timeout : float = 5, load_remote_object = True, protocol : str = 'TCP', **kwargs) -> None:
         self.instance_name = instance_name
         self.timeout = timeout
-        self.identity = instance_name + current_datetime_ms_str()
+        self.identity = f"{instance_name}|{uuid.uuid4()}"
         self.logger = logging.Logger(self.identity)
         # compose ZMQ client in Proxy client so that all sending and receiving is
         # done by the ZMQ client and not by the Proxy client directly. Proxy client only 
@@ -96,8 +98,8 @@ class ObjectProxy:
             network times not considered."""
 
     def invoke(self, method : str, oneway : bool = False, **kwargs) -> typing.Any:
-        method : _RemoteMethod = getattr(self, method, None)
-        if not method:
+        method = getattr(self, method, None) # type: _RemoteMethod 
+        if not isinstance(method, _RemoteMethod):
             raise AttributeError(f"No remote method named {method}")
         if oneway:
             method.oneway(**kwargs)
@@ -106,13 +108,13 @@ class ObjectProxy:
 
     async def async_invoke(self, method : str, **kwargs):
         method = getattr(self, method, None) # type: _RemoteMethod 
-        if not method:
+        if not isinstance(method, _RemoteMethod):
             raise AttributeError(f"No remote method named {method}")
         return await method.async_call(**kwargs)
 
     def set_parameter(self, parameter : str, value : typing.Any, oneway : bool) -> None:
-        parameter : _RemoteParameter = getattr(self, parameter, None)
-        if not parameter:
+        parameter = getattr(self, parameter, None) # type: _RemoteParameter
+        if not isinstance(parameter, _RemoteParameter):
             raise AttributeError(f"No remote parameter named {parameter}")
         if oneway:
             parameter.oneway(value)
@@ -123,64 +125,21 @@ class ObjectProxy:
         pass 
 
     def subscribe_event(self, event_name : str, callback : typing.Callable):
-        pass
+        event = getattr(self, event_name, None) # type: _Event
+        if not isinstance(event, _Event):
+            raise AttributeError(f"No event named {event_name}")
+        if event._subscribed:
+            event._cbs.append(callback)
+            return self._events.
+        else: 
+            event._subscribe([callback])
+            self._events[uuid.uuid4()] = event
 
     def unsubscribe_event(self, event_name : str):
-        pass
-
-    # def __getstate__(self):
-    #     # make sure a tuple of just primitive types are used to allow for proper serialization
-    #     return str(self._pyroUri), tuple(self._pyroOneway), tuple(self._pyroMethods), \
-    #            tuple(self._pyroAttrs), self._pyroHandshake, self._pyroSerializer
-
-    # def __setstate__(self, state):
-    #     self._pyroUri = core.URI(state[0])
-    #     self._pyroOneway = set(state[1])
-    #     self._pyroMethods = set(state[2])
-    #     self._pyroAttrs = set(state[3])
-    #     self._pyroHandshake = state[4]
-    #     self._pyroSerializer = state[5]
-    #     self.__pyroTimeout = config.COMMTIMEOUT
-    #     self._pyroMaxRetries = config.MAX_RETRIES
-    #     self._pyroConnection = None
-    #     self._pyroLocalSocket = None
-    #     self._pyroSeq = 0
-    #     self._pyroRawWireResponse = False
-    #     self.__pyroOwnerThread = get_ident()
-
-    # def __copy__(self):
-    #     p = object.__new__(type(self))
-    #     p.__setstate__(self.__getstate__())
-    #     p._pyroTimeout = self._pyroTimeout
-    #     p._pyroRawWireResponse = self._pyroRawWireResponse
-    #     p._pyroMaxRetries = self._pyroMaxRetries
-    #     return p
-
-
-    # def __dir__(self):
-    #     result = dir(self.__class__) + list(self.__dict__.keys())
-    #     return sorted(set(result) | self._pyroMethods | self._pyroAttrs)
-
-    # # When special methods are invoked via special syntax (e.g. obj[index] calls
-    # # obj.__getitem__(index)), the special methods are not looked up via __getattr__
-    # # for efficiency reasons; instead, their presence is checked directly.
-    # # Thus we need to define them here to force (remote) lookup through __getitem__.
-    
-    # def __len__(self): return self.__getattr__('__len__')()
-    # def __getitem__(self, index): return self.__getattr__('__getitem__')(index)
-    # def __setitem__(self, index, val): return self.__getattr__('__setitem__')(index, val)
-    # def __delitem__(self, index): return self.__getattr__('__delitem__')(index)
-
-    # def __iter__(self):
-    #     try:
-    #         # use remote iterator if it exists
-    #         yield from self.__getattr__('__iter__')()
-    #     except AttributeError:
-    #         # fallback to indexed based iteration
-    #         try:
-    #             yield from (self[index] for index in range(sys.maxsize))
-    #         except (StopIteration, IndexError):
-    #            return
+        event = getattr(self, event_name, None) # type: _Event
+        if not isinstance(event, _Event):
+            raise AttributeError(f"No event named {event_name}")
+        event._unsubscribe()
 
     
     def load_remote_object(self):
@@ -193,6 +152,7 @@ class ObjectProxy:
                                     self._timeout) # type: _RemoteMethod
         reply = fetch()[ServerMessage.DATA][ServerMessageData.RETURN_VALUE] # type: typing.Dict[str, typing.Dict[str, typing.Any]]
 
+        allowed_events = []
         for name, data in reply.items():
             if isinstance(data, dict):
                 data = RPCResource(**data)
@@ -203,15 +163,10 @@ class ObjectProxy:
             elif data.what == ResourceType.PARAMETER:
                 _add_parameter(self, _RemoteParameter(self._zmq_client, data.instruction, self.timeout), data)
             elif data.what == ResourceType.EVENT:
-                pass 
-       
-    # def _pyroInvokeBatch(self, calls, oneway=False):
-    #     flags = protocol.FLAGS_BATCH
-    #     if oneway:
-    #         flags |= protocol.FLAGS_ONEWAY
-    #     return self._pyroInvoke("<batch>", calls, None, flags)
+                _add_event(self, _Event(self._zmq_client, data.event_name, data.event_socket), data)
+        self._events = {}
 
-  
+ 
 
 class _RemoteMethod:
     """method call abstraction"""
@@ -235,7 +190,9 @@ class _RemoteMethod:
         self._last_return_value = self._zmq_client.execute(self._instruction, 
                                         kwargs, raise_client_side_exception=True)
         return self._last_return_value
-           
+    
+    async def async_call(self, *args, **kwargs):
+        pass       
     
 
     
@@ -273,20 +230,25 @@ class _RemoteParameter:
         self._last_value : typing.Dict = await self._zmq_client.execute(self._read_instruction,
                                                 raise_client_side_exception=True)
         return self._last_value
+    
+    def oneway(self):
+        pass
   
+
 
 class _Event:
     """event streaming"""
 
     def __init__(self, client : SyncZMQClient, event_name : str, event_socket : str) -> None:
         self._zmq_client = client 
-        self._event_name = event_name
-        self._event_socket = event_socket
+        self._name = event_name
+        self._URL = event_name
+        self._socket_address = event_socket
 
-    def _subscribe(self, callback : typing.Callable):
-        self._event_consumer = EventConsumer(request.path, event_info.socket_address, 
-                                f"{request.path}_HTTPEvent@"+current_datetime_ms_str())
-        self._cb = callback 
+    def _subscribe(self, callbacks : typing.List[typing.Callable]):
+        self._event_consumer = EventConsumer(self._URL, self._socket_address, 
+                                f"{self._socket_address}_HTTPEvent@"+current_datetime_ms_str())
+        self._cbs = callbacks 
         self._subscribed = True
         self._thread = threading.Thread(target=self.listen)
         self._thread.start()
@@ -295,7 +257,8 @@ class _Event:
         while self._subscribed:
             try:
                 data = self._event_consumer.receive_event(deserialize=True)
-                self._cb(data)
+                for cb in self._cbs: 
+                    cb(data)
             except Exception as E:
                 print(E)
         self._event_consumer.exit()
@@ -362,8 +325,6 @@ class _StreamResultIterator(object):
 __allowed_attribute_types__ = (_RemoteParameter, _RemoteMethod)
 
 def _add_method(client_obj : ObjectProxy, method : _RemoteMethod, func_info : RPCResource) -> None:
-    if isinstance(func_info, list):
-        raise TypeError(f"got list instead of RPC resource for {func_info.name}")
     if not func_info.top_owner:
         return
     for dunder in SERIALIZABLE_WRAPPER_ASSIGNMENTS:
@@ -375,8 +336,6 @@ def _add_method(client_obj : ObjectProxy, method : _RemoteMethod, func_info : RP
     client_obj.__setattr__(func_info.name, method)
 
 def _add_parameter(client_obj : ObjectProxy, parameter : _RemoteParameter, parameter_info : RPCResource) -> None:
-    if isinstance(parameter_info, list):
-        raise TypeError(f"got list instead of RPC resource for {parameter_info.name}")
     if not parameter_info.top_owner:
         return
     for attr in ['doc', 'name']: 
@@ -384,8 +343,8 @@ def _add_parameter(client_obj : ObjectProxy, parameter : _RemoteParameter, param
         setattr(parameter, attr, getattr(parameter_info, attr))
     client_obj.__setattr__(parameter_info.name, parameter)
 
-def _add_event(client_obj : ObjectProxy, event, event_info) -> None:
-    pass 
+def _add_event(client_obj : ObjectProxy, event : _Event, event_info) -> None:
+    client_obj.__setattr__(event.name)
 
 
 __all__ = ['ObjectProxy']

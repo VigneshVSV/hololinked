@@ -69,3 +69,5 @@ pygments_style = 'vs'
 html_static_path = ['_static']
 
 numpydoc_show_class_members = False 
+
+autodoc_member_order = 'bysource'

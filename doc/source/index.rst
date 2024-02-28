@@ -7,8 +7,8 @@
  
 .. |module-highlighted| replace:: ``hololinked``
 
-Welcome to |module|'s documentation!
-====================================
+|module| - pythonic supervisory control & data acquisition
+==========================================================
 
 |module-highlighted| is (supposed to be) a versatile and pythonic tool for building custom control and data acquisition 
 software systems. If you have a requirement to capture data from your hardware/instrumentation remotely through your 

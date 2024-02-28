@@ -192,7 +192,7 @@ class RemoteParameter(Parameter):
         super()._post_slot_set(slot, old, value)
 
     def _post_value_set(self, obj : Parameterized, value : typing.Any) -> None:
-        if (self.db_persist or self.db_commit) and hasattr(obj, 'db_engine') and hasattr(obj.db_engine, 'edit_parameter'):
+        if (self.db_persist or self.db_commit) and hasattr(obj, 'db_engine'):
             obj.db_engine.edit_parameter(self, value)
         return super()._post_value_set(obj, value)
 

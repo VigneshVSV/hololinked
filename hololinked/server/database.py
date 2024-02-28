@@ -6,6 +6,7 @@ from sqlalchemy import Integer, String, JSON, LargeBinary
 from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, MappedAsDataclass
 from dataclasses import dataclass, asdict
 
+from ..param import Parameterized
 from .serializers import JSONSerializer, BaseSerializer
 from .constants import JSONSerializable
 from .remote_parameter import RemoteParameter
@@ -47,23 +48,35 @@ class DeserializedParameter: # not part of database
 
 class Database:
 
+    def __init__(self, instance : Parameterized, serializer : typing.Optional[BaseSerializer] = None, 
+                config_file : typing.Union[str, None] = None) -> None:
+        self.remote_object_instance = instance
+        self.instance_name = instance.instance_name
+        self.serializer = serializer
+        self.URL = self.create_URL(config_file)
+            
     @classmethod
-    def create_URL(file_name : str, asynch : bool = False): # async is a keyword
-        if file_name.endswith('.json'):
+    def create_URL(cls, file_name : str = None):
+        if not file_name:
+            conf = {}
+        elif file_name.endswith('.json'):
             file = open(file_name, 'r')
             conf = JSONSerializer.generic_load(file)
         else:
             raise ValueError("config files of extension - {} expected, given file name {}".format(["json"], file_name))
         
+        dialect = conf.get('dialect', None)
+        server = conf.get('server', None) 
+        database = conf.get('database', 'hololinked')
+        if not server:
+            file = conf.get('file', 'hololinked.db')
+            return f"sqlite+pysqlite://{file}/{database}"
         host = conf.get("host", 'localhost')
         port = conf.get("port", 5432)
-        user     = conf.get('user', 'postgres')
+        user = conf.get('user', 'postgres')
         password = conf.get('password', '')
-        
-        if asynch:
-            return f"postgresql+asyncpg://{user}:{password}@{host}:{port}"
-        else:
-            return f"postgresql://{user}:{password}@{host}:{port}"
+        return f"{server}+{dialect}://{user}:{password}@{host}:{port}/{database}"
+      
         
     
 class BaseAsyncDB(Database):
@@ -83,14 +96,13 @@ class BaseAsyncDB(Database):
         absolute path to database server configuration file
     """
     
-    def __init__(self, database : str, serializer : BaseSerializer, 
+    def __init__(self, instance : Parameterized, 
+                serializer : typing.Optional[BaseSerializer] = None, 
                 config_file : typing.Union[str, None] = None) -> None:
-        if config_file:
-            URL = f"{self.create_URL(config_file, True)}/{database}"
-            self.engine = asyncio_ext.create_async_engine(URL, echo=True)
-            self.async_session = sessionmaker(self.engine, expire_on_commit=True, 
-                            class_= asyncio_ext.AsyncSession) # type: ignore
-        self.serializer = serializer
+        super().__init__(instance=instance, serializer=serializer, config_file=config_file)
+        self.engine = asyncio_ext.create_async_engine(self.URL, echo=True)
+        self.async_session = sessionmaker(self.engine, expire_on_commit=True, 
+                        class_=asyncio_ext.AsyncSession)
 
 
 class BaseSyncDB(Database):
@@ -110,15 +122,13 @@ class BaseSyncDB(Database):
         absolute path to database server configuration file
     """
 
-    def __init__(self, database : str, serializer : BaseSerializer, 
+    def __init__(self, instance : Parameterized, 
+                serializer : typing.Optional[BaseSerializer] = None, 
                 config_file : typing.Union[str, None] = None) -> None:
-        if config_file:
-            URL = f"{self.create_URL(config_file, False)}/{database}"
-            self.engine = create_engine(URL, echo = True)
-            self.sync_session = sessionmaker(self.engine, expire_on_commit=True)
-        self.serializer = serializer
-
-
+        super().__init__(instance=instance, serializer=serializer, config_file=config_file)
+        self.engine = create_engine(self.URL, echo = True)
+        self.sync_session = sessionmaker(self.engine, expire_on_commit=True)
+        
 
 class RemoteObjectDB(BaseSyncDB):
     """
@@ -137,12 +147,7 @@ class RemoteObjectDB(BaseSyncDB):
         configuration file of the database server
     """
 
-    def __init__(self, instance_name : str, serializer : BaseSerializer,
-                    config_file: typing.Optional[str] = None) -> None:
-        super().__init__(database='scadapyserver', serializer=serializer, 
-                        config_file=config_file)
-        self.instance_name = instance_name
-        
+
     def fetch_own_info(self) -> RemoteObjectInformation:
         """
         fetch ``RemoteObject`` instance's own information, for schema see 
@@ -203,7 +208,8 @@ class RemoteObjectDB(BaseSyncDB):
                     param = SerializedParameter(
                         instance_name=self.instance_name, 
                         name=new_param.name, 
-                        serialized_value=self.serializer.dumps(new_param.default)
+                        serialized_value=self.serializer.dumps(getattr(self.remote_object_instance, 
+                                                                new_param.name))
                     )
                     session.add(param)
             session.commit()

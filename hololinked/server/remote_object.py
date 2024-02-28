@@ -191,10 +191,6 @@ class StateMachine:
     
 
 
-
-                
-
-
 ConfigInfo = Enum('LevelTypes','USER_MANAGED PRIMARY_HOST_WIDE PC_HOST_WIDE')
 
 
@@ -241,24 +237,24 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
                         (http(s)://{domain and sub domain}/{instance name}). It is suggested to use  
                         the class name along with a unique name {class name}/{some unique name}. Instance names must be unique
                         in your entire system.""") # type: str
+    # remote paramerters
     httpserver_resources = RemoteParameter(readonly=True, URL_path='/resources/http-server', 
                         doc="""object's resources exposed to HTTP server""", fget=lambda self: self._httpserver_resources ) # type: typing.Dict[str, typing.Dict[str, HTTPResource]]
     rpc_resources = RemoteParameter(readonly=True, URL_path='/resources/object-proxy', 
                         doc= """object's resources exposed to RPC client, similar to HTTP resources but differs 
                         in details.""", fget=lambda self: self._rpc_resources) # type: typing.Dict[str, typing.Any]
-    # remote paramerters
-    events = RemoteParameter(readonly=True, URL_path='/events', 
-                        doc="returns a dictionary with two fields containing event name and event information") # type: typing.Dict[str, typing.Any]
     gui_resources : typing.Dict = RemoteParameter(readonly=True, URL_path='/resources/gui', 
                         doc= """object's data read by scadapy webdashboard GUI client, similar to http_resources but differs 
                         in details.""") # type: typing.Dict[str, typing.Any]
+    events = RemoteParameter(readonly=True, URL_path='/events', 
+                        doc="returns a dictionary with two fields containing event name and event information") # type: typing.Dict[str, typing.Any]
     object_info = RemoteParameter(doc="contains information about this object like the class name, script location etc.",
                         readonly=True, URL_path='/info', fget = lambda self: self._object_info) # type: RemoteObjectDB.RemoteObjectInfo
     GUI = ClassSelector(class_=ReactApp, default=None, allow_None=True, 
-                        doc= """GUI applied here will become visible at GUI tab of dashboard tool""") # type: typing.Optional[ReactApp]
+                        doc="GUI specified here will become visible at GUI tab of hololinked-portal dashboard tool") # type: typing.Optional[ReactApp]
     
 
-    def __new__(cls, **kwargs):
+    def __new__(cls):
         """
         custom defined __new__ method to assign some important attributes at instance creation time directly instead of 
         super().__init__(instance_name = val1 , users_own_kw_argument1 = users_val1, ..., users_own_kw_argumentn = users_valn) 
@@ -609,7 +605,7 @@ class RemoteObject(RemoteSubobject):
             self._object_info = self._create_object_info()
             return 
         # 1. create engine 
-        self.db_engine : RemoteObjectDB = RemoteObjectDB(instance_name=self.instance_name, serializer=self.rpc_serializer,
+        self.db_engine : RemoteObjectDB = RemoteObjectDB(instance=self,
                                         config_file=config_file)
         # 2. create an object metadata to be used by different types of clients
         object_info = self.db_engine.fetch_own_info()
@@ -630,9 +626,9 @@ class RemoteObject(RemoteSubobject):
             return
         self.db_engine.create_missing_db_parameters(self.__class__.parameters.db_init_objects)
         # 4. read db_init and db_persist objects
-        for db_param in  self.db_engine.read_all_parameters():
+        for db_param in self.db_engine.read_all_parameters():
             try:
-                setattr(self, db_param.name, self.rpc_serializer.loads(db_param.value)) # type: ignore
+                setattr(self, db_param.name, db_param.value) # type: ignore
             except Exception as E:
                 self.logger.error(f"could not set attribute {db_param.name} due to error {E}")
 
@@ -695,7 +691,7 @@ class RemoteObject(RemoteSubobject):
         return self.parameters.descriptors.keys()
 
     @get('/parameters/values')
-    def parameter_values(self, **kwargs) -> typing.Dict[str, typing.Any]:
+    def _parameter_values(self, **kwargs) -> typing.Dict[str, typing.Any]:
         """
         returns requested parameter values in a dict
         """
@@ -906,4 +902,4 @@ class RemoteAccessHandler(logging.Handler, RemoteSubobject):
 
 
 
-__all__ = ['RemoteObject', 'StateMachine', 'RemoteObjectDB', 'ListHandler', 'RemoteAccessHandler']
+__all__ = ['RemoteObject', 'StateMachine', 'ListHandler', 'RemoteAccessHandler']
