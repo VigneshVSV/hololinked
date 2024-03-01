@@ -6,22 +6,22 @@ import json
 import asyncio
 import ssl
 import typing
+import getpass
 from dataclasses import dataclass, asdict, field
-from typing import Any
+from argon2 import PasswordHasher
 
 from sqlalchemy import Engine, Integer, String, JSON, ARRAY, Boolean
 from sqlalchemy import select, create_engine
-from sqlalchemy.orm import Session, sessionmaker, Mapped, mapped_column, DeclarativeBase
-from sqlalchemy_utils import database_exists, create_database, drop_database
+from sqlalchemy.orm import Session, sessionmaker, Mapped, mapped_column, DeclarativeBase, MappedAsDataclass
 from sqlalchemy.ext import asyncio as asyncio_ext
-from argon2 import PasswordHasher
+from sqlalchemy_utils import database_exists, create_database, drop_database
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from tornado.web import RequestHandler, Application, authenticated
-from tornado.escape import json_decode, json_encode
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
 
-
+from .constants import JSONSerializable
 from .serializers import JSONSerializer
+from .database import BaseDB
 from .remote_parameters import TypedList
 from .zmq_message_brokers import MessageMappedZMQClientPool
 from .webserver_utils import get_IP_from_interface, update_resources_using_client
@@ -60,10 +60,10 @@ global_session : typing.Optional[Session] = None
 
 
 
-class TableBase(DeclarativeBase):
+class HololinkedHostTableBase(DeclarativeBase):
     pass 
     
-class Dashboards(TableBase):
+class Dashboards(HololinkedHostTableBase, MappedAsDataclass):
     __tablename__ = "dashboards"
 
     name : Mapped[str] = mapped_column(String(1024), primary_key=True)
@@ -72,32 +72,24 @@ class Dashboards(TableBase):
     json_specfication : Mapped[typing.Dict[str, typing.Any]] = mapped_column(JSON)
 
     def json(self):
-        return {
-            "name" : self.name, 
-            "URL"  : self.URL, 
-            "description" : self.description,
-            "json" : self.json_specfication
-        }
+        return asdict(self)
 
-class AppSettings(TableBase):
+class AppSettings(HololinkedHostTableBase, MappedAsDataclass):
     __tablename__ = "appsettings"
 
     field : Mapped[str] = mapped_column(String(8192), primary_key=True)
     value : Mapped[typing.Dict[str, typing.Any]] = mapped_column(JSON)
 
     def json(self):
-        return {
-            "field" : self.field, 
-            "value" : self.value
-        }
+        return asdict(self)
 
-class LoginCredentials(TableBase):
+class LoginCredentials(HololinkedHostTableBase, MappedAsDataclass):
     __tablename__ = "login_credentials"
 
     email : Mapped[str] = mapped_column(String(1024), primary_key=True)
     password : Mapped[str] = mapped_column(String(1024), unique=True)
 
-class Server(TableBase):
+class Server(HololinkedHostTableBase, MappedAsDataclass):
     __tablename__ = "http_servers"
 
     hostname : Mapped[str] = mapped_column(String, primary_key=True)
@@ -105,6 +97,30 @@ class Server(TableBase):
     port : Mapped[int] = mapped_column(Integer)
     IPAddress : Mapped[str] = mapped_column(String)
     remote_objects : Mapped[typing.List[str]] = mapped_column(ARRAY(String))
+    https : Mapped[bool] = mapped_column(Boolean) 
+    qualifiedIP : Mapped[str] = field(init = False)
+
+    def __post_init__(self):
+        self.qualifiedIP = '{}:{}'.format(self.hostname, self.port)
+
+    def json(self):
+        return asdict(self)
+    
+class RemoteObjectInformation(HololinkedHostTableBase, MappedAsDataclass):
+    __tablename__ = "remote_objects"
+
+    instance_name  : Mapped[str] = mapped_column(String, primary_key=True)
+    class_name     : Mapped[str] = mapped_column(String)
+    script         : Mapped[str] = mapped_column(String)
+    kwargs         : Mapped[JSONSerializable] = mapped_column(JSON)
+    eventloop_instance_name : Mapped[str] = mapped_column(String)
+    http_server    : Mapped[str] = mapped_column(String)
+    level          : Mapped[int] = mapped_column(Integer)
+    level_type     : Mapped[str] = mapped_column(String)
+
+    def json(self):
+        return asdict(self)
+
 
 
 def for_authenticated_user(method):
@@ -120,7 +136,7 @@ def for_authenticated_user(method):
     return authenticated_method
 
 
-class PrimaryHostHandler(RequestHandler):
+class SystemHostHandler(RequestHandler):
 
     def check_headers(self):
         content_type = self.request.headers.get("Content-Type", None)
@@ -129,7 +145,7 @@ class PrimaryHostHandler(RequestHandler):
             self.write({ "error" : "request body is not JSON." })
             self.finish()
 
-    def get_current_user(self) -> Any:
+    def get_current_user(self) -> typing.Any:
         return self.get_signed_cookie('user')
         
     def set_default_headers(self) -> None:
@@ -143,7 +159,7 @@ class PrimaryHostHandler(RequestHandler):
         self.finish()
 
 
-class UsersHandler(PrimaryHostHandler):
+class UsersHandler(SystemHostHandler):
 
     async def post(self):
         self.set_status(200)
@@ -154,12 +170,12 @@ class UsersHandler(PrimaryHostHandler):
         self.finish()
 
     
-class LoginHandler(PrimaryHostHandler):
+class LoginHandler(SystemHostHandler):
 
     async def post(self):
         self.check_headers()
         try:
-            body = json_decode(self.request.body)
+            body = JSONSerializer.generic_loads(self.request.body)
             email = body["email"]
             password = body["password"]
             async with global_session() as session: 
@@ -191,13 +207,13 @@ class LoginHandler(PrimaryHostHandler):
         self.finish()
     
 
-class AppSettingsHandler(PrimaryHostHandler):
+class AppSettingsHandler(SystemHostHandler):
 
     @for_authenticated_user
     async def post(self):
         self.check_headers()
         try:
-            value = json_decode(self.request.body["value"])
+            value = JSONSerializer.generic_loads(self.request.body["value"])
             async with global_session() as session, session.begin():
                 session.add(AppSettings(
                         field = field, 
@@ -214,7 +230,7 @@ class AppSettingsHandler(PrimaryHostHandler):
     async def patch(self):
         self.check_headers()
         try:
-            value = json_decode(self.request.body)
+            value = JSONSerializer.generic_loads(self.request.body)
             field = value["field"]
             value = value["value"]
             async with global_session() as session, session.begin():
@@ -235,7 +251,7 @@ class AppSettingsHandler(PrimaryHostHandler):
             async with global_session() as session:
                 stmt = select(AppSettings)
                 data = await session.execute(stmt)
-                serialized_data = json_encode({result[AppSettings.__name__].field : result[AppSettings.__name__].value["value"] 
+                serialized_data = JSONSerializer.generic_dumps({result[AppSettings.__name__].field : result[AppSettings.__name__].value["value"] 
                     for result in data.mappings().all()})
             self.set_status(200)
             self.set_header("Content-Type", "application/json")
@@ -245,13 +261,13 @@ class AppSettingsHandler(PrimaryHostHandler):
         self.finish()
 
     
-class DashboardsHandler(PrimaryHostHandler):
+class DashboardsHandler(SystemHostHandler):
 
     @for_authenticated_user
     async def post(self):
         self.check_headers()
         try:
-            data = json_decode(self.request.body)
+            data = JSONSerializer.generic_loads(self.request.body)
             async with global_session() as session, session.begin():
                 session.add(Dashboards(**data))
                 await session.commit()
@@ -268,7 +284,7 @@ class DashboardsHandler(PrimaryHostHandler):
             async with global_session() as session:
                 stmt = select(Dashboards)
                 data = await session.execute(stmt)
-                serialized_data = json_encode([result[Dashboards.__name__]._json() for result 
+                serialized_data = JSONSerializer.generic_dumps([result[Dashboards.__name__]._json() for result 
                                                in data.mappings().all()])           
             self.set_status(200)
             self.set_header("Content-Type", "application/json")
@@ -279,13 +295,13 @@ class DashboardsHandler(PrimaryHostHandler):
         self.finish()
 
 
-class SubscribersHandler(PrimaryHostHandler):
+class SubscribersHandler(SystemHostHandler):
 
     @for_authenticated_user
     async def post(self):
         if self.request.headers["Content-Type"] == "application/json":
             self.set_status(200)
-            server = SubscribedHTTPServers(**json_decode(self.request.body))
+            server = SubscribedHTTPServers(**JSONSerializer.generic_loads(self.request.body))
             async with global_session() as session, session.begin():
                 session.add(server)
                 await session.commit()
@@ -297,10 +313,17 @@ class SubscribersHandler(PrimaryHostHandler):
         self.set_header("Content-Type", "application/json")
         async with global_session() as session:
             result = select(Server)
-            self.write(json_encode(result.scalars().all()))
+            self.write(JSONSerializer.generic_dumps(result.scalars().all()))
 
 
-class MainHandler(PrimaryHostHandler):
+class SubscriberHandler(SystemHostHandler):
+
+    async def get(self):
+        pass
+    
+
+
+class MainHandler(SystemHostHandler):
 
     async def get(self):
         self.check_headers()
@@ -311,12 +334,12 @@ class MainHandler(PrimaryHostHandler):
 
 
 def create_primary_host(config_file : str, ssl_context : ssl.SSLContext, **server_settings) -> TornadoHTTP1Server:
-    URL = f"{DB.create_DB_URL(config_file)}/hololinked-host"
+    URL = BaseDB.create_URL(config_file, database="hololinked-host")
     if not database_exists(URL): 
         try:
             create_database(URL)
             sync_engine = create_engine(URL)
-            TableBase.metadata.create_all(sync_engine)
+            HololinkedHostTableBase.metadata.create_all(sync_engine)
             create_tables(sync_engine)
             create_credentials(sync_engine)
         except Exception as ex:
@@ -324,7 +347,6 @@ def create_primary_host(config_file : str, ssl_context : ssl.SSLContext, **serve
             raise ex from None
 
     global global_engine, global_session
-    URL = f"{DB.create_DB_URL(config_file, True)}/hololinked-host"
     global_engine = asyncio_ext.create_async_engine(URL, echo=True)
     global_session = sessionmaker(global_engine, expire_on_commit=True, 
                                     class_=asyncio_ext.AsyncSession) # type: ignore
@@ -335,8 +357,9 @@ def create_primary_host(config_file : str, ssl_context : ssl.SSLContext, **serve
         (r"/dashboards", DashboardsHandler),
         (r"/settings", AppSettingsHandler),
         (r"/subscribers", SubscribersHandler),
+        # (r"/remote-objects", RemoteObjectsHandler),
         (r"/login", LoginHandler)
-    ], cookie_secret=base64.b64encode(os.urandom(32)).decode('utf-8') , 
+    ], cookie_secret=base64.b64encode(os.urandom(32)).decode('utf-8'), 
     **server_settings)
     
     return TornadoHTTP1Server(app, ssl_options=ssl_context)
@@ -345,57 +368,35 @@ def create_primary_host(config_file : str, ssl_context : ssl.SSLContext, **serve
 
 def create_tables(engine):
     with Session(engine) as session, session.begin():
-        # Pages
-        session.add(AppSettings(
-            field = 'dashboards',
-            value =  {
-                'deleteWithoutAsking' : True,
-                'showRecentlyUsed' : True}
-        ))
-    
-        # login page
-        session.add(AppSettings(
-            field = 'login',
-            value =  {
-                'footer' : '',
-                'footerLink' : '',
-                'displayFooter' : True
-            }
-        ))
-     
-        # server
-        session.add(AppSettings(
-            field = 'servers',
-            value =  {
-                'allowHTTP' : False
-            }            
-        ))
-
-        # remote object wizard 
-        session.add(AppSettings(
-            field = 'remoteObjectViewer' ,
-            value =  {
-                'stringifyConsoleOutput' : False,
-                'consoleDefaultMaxEntries' : 15,
-                'consoleDefaultWindowSize' : 500, 
-                'consoleDefaultFontSize' : 16,
-                'stringifyLogViewerOutput' : False,
-                'logViewerDefaultMaxEntries' : 10,
-                'logViewerDefaultOutputWindowSize' : 1000,
-                'logViewerDefaultFontSize' : 16
-            }
-        ))
+        file = open("default_host_settings.json", 'r')
+        default_settings = JSONSerializer.generic_load(file)
+        for name, settings in default_settings.items():
+            session.add(AppSettings(
+                field = name,
+                value = settings
+            ))
     session.commit()
+
 
 def create_credentials(sync_engine):
+    """
+    create name and password for a new user in a database 
+    """
+    
     print("Requested primary host seems to use a new database. Give username and password (not for database server, but for client logins from hololinked-portal) : ")
     email = input("email-id (not collected anywhere else excepted your own database) : ")
-    password = input("password : ")
-
-    with Session(sync_engine) as session, session.begin():
-        ph = PasswordHasher(time_cost=500)
-        session.add(LoginCredentials(email=email, password=ph.hash(password)))
-    session.commit()
+    while True:
+        password = getpass.getpass("password : ")
+        password_confirm = getpass.getpass("repeat-password : ")
+        if password != password_confirm:
+            print("password & repeat password not the same. Try again.")
+            continue
+        with Session(sync_engine) as session, session.begin():
+            ph = PasswordHasher(time_cost=500)
+            session.add(LoginCredentials(email=email, password=ph.hash(password)))
+        session.commit()
+        return 
+    raise RuntimeError("password not created, aborting database creation.")
 
 
 @dataclass 
@@ -408,20 +409,6 @@ class NonDBRemoteObjectInfo:
         return asdict(self)
 
 
-@dataclass
-class SubscribedHTTPServers:
-    hostname : str 
-    IPAddress : typing.Any
-    port : int 
-    type : str
-    https : bool 
-    qualifiedIP : str = field(init = False)
-
-    def __post_init__(self):
-        self.qualifiedIP = '{}:{}'.format(self.hostname, self.port)
-
-    def json(self):
-        return asdict(self)
 
 
 @dataclass
@@ -441,7 +428,7 @@ class UninstantiatedRemoteObject:
         )
     
 
-class HTTPServerUtilities(BaseAsyncDB, RemoteObject):
+class SystemHost(HTTPServer):
     """
     HTTPServerUtilities provide functionality to instantiate, kill or get current status of 
     existing remote-objects attached to this server, ability to subscribe to a Primary Host Server 
@@ -580,8 +567,7 @@ class HTTPServerUtilities(BaseAsyncDB, RemoteObject):
 
 
 class PCHostUtilities(HTTPServerUtilities):
-    
-    type : str = 'PC_HOST'
+
 
     def __init__(self, db_config_file : str, server_network_interface : str, port : int, **kwargs) -> None:
         super().__init__(db_config_file = db_config_file, zmq_client_pool = None, remote_object_info = None, **kwargs)
@@ -593,13 +579,6 @@ class PCHostUtilities(HTTPServerUtilities):
             type=self.type,
             https=False
         )
-
-
-def create_server_tables(serverDB):
-    engine = create_engine(serverDB)
-    PrimaryHostUtilities.TableBase.metadata.create_all(engine)
-    RemoteObjectDB.TableBase.metadata.create_all(engine)
-    engine.dispose()
 
 
 

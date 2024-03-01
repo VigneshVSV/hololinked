@@ -15,27 +15,11 @@ from .remote_parameter import RemoteParameter
 
 class RemoteObjectTableBase(DeclarativeBase):
     pass 
-
-class RemoteObjectInformation(MappedAsDataclass, RemoteObjectTableBase):
-    __tablename__ = "remote_objects"
-
-    instance_name  : Mapped[str] = mapped_column(String, primary_key = True)
-    class_name     : Mapped[str] = mapped_column(String)
-    http_server    : Mapped[str] = mapped_column(String)
-    script         : Mapped[str] = mapped_column(String)
-    args           : Mapped[JSONSerializable] = mapped_column(JSON)
-    kwargs         : Mapped[JSONSerializable] = mapped_column(JSON)
-    eventloop_name : Mapped[str] = mapped_column(String)
-    level          : Mapped[int] = mapped_column(Integer)
-    level_type     : Mapped[str] = mapped_column(String)
-
-    def json(self):
-        return asdict(self)
     
 class SerializedParameter(MappedAsDataclass, RemoteObjectTableBase):
     __tablename__ = "parameters"
 
-    id : Mapped[int] = mapped_column(Integer, primary_key = True, autoincrement = True)
+    id : Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     instance_name  : Mapped[str] = mapped_column(String)
     name : Mapped[str] = mapped_column(String)
     serialized_value : Mapped[bytes] = mapped_column(LargeBinary) 
@@ -46,7 +30,8 @@ class DeserializedParameter: # not part of database
     value : typing.Any
 
 
-class Database:
+
+class BaseDB:
 
     def __init__(self, instance : Parameterized, serializer : typing.Optional[BaseSerializer] = None, 
                 config_file : typing.Union[str, None] = None) -> None:
@@ -56,7 +41,7 @@ class Database:
         self.URL = self.create_URL(config_file)
             
     @classmethod
-    def create_URL(cls, file_name : str = None):
+    def create_URL(cls, file_name : str = None, database : typing.Optional[str] = None) -> str:
         if not file_name:
             conf = {}
         elif file_name.endswith('.json'):
@@ -67,7 +52,8 @@ class Database:
         
         dialect = conf.get('dialect', None)
         server = conf.get('server', None) 
-        database = conf.get('database', 'hololinked')
+        if not database:
+            database = conf.get('database', 'hololinked')
         if not server:
             file = conf.get('file', 'hololinked.db')
             return f"sqlite+pysqlite://{file}/{database}"
@@ -77,9 +63,8 @@ class Database:
         password = conf.get('password', '')
         return f"{server}+{dialect}://{user}:{password}@{host}:{port}/{database}"
       
-        
     
-class BaseAsyncDB(Database):
+class BaseAsyncDB(BaseDB):
     """
     Base class for an async database engine, implements configuration file reader, 
     sqlalchemy engine & session creation.
@@ -105,7 +90,7 @@ class BaseAsyncDB(Database):
                         class_=asyncio_ext.AsyncSession)
 
 
-class BaseSyncDB(Database):
+class BaseSyncDB(BaseDB):
     """
     Base class for an synchronous (blocking) database engine, implements 
     configuration file reader, sqlalchemy engine & session creation.
@@ -146,8 +131,6 @@ class RemoteObjectDB(BaseSyncDB):
     config_file: str
         configuration file of the database server
     """
-
-
     def fetch_own_info(self) -> RemoteObjectInformation:
         """
         fetch ``RemoteObject`` instance's own information, for schema see 
