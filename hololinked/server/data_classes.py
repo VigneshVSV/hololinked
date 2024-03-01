@@ -125,6 +125,15 @@ class RemoteResource:
         return json_dict                 
     
 
+
+class HTTPMethodInstructions:
+    GET :  typing.Optional[str] = field(default=None)
+    POST :  typing.Optional[str] = field(default=None)
+    PUT :  typing.Optional[str] = field(default=None)
+    DELETE :  typing.Optional[str] = field(default=None)
+    PATCH : typing.Optional[str] = field(default=None) 
+
+
 @dataclass
 class HTTPResource:
     """
@@ -143,36 +152,27 @@ class HTTPResource:
     instruction : str
         unique string that identifies the resource, generally made using the URL_path or identical to the URL_path (
         qualified URL path {instance name}/{URL path}).  
-    path_format : str
-        see param converter doc
-    path_regex : str
-        see param converter doc
-    param_converters : str
-        path format, regex and converter are used by HTTP routers to extract path parameters
         
     """
     what : str 
     instance_name : str 
-    instruction : str
     fullpath : str
     request_as_argument : bool = field(default=False)
-    path_format : typing.Optional[str] = field(default=None) 
-    path_regex : typing.Optional[typing.Pattern] = field(default=None)
-    param_convertors : typing.Optional[typing.Dict] = field(default=None)
-    method : str = field(default="GET")
+    instructions : typing.Dict[str, str] = field(default_factory=dict)
+   
     # below are all dunders, when something else is added, be careful to remember to edit ObjectProxy logic when necessary
     
     # 'what' can be an 'ATTRIBUTE' or 'CALLABLE' (based on isparameter or iscallable) and 'instruction' 
     # stores the instructions to be sent to the eventloop. 'instance_name' maps the instruction to a particular 
     # instance of RemoteObject
                                 
-    def __init__(self, *, what : str, instance_name : str, fullpath : str, instruction : str, 
-                request_as_argument : bool = False) -> None:
+    def __init__(self, *, what : str, instance_name : str, fullpath : str, request_as_argument : bool = False,
+                **instructions) -> None:
         self.what = what 
         self.instance_name = instance_name
         self.fullpath = fullpath
-        self.instruction = instruction
         self.request_as_argument = request_as_argument
+        self.instruction = HTTPMethodInstructions(**instructions)
     
     def __getstate__(self):
         return self.json()
@@ -194,16 +194,6 @@ class HTTPResource:
             "request_as_argument" : self.request_as_argument
         }
     
-    def compile_path(self):
-        path_regex, self.path_format, param_convertors = compile_path(self.fullpath)
-        if self.path_format == self.fullpath and len(param_convertors) == 0:
-            self.path_regex = None 
-            self.param_convertors = None
-        elif self.path_format != self.fullpath and len(param_convertors) == 0:
-            raise RuntimeError(f"Unknown path format found '{self.path_format}' for path '{self.fullpath}', no path converters were created.")
-        else:
-            self.path_regex = path_regex
-            self.param_convertors = param_convertors
 
     
 @dataclass

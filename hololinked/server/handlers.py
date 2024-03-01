@@ -2,13 +2,12 @@
 import typing
 import logging
 from json import JSONDecodeError
-from tornado.web import RequestHandler, StaticFileHandler
+from tornado.web import RequestHandler, StaticFileHandler, Application
 from tornado.iostream import StreamClosedError
 
 from .constants import CommonInstructions
 from .serializers import JSONSerializer
 from .zmq_message_brokers import AsyncZMQClient, MessageMappedZMQClientPool, EventConsumer
-from .webserver_utils import *
 from .utils import current_datetime_ms_str
 from .data_classes import HTTPResource, ServerSentEvent
 
@@ -20,6 +19,7 @@ class BaseHandler(RequestHandler):
     json_serializer : JSONSerializer
     clients : str
     logger : logging.Logger
+    application : Application
 
     def initialize(self, resource : typing.Union[HTTPResource, ServerSentEvent]) -> None:
         self.resource = resource
@@ -222,9 +222,8 @@ class FileHandler(StaticFileHandler):
 
 class RemoteObjectsHandler(BaseHandler):
 
-    def initialize(self, resource: HTTPResource | ServerSentEvent, request_handler) -> None:
+    def initialize(self, request_handler : RequestHandler) -> None:
         self.request_handler = request_handler
-        return super().initialize(resource)
     
     async def get(self):
         with self.async_session() as session:
@@ -242,7 +241,7 @@ class RemoteObjectsHandler(BaseHandler):
         for client in clients:
             await client.handshake_complete()
             _, _, _, _, _, reply = await client.async_execute(
-                        f'/{client.server_instance_name}{CommonInstructions.HTTP_RESOURCES}', 
+                        CommonInstructions.http_resource_read(client.server_instance_name), 
                         raise_client_side_exception=True)
             update_resources(resources, reply["returnValue"]) # type: ignore
             # _, _, _, _, _, reply = await client.read_attribute('/'+client.server_instance_name + '/object-info', raise_client_side_exception = True)
@@ -279,3 +278,4 @@ class RemoteObjectsHandler(BaseHandler):
                 remote_method and RemoteParamater contains all the info given 
                 to make RPCHandler work
             """
+        self.application.wildcard_router.add_rules(handlers)

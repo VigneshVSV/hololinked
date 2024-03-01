@@ -54,7 +54,8 @@ class BaseSerializer(object):
     def dumps(self, data):
         raise NotImplementedError("implement in subclass")
     
-    def _convertToBytes(self, data):
+    @classmethod
+    def convert_to_bytes(self, data):
         if type(data) is bytearray:
             return bytes(data)
         if type(data) is memoryview:
@@ -127,7 +128,7 @@ class JSONSerializer(BaseSerializer):
         json.dump(data, file_desc, ensure_ascii=False, allow_nan=True, default=self.default)
 
     def loads(self, data : typing.Union[bytearray, memoryview, bytes]) -> typing.Any:
-        data : str = self._convertToBytes(data).decode("utf-8") 
+        data : str = self.convert_to_bytes(data).decode("utf-8") 
         try:
             return json.loads(data)
         except:
@@ -152,7 +153,7 @@ class JSONSerializer(BaseSerializer):
     
     @classmethod
     def generic_loads(cls, data : typing.Union[bytearray, memoryview, bytes]) -> typing.Dict[str, typing.Any]:
-        data = cls._convertToBytes(data).decode("utf-8") # type: ignore
+        data = cls.convert_to_bytes(data).decode("utf-8") 
         return json.loads(data)
     
     @classmethod

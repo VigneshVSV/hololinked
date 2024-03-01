@@ -8,12 +8,12 @@ import typing
 import datetime
 import zmq
 from collections import deque
-from enum import EnumMeta, Enum
+from enum import EnumMeta, StrEnum
 
 
 from ..param.parameterized import Parameterized, ParameterizedMetaclass 
+from .constants import (CallableType, LOGLEVEL, ZMQ_PROTOCOLS, HTTP_METHODS, ResourceOperations, ResourceTypes)
 from .database import RemoteObjectDB
-from .constants import (JSONSerializable, CallableType, LOGLEVEL, ZMQ_PROTOCOLS, HTTP_METHODS)
 from .serializers import *
 from .exceptions import BreakInnerLoop
 from .decorators import remote_method
@@ -47,13 +47,17 @@ class StateMachine:
     on_exit: Dict[str, Callable | RemoteParameter]
         callbacks to be invoked when a certain state is exited. 
         It is to be specified as a dictionary with the states being the keys
-        
+    **machine:
+        state name: List[Callable, RemoteParamater]
+            directly pass the state name as an argument along with the methods/parameters which are allowed to execute 
+            in that state
+            
     Attributes
     ----------
     exists: bool
         internally computed, True if states and initial_states are valid 
     """
-    initial_state = ClassSelector(default=None, allow_None=True, constant=True, class_=(Enum, str))
+    initial_state = ClassSelector(default=None, allow_None=True, constant=True, class_=(StrEnum, str))
     exists = Boolean(default=False)
     states = ClassSelector(default=None, allow_None=True, constant=True, class_=(EnumMeta, tuple, list)) 
     on_enter = TypedDict(default=None, allow_None=True, key_type=str)
@@ -61,7 +65,7 @@ class StateMachine:
     machine = TypedDict(default=None, allow_None=True, key_type=str, item_type=(list, tuple))
 
     def __init__(self, states : typing.Union[EnumMeta, typing.List[str], typing.Tuple[str]], *, 
-            initial_state : typing.Union[Enum, str], 
+            initial_state : typing.Union[StrEnum, str], 
             on_enter : typing.Dict[str, typing.Union[typing.List[typing.Callable], typing.Callable]] = {}, 
             on_exit  : typing.Dict[str, typing.Union[typing.List[typing.Callable], typing.Callable]] = {}, 
             push_state_change_event : bool = False,
@@ -74,7 +78,8 @@ class StateMachine:
         self.machine = machine
         self.push_state_change_event = push_state_change_event
         if push_state_change_event:
-            self.state_change_event = Event('state-change') 
+            pass
+            # self.state_change_event = Event('state-change') 
 
     def _prepare(self, owner : 'RemoteObject') -> None:
         if self.states is None and self.initial_state is None:    
@@ -100,7 +105,7 @@ class StateMachine:
             if state in self:
                 for resource in objects:
                     if hasattr(resource, 'scada_info'):
-                        assert isinstance(resource._remote_info, RemoteResourceInfoValidator) # type: ignore
+                        assert isinstance(resource._remote_info, RemoteResourceInfoValidator)
                         if resource._remote_info.iscallable and resource._remote_info.obj_name not in owner_methods: # type: ignore
                             raise AttributeError("Given object {} for state machine does not belong to class {}".format(
                                                                                                 resource, owner))
@@ -137,19 +142,20 @@ class StateMachine:
                     raise TypeError(f"on_enter accept only methods. Given type {type(obj)}.")     
         self.exists = True
         
-    def __contains__(self, state : typing.Union[str, Enum]):
+    def __contains__(self, state : typing.Union[str, StrEnum]):
         if isinstance(self.states, EnumMeta) and state not in self.states.__members__ and state not in self.states: # type: ignore
             return False 
-        elif isinstance(self.states, (tuple, list)) and state not in self.states:
+        elif isinstance(self.states, tuple) and state not in self.states:
             return False 
         return True
+        # TODO It might be better to return True's instead of False's and return False at the last, may take care of edge-cases better 
         
-    def _machine_compliant_state(self, state) -> typing.Union[Enum, str]:
+    def _machine_compliant_state(self, state) -> typing.Union[StrEnum, str]:
         if isinstance(self.states, EnumMeta):
             return self.states.__members__[state] # type: ignore
         return state 
     
-    def get_state(self) -> typing.Union[str, Enum, None]:
+    def get_state(self) -> typing.Union[str, StrEnum, None]:
         """
         return the current state. one can also access the property `current state`.
         
@@ -168,12 +174,12 @@ class StateMachine:
             self._state = value
             if push_event and self.push_state_change_event:
                 self.state_change_event.push({self.owner.instance_name : value})
-            if isinstance(previous_state, Enum):
+            if isinstance(previous_state, StrEnum):
                 previous_state = previous_state.name
             if previous_state in self.on_exit:
                 for func in self.on_exit[previous_state]: # type: ignore
                     func(self.owner)
-            if isinstance(value, Enum):
+            if isinstance(value, StrEnum):
                 value = value.name  
             if value in self.on_enter:
                 for func in self.on_enter[value]: # type: ignore
@@ -191,10 +197,16 @@ class StateMachine:
     
 
 
-ConfigInfo = Enum('LevelTypes','USER_MANAGED PRIMARY_HOST_WIDE PC_HOST_WIDE')
 
-
-class RemoteObjectMetaclass(ParameterizedMetaclass):
+class RemoteObjectMeta(ParameterizedMetaclass):
+    """
+    Metaclass for remote object, implements a ``__post_init__()`` call & ``RemoteClassParameters`` instantiation for 
+    ``RemoteObject``. During instantiation of ``RemoteObject``, first the message brokers are created (``_prepare_message_brokers()``),
+    then ``_prepare_logger()``, then ``_prepare_DB()`` & ``_prepare_state_machine()`` in the ``__init__()``. In the 
+    ``__post_init__()``, the resources of the RemoteObject are segregated and database operations like writing parameter 
+    values are carried out. Between ``__post_init__()`` and ``__init__()``, package user's ``__init__()`` will run where user can run 
+    custom logic after preparation of message brokers and database engine and before using database operations. 
+    """
     
     @classmethod
     def __prepare__(cls, name, bases):
@@ -220,14 +232,23 @@ class RemoteObjectMetaclass(ParameterizedMetaclass):
         return instance
     
     def _create_param_container(mcs, mcs_members : dict) -> None:
+        """
+        creates ``RemoteClassParameters`` instead of ``param``'s own ``Parameters``
+        as the default container for descriptors. See code of ``param``.
+        """
         mcs._param_container = RemoteClassParameters(mcs, mcs_members)
 
     @property
     def parameters(mcs) -> RemoteClassParameters:
+        """
+        returns ``RemoteClassParameters`` instance instead of ``param``'s own 
+        ``Parameters`` instance. See code of ``param``.
+        """
         return mcs._param_container
     
 
-class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
+
+class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
 
     # local parameters
     instance_name = String(default=None, regex=r'[A-Za-z]+[A-Za-z_0-9\-\/]*', constant=True, remote=False,
@@ -239,12 +260,13 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
                         in your entire system.""") # type: str
     # remote paramerters
     httpserver_resources = RemoteParameter(readonly=True, URL_path='/resources/http-server', 
-                        doc="""object's resources exposed to HTTP server""", fget=lambda self: self._httpserver_resources ) # type: typing.Dict[str, typing.Dict[str, HTTPResource]]
+                        doc="object's resources exposed to HTTP client (through hololinked.server.HTTPServer)", 
+                        fget=lambda self: self._httpserver_resources ) # type: typing.Dict[str, typing.Dict[str, HTTPResource]]
     rpc_resources = RemoteParameter(readonly=True, URL_path='/resources/object-proxy', 
-                        doc= """object's resources exposed to RPC client, similar to HTTP resources but differs 
-                        in details.""", fget=lambda self: self._rpc_resources) # type: typing.Dict[str, typing.Any]
+                        doc="object's resources exposed to RPC client, similar to HTTP resources but differs in details.", 
+                        fget=lambda self: self._rpc_resources) # type: typing.Dict[str, typing.Any]
     gui_resources : typing.Dict = RemoteParameter(readonly=True, URL_path='/resources/gui', 
-                        doc= """object's data read by scadapy webdashboard GUI client, similar to http_resources but differs 
+                        doc="""object's data read by scadapy webdashboard GUI client, similar to http_resources but differs 
                         in details.""") # type: typing.Dict[str, typing.Any]
     events = RemoteParameter(readonly=True, URL_path='/events', 
                         doc="returns a dictionary with two fields containing event name and event information") # type: typing.Dict[str, typing.Any]
@@ -298,14 +320,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
         and extracts information 
         """
         # The following dict is to be given to the HTTP server
-        httpserver_resources = dict(
-            GET     = dict(),
-            POST    = dict(),
-            PUT     = dict(),
-            DELETE  = dict(),
-            PATCH   = dict(),
-            OPTIONS = dict()
-        ) # type: typing.Dict[str, typing.Dict[str, HTTPResource]]
+        httpserver_resources = dict() # type: typing.Dict[str, HTTPResource]
         # The following dict will be given to the object proxy client
         rpc_resources = dict() # type: typing.Dict[str, RPCResource]
         # The following dict will be used by the event loop
@@ -324,16 +339,17 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
                 fullpath = "{}{}".format(self._full_URL_path_prefix, remote_info.URL_path) 
                 assert remote_info.iscallable, ("remote info from inspect.ismethod is not a callable",
                                     "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")
-                for http_method in remote_info.http_method:
-                    httpserver_resources[http_method][fullpath] = HTTPResource(
-                                                what=CALLABLE,
-                                                instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
-                                                fullpath=fullpath,
-                                                instruction=fullpath,
-                                                request_as_argument=remote_info.request_as_argument 
-                                            )
+                if len(remote_info.http_method) > 1:
+                    raise ValueError(f"methods support only one HTTP method at the moment. Given number of methods : {len(remote_info.http_method)}.")
+                httpserver_resources[fullpath] = HTTPResource(
+                                            what=ResourceTypes.CALLABLE,
+                                            instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
+                                            fullpath=fullpath,
+                                            request_as_argument=remote_info.request_as_argument 
+                                            **{http_method : fullpath},
+                                        )
                 rpc_resources[fullpath] = RPCResource(
-                                                what=CALLABLE,
+                                                what=ResourceTypes.CALLABLE,
                                                 instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
                                                 instruction=fullpath,                                                                                                                                                                                        
                                                 name=getattr(resource, '__name__'),
@@ -366,7 +382,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
             httpserver_resources[HTTP_METHODS.GET]['{}{}'.format(
                         self._full_URL_path_prefix, resource.URL_path)] = ServerSentEvent(
                                                             # event URL_path has '/' prefix
-                                                            what=EVENT,
+                                                            what=ResourceTypes.EVENT,
                                                             event_name=resource.name,
                                                             socket_address=self._event_publisher.socket_address
                                                         )
@@ -383,33 +399,29 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMetaclass):
                                     "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")
                 read_http_method, write_http_method = remote_info.http_method
                     
-                httpserver_resources[read_http_method][fullpath] = HTTPResource(
-                                                    what=PARAMETER, 
+                httpserver_resources[fullpath] = HTTPResource(
+                                                    what=ResourceTypes.PARAMETER, 
                                                     instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
                                                     fullpath=fullpath,
-                                                    instruction=fullpath + '/' + READ
+                                                    request_as_argument=False,
+                                                    **{ 
+                                                        read_http_method : fullpath+ResourceOperations.PARAMETER_READ,
+                                                        write_http_method : fullpath+ResourceOperations.PARAMETER_WRITE
+                                                    }
                                                 )
-                    
-                httpserver_resources[write_http_method][fullpath] = HTTPResource(
-                                                    what=PARAMETER, 
-                                                    instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
-                                                    fullpath=fullpath,
-                                                    instruction=fullpath + '/' + WRITE
-                                                )
-                        
                 rpc_resources[fullpath] = RPCResource(
-                                what=PARAMETER, 
+                                what=ResourceTypes.PARAMETER, 
                                 instance_name=self._owner.instance_name if self._owner is not None else self.instance_name, 
                                 instruction=fullpath, 
                                 doc=parameter.__doc__, 
                                 name=remote_info.obj_name,
                                 qualname=self.__class__.__name__ + '.' + remote_info.obj_name,
                                 # qualname is not correct probably, does not respect inheritance
-                                 top_owner=self._owner is None
+                                top_owner=self._owner is None
                             ) 
                 dclass = remote_info.to_dataclass(obj=parameter, bound_obj=self) 
-                instance_resources[fullpath+'/'+READ] = dclass
-                instance_resources[fullpath+'/'+WRITE] = dclass  
+                instance_resources[fullpath+ResourceOperations.PARAMETER_READ] = dclass
+                instance_resources[fullpath+ResourceOperations.PARAMETER_WRITE] = dclass  
         # The above for-loops can be used only once, the division is only for readability
         # following are in _internal_fixed_attributes - allowed to set only once
         self._rpc_resources = rpc_resources       

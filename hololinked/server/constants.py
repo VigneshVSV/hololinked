@@ -15,7 +15,7 @@ ANY_STATE   : str = "ANY_STATE"
 UNSPECIFIED : str = "UNSPECIFIED"
 # types
 
-class ResourceType(StrEnum):
+class ResourceTypes(StrEnum):
     FUNC  = "FUNC"
     ATTRIBUTE = "ATTRIBUTE"
     PARAMETER = "PARAMETER"
@@ -23,6 +23,11 @@ class ResourceType(StrEnum):
     CALLABLE = "CALLABLE"
     FILE = "FILE"
     EVENT = "EVENT"
+
+class ResourceOperations(StrEnum):
+    PARAMETER_READ = "/read"
+    PARAMETER_WRITE = "/write"
+
 
 # regex logic
 class REGEX(StrEnum):
@@ -65,6 +70,15 @@ class ZMQ_PROTOCOLS(StrEnum):
 class CommonInstructions(StrEnum):
     RPC_RESOURCES = '/resources/object-proxy/read'
     HTTP_RESOURCES = '/resources/http-server/read'
+
+    @classmethod
+    def rpc_resource_read(cls, instance_name : str) -> str:
+        return f"/{instance_name}{cls.RPC_RESOURCES}"
+
+    @classmethod
+    def http_resource_read(cls, instance_name : str) -> str:
+        return f"/{instance_name}{cls.HTTP_RESOURCES}"
+
 
 class ClientMessage(IntEnum):
     """

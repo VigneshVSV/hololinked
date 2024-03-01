@@ -41,7 +41,8 @@ class BaseDB:
         self.URL = self.create_URL(config_file)
             
     @classmethod
-    def create_URL(cls, file_name : str = None, database : typing.Optional[str] = None) -> str:
+    def create_URL(cls, file_name : str = None, database : typing.Optional[str] = None, 
+                use_dialect : typing.Optional[bool] = False) -> str:
         if not file_name:
             conf = {}
         elif file_name.endswith('.json'):
@@ -50,20 +51,24 @@ class BaseDB:
         else:
             raise ValueError("config files of extension - {} expected, given file name {}".format(["json"], file_name))
         
-        dialect = conf.get('dialect', None)
         server = conf.get('server', None) 
-        if not database:
-            database = conf.get('database', 'hololinked')
         if not server:
-            file = conf.get('file', 'hololinked.db')
-            return f"sqlite+pysqlite://{file}/{database}"
+            file = conf.get('file', f"{database}.db" if not database.endswith('.db') else database)
+            return f"sqlite+pysqlite:///{file}"
+        if use_dialect:
+            dialect = conf.get('dialect', None)
+        else:
+            dialect = None
+        database = conf.get('database', 'hololinked')
         host = conf.get("host", 'localhost')
         port = conf.get("port", 5432)
         user = conf.get('user', 'postgres')
         password = conf.get('password', '')
-        return f"{server}+{dialect}://{user}:{password}@{host}:{port}/{database}"
-      
-    
+        if dialect:
+            return f"{server}+{dialect}://{user}:{password}@{host}:{port}/{database}"
+        else:      
+            return f"{server}://{user}:{password}@{host}:{port}/{database}"
+     
 class BaseAsyncDB(BaseDB):
     """
     Base class for an async database engine, implements configuration file reader, 
@@ -131,7 +136,7 @@ class RemoteObjectDB(BaseSyncDB):
     config_file: str
         configuration file of the database server
     """
-    def fetch_own_info(self) -> RemoteObjectInformation:
+    def fetch_own_info(self): # -> RemoteObjectInformation:
         """
         fetch ``RemoteObject`` instance's own information, for schema see 
         ``RemoteObjectInformation``.

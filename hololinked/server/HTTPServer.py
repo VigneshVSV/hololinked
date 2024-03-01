@@ -9,10 +9,8 @@ from tornado.httpserver import HTTPServer as TornadoHTTP1Server
 from ..param import Parameterized
 from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector, 
                     TypedList, String)
-from .utils import create_default_logger, run_coro_sync, run_method_somehow
+from .utils import create_default_logger, run_coro_sync
 from .serializers import JSONSerializer
-from .constants import CommonInstructions
-from .webserver_utils import log_request, update_resources
 from .zmq_message_brokers import MessageMappedZMQClientPool
 from .handlers import RPCHandler, BaseHandler, EventHandler, RemoteObjectsHandler
 
@@ -20,7 +18,7 @@ from .handlers import RPCHandler, BaseHandler, EventHandler, RemoteObjectsHandle
 
 class HTTPServer(Parameterized):
     """
-    HTTP(s) server to route requests to ``RemoteObject``
+    HTTP(s) server to route requests to ``RemoteObject``. Only one HTTPServer per process supported.
     """
 
     address = IPAddress(default='0.0.0.0', 
@@ -90,16 +88,18 @@ class HTTPServer(Parameterized):
                                             f"{self.address}:{self.port}"), 
                                             self.log_level)
             
+        self.handlers = [
+            (r'/remote-objects', RemoteObjectsHandler, {'request_handler' : self.request_handler})
+        ]
+        self.app = Application(handlers=self.handlers)
+        
         self.zmq_client_pool = MessageMappedZMQClientPool(self.remote_objects, 
                                     self._IP, json_serializer=self.serializer)
         BaseHandler.zmq_client_pool = self.zmq_client_pool
         BaseHandler.json_serializer = self.serializer
         BaseHandler.logger = self.logger
         BaseHandler.clients = ', '.join(self.allowed_clients)
-
-        self.handlers = [
-            (r'/remote-objects', RemoteObjectsHandler)
-        ]
+        BaseHandler.application = self.app
 
         return True
 
@@ -111,7 +111,6 @@ class HTTPServer(Parameterized):
         self.event_loop.add_future(RemoteObjectsHandler.connect_to_remote_object(
             [client for client in self.zmq_client_pool]))
         
-        self.app = Application(handlers=self.handlers)
         if self.protocol_version == 2:
             raise NotImplementedError("Current HTTP2 is not implemented.")
             self.server = TornadoHTTP2Server(router, ssl_options=self.ssl_context)
