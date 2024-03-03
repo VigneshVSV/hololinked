@@ -22,7 +22,7 @@ def copy_parameters(src : str = 'D:/onedrive/desktop/dashboard/scada/scadapy/sca
                         'from .remote_parameter import RemoteParameter\n',
                         'from .constants import HTTP, PROXY, USE_OBJECT_NAME, GET, PUT']
 
-    def fetch_line() -> str:
+    def fetch_line() -> typing.Generator[str]:
         with open(src, 'r') as file:
             oldlines = file.readlines()
             for line in oldlines: 

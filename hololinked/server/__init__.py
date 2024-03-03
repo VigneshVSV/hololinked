@@ -10,6 +10,5 @@ from .database import *
 from .remote_object import *
 from .eventloop import *
 from .HTTPServer import *
-from .host_utilities import *
 
 

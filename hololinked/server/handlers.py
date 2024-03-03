@@ -5,9 +5,10 @@ from json import JSONDecodeError
 from tornado.web import RequestHandler, StaticFileHandler, Application
 from tornado.iostream import StreamClosedError
 
-from .constants import CommonInstructions
+from .constants import CommonInstructions, ServerMessageData
 from .serializers import JSONSerializer
 from .zmq_message_brokers import AsyncZMQClient, MessageMappedZMQClientPool, EventConsumer
+from .webserver_utils import *
 from .utils import current_datetime_ms_str
 from .data_classes import HTTPResource, ServerSentEvent
 
@@ -243,7 +244,7 @@ class RemoteObjectsHandler(BaseHandler):
             _, _, _, _, _, reply = await client.async_execute(
                         CommonInstructions.http_resource_read(client.server_instance_name), 
                         raise_client_side_exception=True)
-            update_resources(resources, reply["returnValue"]) # type: ignore
+            resources.update(reply[ServerMessageData.RETURN_VALUE])
             # _, _, _, _, _, reply = await client.read_attribute('/'+client.server_instance_name + '/object-info', raise_client_side_exception = True)
             # remote_object_info.append(RemoteObjectDB.RemoteObjectInfo(**reply["returnValue"])) # Should raise an exception if returnValue key is not found for some reason. 
         
