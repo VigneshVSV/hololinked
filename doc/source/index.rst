@@ -18,8 +18,8 @@ separate the concerns of GUI & device or integrate with web-browser for a modern
 based tools. |module-highlighted| is being developed with the following features in mind:  
  
 * being truly pythonic - all code in python & all features of python
-* easy to understand & setup
 * reasonable integration with HTTP to take advantage of modern web practices and Javascript GUI frameworks like React
+* easy to understand & setup
 * agnostic to system size & flexibility in topology
 * 30FPS 1280*1080*3 (8 bit) image streaming over HTTP
 

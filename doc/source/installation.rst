@@ -42,3 +42,9 @@ To build & host docs locally, in top directory:
     make clean 
     make html
     python -m http.server --directory build\html
+
+To open the docs in the default browser, one can also issue the following instead of starting a python server 
+
+.. code:: shell 
+
+    make host-doc
