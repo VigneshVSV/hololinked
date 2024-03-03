@@ -6,7 +6,7 @@ import importlib
 import typing 
 import threading
 
-from .utils import unique_id, wrap_text
+from .utils import uuid4_in_bytes, wrap_text
 from .constants import *
 from .remote_parameters import TypedDict
 from .exceptions import *
@@ -102,7 +102,7 @@ class EventLoop(RemoteObject):
     @post('/remote-objects')
     def import_remote_object(self, file_name : str, object_name : str):
         consumer = self._import_remote_object_module(file_name, object_name) 
-        id = unique_id()
+        id = uuid4_in_bytes()
         self.uninstantiated_remote_objects[id] = consumer
         return dict(
             id = id, 

@@ -39,36 +39,54 @@ class BaseDB:
         self.instance_name = instance.instance_name
         self.serializer = serializer
         self.URL = self.create_URL(config_file)
-            
+
     @classmethod
-    def create_URL(cls, file_name : str = None, database : typing.Optional[str] = None, 
-                use_dialect : typing.Optional[bool] = False) -> str:
-        if not file_name:
+    def load_conf(cls, config_file : str) -> typing.Dict[str, typing.Any]:
+        if not config_file:
             conf = {}
-        elif file_name.endswith('.json'):
-            file = open(file_name, 'r')
+        elif config_file.endswith('.json'):
+            file = open(config_file, 'r')
             conf = JSONSerializer.generic_load(file)
         else:
-            raise ValueError("config files of extension - {} expected, given file name {}".format(["json"], file_name))
-        
+            raise ValueError("config files of extension - {} expected, given file name {}".format(["json"], config_file))
+        return conf
+            
+    @classmethod
+    def create_postgres_URL(cls, config_file : str = None, database : typing.Optional[str] = None, 
+                use_dialect : typing.Optional[bool] = False) -> str:
+        conf = BaseDB.load_conf(config_file)
         server = conf.get('server', None) 
-        if not server:
-            file = conf.get('file', f"{database}.db" if not database.endswith('.db') else database)
-            return f"sqlite+pysqlite:///{file}"
-        if use_dialect:
-            dialect = conf.get('dialect', None)
-        else:
-            dialect = None
         database = conf.get('database', 'hololinked')
         host = conf.get("host", 'localhost')
         port = conf.get("port", 5432)
         user = conf.get('user', 'postgres')
         password = conf.get('password', '')
-        if dialect:
-            return f"{server}+{dialect}://{user}:{password}@{host}:{port}/{database}"
-        else:      
-            return f"{server}://{user}:{password}@{host}:{port}/{database}"
+        if use_dialect:
+            dialect = conf.get('dialect', None)
+            if dialect:
+                return f"{server}+{dialect}://{user}:{password}@{host}:{port}/{database}"      
+        return f"{server}://{user}:{password}@{host}:{port}/{database}"
      
+    @classmethod
+    def create_sqlite_URL(cls, database : typing.Optional[str] = None, in_memory : bool = False, 
+                                config_file : typing.Optional[str] = None) -> str:
+        if config_file:
+            conf = BaseDB.load_conf(config_file)
+        elif not database and not in_memory:
+            raise ValueError("either a database name or a configuration file must be specified for sqlite")
+        else:
+            conf = {}
+        in_memory = conf.get('inmemory', in_memory)
+        dialect = conf.get('dialect', 'pysqlite')
+        if not in_memory:
+            database = conf.get('database', database)
+            file = conf.get('file', f"{database}.db" if not database.endswith('.db') else database)
+            return f"sqlite+{dialect}:///{file}"
+        else: 
+            return f"sqlite+{dialect}:///:memory:"
+
+
+
 class BaseAsyncDB(BaseDB):
     """
     Base class for an async database engine, implements configuration file reader, 

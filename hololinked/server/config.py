@@ -58,6 +58,7 @@ class Configuration:
         self.TEMP_DIR = f"{tempfile.gettempdir()}{os.sep}hololinked"
         self.TCP_SOCKET_SEARCH_START_PORT = 60000
         self.TCP_SOCKET_SEARCH_END_PORT = 65535
+        self.PWD_HASHER_TIME_COST = 15
 
         # qualname is not defined
         if use_environment:

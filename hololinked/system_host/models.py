@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, MappedAsDatac
 
 from ..server.constants import JSONSerializable
 
+
 class HololinkedHostTableBase(DeclarativeBase):
     pass 
     
@@ -68,11 +69,28 @@ class RemoteObjectInformation(HololinkedHostTableBase, MappedAsDataclass):
         return asdict(self)
     
 
+
+class HololinkedHostInMemoryTableBase(DeclarativeBase):
+    pass 
+
+class UserSession(HololinkedHostInMemoryTableBase, MappedAsDataclass):
+    __tablename__ = "user_sessions"
+
+    email : Mapped[str] = mapped_column(String)
+    session_key : Mapped[BLOB] = mapped_column(BLOB, primary_key=True)
+    origin : Mapped[str] = mapped_column(String)
+    user_agent : Mapped[str] = mapped_column(String)
+    remote_IP : Mapped[str] = mapped_column(String)
+
+        
+
 __all__ = [
     HololinkedHostTableBase.__name__,
+    HololinkedHostInMemoryTableBase.__name__,
     Dashboards.__name__,
     AppSettings.__name__,
     LoginCredentials.__name__,
     Server.__name__,
     RemoteObjectInformation.__name__,
+    UserSession.__name__
 ]

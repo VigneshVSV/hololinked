@@ -120,7 +120,7 @@ def copy_parameters(src : str = 'D:/onedrive/desktop/dashboard/scada/scadapy/sca
         file.writelines(newlines)
 
 
-def unique_id() -> bytes:
+def uuid4_in_bytes() -> bytes:
     """
     uuid.uuid4() in bytes
     """
