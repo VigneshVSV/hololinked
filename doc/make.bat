@@ -9,6 +9,7 @@ if "%SPHINXBUILD%" == "" (
 )
 set SOURCEDIR=source
 set BUILDDIR=build
+set DOC_ADDRESS=http://localhost:8000
 
 %SPHINXBUILD% >NUL 2>NUL
 if errorlevel 9009 (
@@ -25,11 +26,33 @@ if errorlevel 9009 (
 
 if "%1" == "" goto help
 
+if "%1" == "server" goto server
+
+if "%1" == "open-in-chrome" goto open-in-chrome
+
+if "%1" == "host-doc" goto host-doc
+
 %SPHINXBUILD% -M %1 %SOURCEDIR% %BUILDDIR% %SPHINXOPTS% %O%
 goto end
 
 :help
 %SPHINXBUILD% -M help %SOURCEDIR% %BUILDDIR% %SPHINXOPTS% %O%
+goto end
+
+:server
+echo server is hosted at %DOC_ADDRESS%, change port directory in make file if necessary
+python -m http.server --directory build\html
+goto end 
+
+:open-doc-in-browser
+start explorer %DOC_ADDRESS%
+goto end
+
+:host-doc 
+echo server is hosted at %DOC_ADDRESS%, change port directory in make file if necessary
+start explorer %DOC_ADDRESS%
+python -m http.server --directory build\html
+goto end
 
 :end
 popd
