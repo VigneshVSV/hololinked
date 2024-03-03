@@ -61,4 +61,4 @@ Indices and tables
 
 
 
-last build : |today|
+last build : |today| CET
