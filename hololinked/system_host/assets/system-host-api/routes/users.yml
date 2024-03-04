@@ -1,0 +1,35 @@
+users:
+  post:
+    tags: 
+      - hololinked portal users
+    summary: add new user 
+    requestBody:
+      required: true 
+      content:
+        application/json:
+            schema:
+              $ref: "../schemas/users.yml#/components/schemas/users"
+    responses:
+      204:
+        description: new user was added
+      401:
+        description: user did not login therefore cannot add new user
+      403: 
+        description: user is not authorised to add new user 
+  patch:
+    tags: 
+      - hololinked portal users
+    summary: change password
+    requestBody:
+      required: true 
+      content:
+        application/json:
+            schema:
+              $ref: "../schemas/users.yml#/components/schemas/login-data"
+    responses:
+      204:
+        description: password was changed
+      401:
+        description: user did not login therefore cannot change password
+      403: 
+        description: user is not authorised to change password 

@@ -1,0 +1,94 @@
+app-settings:
+  get:
+    summary: get all user interface related settings of hololinked-portal
+    tags:
+      - hololinked portal settings
+    responses:
+      200:
+        description: JSON of settings categorized by a certain field. 
+        content:
+          application/json:
+            schema:
+              $ref: "../schemas/app-settings.yml#/components/schemas/app-settings"
+      401:
+        description: user did not login therefore cannot access this resource
+  patch:
+    summary: edit one or multiple app-settings. 
+    description:  Its possible to edit both the entire JSON or one of the subfields
+    tags:
+      - hololinked portal settings
+    requestBody:
+      required: true 
+      content:
+        application/json:
+            schema:
+              $ref: "../schemas/app-settings.yml#/components/schemas/app-settings"
+    responses:
+      204:
+        description: settings was updated
+
+app-settings-with-name:
+  
+  get:
+    summary: get all user interface settings of hololinked-portal by name 
+    tags:
+      - hololinked portal settings
+    parameters:
+      - name:
+        $ref: "#/components/parameters/name"
+    responses:
+      200:
+        description: JSON of settings categorized by a certain field. 
+        content:
+          application/json:
+            schema:
+              oneOf: [
+                $ref: "../schemas/app-settings.yml#/components/schemas/dashboards",
+                $ref: "../schemas/app-settings.yml#/components/schemas/login",
+                $ref: "../schemas/app-settings.yml#/components/schemas/servers",
+                $ref: "../schemas/app-settings.yml#/components/schemas/remoteObjectViewer"
+              ]
+  
+  put:
+    summary: edit all settings specified by name
+    tags:
+      - hololinked portal settings
+    requestBody:
+      required: true 
+      content:
+          application/json:
+            schema:
+              oneOf: [
+                $ref: "../schemas/app-settings.yml#/components/schemas/dashboards",
+                $ref: "../schemas/app-settings.yml#/components/schemas/login",
+                $ref: "../schemas/app-settings.yml#/components/schemas/servers",
+                $ref: "../schemas/app-settings.yml#/components/schemas/remoteObjectViewer"
+              ]
+    parameters:
+      - name:
+        $ref: "#/components/parameters/name"
+    responses:
+      204:
+        description: settings was updated 
+  
+  patch: 
+    summary: edit part of settings specified by name
+    tags:
+      - hololinked portal settings
+    parameters:
+      - name:
+        $ref: "#/components/parameters/name"
+    responses: 
+      204:
+        description: settings was updated
+
+components:
+  parameters:
+    name:
+      name: name 
+      in: path 
+      required: true
+      description: The name of the setting, one of the field of app-settings schema 
+      schema:
+        type: string
+        enum: ["dashboards", "remote-object-viewer", "login", "servers"]

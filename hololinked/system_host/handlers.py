@@ -1,4 +1,6 @@
+import os
 import typing
+import yaml
 import inspect
 from argon2 import PasswordHasher
 
@@ -28,6 +30,7 @@ def for_authenticated_user(method):
 class SystemHostHandler(RequestHandler):
     """
     Base Request Handler for all requests directed to system host server. Implements CORS & credential checks. 
+    Use built in swagger-ui for request handler documentation for other paths. 
     """
 
     def initialize(self, CORS : typing.List[str], disk_session : Session, mem_session : asyncio_ext.AsyncSession) -> None:
@@ -100,7 +103,7 @@ class SystemHostHandler(RequestHandler):
         self.set_header("Access-Control-Allow-Credentials", "true")
       
     async def options(self):
-        self.set_status(200)
+        self.set_status(204)
         self.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.set_custom_default_headers()
         self.finish()
@@ -119,7 +122,7 @@ class UsersHandler(SystemHostHandler):
     
 class LoginHandler(SystemHostHandler):
     """
-    Performs login and supplies a signed cookie for session
+    performs login and supplies a signed cookie for session
     """
     async def post(self):
         self.check_headers()
@@ -133,12 +136,12 @@ class LoginHandler(SystemHostHandler):
                 data = await session.execute(stmt)
                 data = data.scalars().all() # type: typing.List[LoginCredentials]
             if len(data) == 0:
-                self.set_status(403, "authentication failed - no username found")    
+                self.set_status(404, "authentication failed - no username found")    
             else:
                 data = data[0] # type: LoginCredentials
                 ph = PasswordHasher(time_cost=global_config.PWD_HASHER_TIME_COST)
                 if ph.verify(data.password, password):
-                    self.set_status(200)
+                    self.set_status(204, "logged in")
                     cookie_value = uuid4_in_bytes()
                     self.set_signed_cookie("user", cookie_value, httponly=True,  
                                 secure=True, samesite="strict", domain="localhost",
@@ -158,7 +161,7 @@ class LoginHandler(SystemHostHandler):
         self.finish()
         
     async def options(self):
-        self.set_status(200)
+        self.set_status(204)
         self.set_header("Access-Control-Allow-Methods", "POST, OPTIONS")
         self.set_custom_default_headers()
         self.finish()
@@ -166,7 +169,7 @@ class LoginHandler(SystemHostHandler):
 
 class LogoutHandler(SystemHostHandler):
     """
-    Performs login and supplies a signed cookie for session
+    Performs logout and clears the signed cookie of session
     """
     async def post(self):
         self.check_headers()
@@ -182,7 +185,7 @@ class LogoutHandler(SystemHostHandler):
                     if result.rowcount != 1:
                         self.set_status(500, "found user but could not logout") # never comes here
                     session.commit()
-                self.set_status(200, "logged out")
+                self.set_status(204, "logged out")
                 self.clear_cookie("user")   
         except Exception as ex:
             self.set_status(500, f"logout failed - {str(ex)}")
@@ -190,7 +193,7 @@ class LogoutHandler(SystemHostHandler):
         self.finish()
         
     async def options(self):
-        self.set_status(200)
+        self.set_status(204)
         self.set_header("Access-Control-Allow-Methods", "POST, OPTIONS")
         self.set_custom_default_headers()
         self.finish()
@@ -318,6 +321,23 @@ class SubscriberHandler(SystemHostHandler):
         pass
     
 
+class SwaggerHandler(SystemHostHandler):
+    
+    async def get(self):
+        with open(f'{os.path.dirname(os.path.abspath(__file__))}{os.sep}assets{os.sep}system-host-api{os.sep}index.yml', 'r') as file:
+            swagger_spec = yaml.safe_load(file)
+            self.set_header('Content-Type', 'application/yaml')
+            self.write(swagger_spec)
+        self.finish()
+
+
+class SwaggerUIHandler(SystemHostHandler):
+    
+    async def get(self):
+        await self.render(f"{os.path.dirname(os.path.abspath(__file__))}{os.sep}assets{os.sep}swagger_ui_template.html", 
+                        swagger_spec_url="/doc")
+
+
 
 class MainHandler(SystemHostHandler):
 
@@ -338,5 +358,7 @@ __all__ = [
     DashboardsHandler.__name__,
     SubscribersHandler.__name__,
     MainHandler.__name__,
-    LogoutHandler.__name__
+    LogoutHandler.__name__,
+    SwaggerHandler.__name__,
+    SwaggerUIHandler.__name__
 ]

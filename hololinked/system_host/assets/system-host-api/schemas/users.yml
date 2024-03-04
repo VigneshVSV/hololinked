@@ -1,0 +1,40 @@
+openapi: '3.0.2'
+info:
+  title: hololinked system host server
+  description: hololinked system host server stores system level data using this API. System level data allow interaction with one's system as a whole - where, what RemoteObject's are running and how? This API is also consumed by the hololinked-portal app, therefore containing services related to hololinked-portal.  
+  version: '1.0.0'  
+paths: {}
+components:
+  schemas:
+    users: 
+      type: object 
+      properties:
+        email: 
+          $ref: "#/components/schemas/email"
+        password: 
+          $ref: "#/components/schemas/password"
+        type: 
+          $ref: "#/components/schemas/type"
+    login-data: 
+      type: object 
+      properties:
+        email: 
+          $ref: "#/components/schemas/email"
+        password: 
+          $ref: "#/components/schemas/password"
+    email: 
+      type: string
+      default: ""
+    password:
+      type: string
+      default: ""
+    type: 
+      type: string 
+      enum: ["admin", "user"]
+      default: "admin"
+       
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie 
+      name: user

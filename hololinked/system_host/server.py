@@ -80,7 +80,9 @@ def create_system_host(db_config_file : typing.Optional[str] = None, ssl_context
         (r"/subscribers", SubscribersHandler, kwargs),
         # (r"/remote-objects", RemoteObjectsHandler),
         (r"/login", LoginHandler, kwargs),
-        (r"/logout", LogoutHandler, kwargs)
+        (r"/logout", LogoutHandler, kwargs),
+        (r"/doc", SwaggerHandler, kwargs),
+        (r"/swagger-ui", SwaggerUIHandler, kwargs)
     ], 
     cookie_secret=base64.b64encode(os.urandom(32)).decode('utf-8'), 
     **server_settings)

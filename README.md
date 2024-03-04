@@ -45,5 +45,8 @@ clone the repository and install in develop mode `pip install -e .` for convenie
 - Database support for storing and loading parameters (based on SQLAlchemy) when object dies and restarts
 
 
+[![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest)
+ 
+
 
 
