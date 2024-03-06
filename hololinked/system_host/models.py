@@ -16,10 +16,15 @@ class Dashboards(HololinkedHostTableBase, MappedAsDataclass):
     name : Mapped[str] = mapped_column(String(1024), primary_key=True)
     URL  : Mapped[str] = mapped_column(String(1024), unique=True)
     description : Mapped[str] = mapped_column(String(16384))
-    json_specfication : Mapped[typing.Dict[str, typing.Any]] = mapped_column(JSON)
+    json_specfication : Mapped[typing.Dict[str, typing.Any]] = mapped_column(JSON, nullable=True)
 
     def json(self):
-        return asdict(self)
+        return {
+            "name" : self.name,
+            "URL" : self.URL,
+            "description" : self.description,
+            "json_specification" : self.json_specfication
+        }
 
 class AppSettings(HololinkedHostTableBase, MappedAsDataclass):
     __tablename__ = "appsettings"

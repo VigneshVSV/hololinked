@@ -1,10 +1,9 @@
 import os
 import typing
-import yaml
-import inspect
+from typing import List
 from argon2 import PasswordHasher
 
-from sqlalchemy import select, delete, update
+from sqlalchemy import select, delete
 from sqlalchemy.orm import Session
 from sqlalchemy.ext import asyncio as asyncio_ext
 from tornado.web import RequestHandler, HTTPError, authenticated
@@ -144,7 +143,7 @@ class LoginHandler(SystemHostHandler):
                     self.set_status(204, "logged in")
                     cookie_value = uuid4_in_bytes()
                     self.set_signed_cookie("user", cookie_value, httponly=True,  
-                                secure=True, samesite="strict", domain="localhost",
+                                secure=True, samesite="strict", domain="gar-ex-medsch10",
                                 expires_days=None)
                 with self.mem_session() as session:
                     session : Session
@@ -283,7 +282,7 @@ class DashboardsHandler(SystemHostHandler):
             async with self.disk_session() as session:
                 stmt = select(Dashboards)
                 data = await session.execute(stmt)
-                serialized_data = JSONSerializer.generic_dumps([result[Dashboards.__name__]._json() for result 
+                serialized_data = JSONSerializer.generic_dumps([result[Dashboards.__name__].json() for result 
                                                in data.mappings().all()])           
             self.set_status(200)
             self.set_header("Content-Type", "application/json")
@@ -321,31 +320,29 @@ class SubscriberHandler(SystemHostHandler):
         pass
     
 
-class SwaggerHandler(SystemHostHandler):
-    
-    async def get(self):
-        with open(f'{os.path.dirname(os.path.abspath(__file__))}{os.sep}assets{os.sep}system-host-api{os.sep}index.yml', 'r') as file:
-            swagger_spec = yaml.safe_load(file)
-            self.set_header('Content-Type', 'application/yaml')
-            self.write(swagger_spec)
-        self.finish()
-
-
 class SwaggerUIHandler(SystemHostHandler):
     
     async def get(self):
         await self.render(f"{os.path.dirname(os.path.abspath(__file__))}{os.sep}assets{os.sep}swagger_ui_template.html", 
-                        swagger_spec_url="/doc")
-
+                        swagger_spec_url="/index.yml")
 
 
 class MainHandler(SystemHostHandler):
+
+    def initialize(self, CORS: List[str], disk_session: Session, 
+                   mem_session: asyncio_ext.AsyncSession, swagger : bool = False,
+                   IP : str = "") -> None:
+        self.swagger = swagger
+        self.IP = IP
+        return super().initialize(CORS, disk_session, mem_session)
 
     async def get(self):
         self.check_headers()
         self.set_status(200)
         self.set_custom_default_headers()
-        self.write("<p>I am alive!!!<p>")
+        self.write("<p><h1>I am alive!</h1><p>")
+        if self.swagger:
+            self.write(f"<p>Visit <a href={self.IP+'/swagger-ui'}>here</a> for my swagger doc</p>")
         self.finish()
 
 
@@ -359,6 +356,5 @@ __all__ = [
     SubscribersHandler.__name__,
     MainHandler.__name__,
     LogoutHandler.__name__,
-    SwaggerHandler.__name__,
     SwaggerUIHandler.__name__
 ]

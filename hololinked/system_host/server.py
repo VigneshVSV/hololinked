@@ -13,7 +13,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.ext import asyncio as asyncio_ext
 from sqlalchemy_utils import database_exists, create_database, drop_database
-from tornado.web import Application
+from tornado.web import Application, StaticFileHandler
+from tornado.routing import RuleRouter, PathMatches
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
 
 from ..server.serializers import JSONSerializer
@@ -39,7 +40,7 @@ def create_system_host(db_config_file : typing.Optional[str] = None, ssl_context
             create_database(disk_DB_URL)
             sync_disk_db_engine = create_engine(disk_DB_URL)
             HololinkedHostTableBase.metadata.create_all(sync_disk_db_engine)
-            create_tables(sync_disk_db_engine)
+            # create_tables(sync_disk_db_engine)
             create_credentials(sync_disk_db_engine)
         except Exception as ex:
             if disk_DB_URL.startswith("sqlite"):
@@ -73,7 +74,7 @@ def create_system_host(db_config_file : typing.Optional[str] = None, ssl_context
     )
 
     app = Application([
-        (r"/", MainHandler, kwargs),
+        (r"/", MainHandler, dict(IP="https://localhost:8080", swagger=True, **kwargs)),
         (r"/users", UsersHandler, kwargs),
         (r"/dashboards", DashboardsHandler, kwargs),
         (r"/app-settings", AppSettingsHandler, kwargs),
@@ -81,8 +82,9 @@ def create_system_host(db_config_file : typing.Optional[str] = None, ssl_context
         # (r"/remote-objects", RemoteObjectsHandler),
         (r"/login", LoginHandler, kwargs),
         (r"/logout", LogoutHandler, kwargs),
-        (r"/doc", SwaggerHandler, kwargs),
-        (r"/swagger-ui", SwaggerUIHandler, kwargs)
+        (r"/swagger-ui", SwaggerUIHandler, kwargs),
+        (r"/(.*)", StaticFileHandler, { "path" : os.path.join(os.path.dirname(__file__),
+                                                f"assets{os.sep}system-host-api") }),
     ], 
     cookie_secret=base64.b64encode(os.urandom(32)).decode('utf-8'), 
     **server_settings)

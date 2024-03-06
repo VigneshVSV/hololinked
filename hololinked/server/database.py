@@ -56,7 +56,7 @@ class BaseDB:
                 use_dialect : typing.Optional[bool] = False) -> str:
         conf = BaseDB.load_conf(config_file)
         server = conf.get('server', None) 
-        database = conf.get('database', 'hololinked')
+        database = conf.get('database', database)
         host = conf.get("host", 'localhost')
         port = conf.get("port", 5432)
         user = conf.get('user', 'postgres')
