@@ -129,6 +129,7 @@ class LoginHandler(SystemHostHandler):
             body = JSONSerializer.generic_loads(self.request.body)
             email = body["email"]
             password = body["password"]
+            rememberme = body["rememberme"]
             async with self.disk_session() as session: 
                 session : asyncio_ext.AsyncSession
                 stmt = select(LoginCredentials).filter_by(email=email)
@@ -143,8 +144,8 @@ class LoginHandler(SystemHostHandler):
                     self.set_status(204, "logged in")
                     cookie_value = uuid4_in_bytes()
                     self.set_signed_cookie("user", cookie_value, httponly=True,  
-                                secure=True, samesite="strict", domain="gar-ex-medsch10",
-                                expires_days=None)
+                                            secure=True, samesite="strict", 
+                                            expires_days=30 if rememberme else None)
                 with self.mem_session() as session:
                     session : Session
                     session.add(UserSession(email=email, session_key=cookie_value,
@@ -323,8 +324,10 @@ class SubscriberHandler(SystemHostHandler):
 class SwaggerUIHandler(SystemHostHandler):
     
     async def get(self):
-        await self.render(f"{os.path.dirname(os.path.abspath(__file__))}{os.sep}assets{os.sep}swagger_ui_template.html", 
-                        swagger_spec_url="/index.yml")
+        await self.render(
+            f"{os.path.dirname(os.path.abspath(__file__))}{os.sep}assets{os.sep}swagger_ui_template.html", 
+            swagger_spec_url="/index.yml"
+        )
 
 
 class MainHandler(SystemHostHandler):

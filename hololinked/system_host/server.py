@@ -84,12 +84,12 @@ def create_system_host(db_config_file : typing.Optional[str] = None, ssl_context
         (r"/logout", LogoutHandler, kwargs),
         (r"/swagger-ui", SwaggerUIHandler, kwargs),
         (r"/(.*)", StaticFileHandler, { "path" : os.path.join(os.path.dirname(__file__),
-                                                f"assets{os.sep}system-host-api") }),
+                    f"assets{os.sep}hololinked-server-swagger-api{os.sep}system-host-api") }),
     ], 
     cookie_secret=base64.b64encode(os.urandom(32)).decode('utf-8'), 
     **server_settings)
     
-    return TornadoHTTP1Server(app, ssl_options=ssl_context)
+    return TornadoHTTP1Server(app, ssl_options=ssl_context, auto)
  
 
 
