@@ -40,7 +40,7 @@ def create_system_host(db_config_file : typing.Optional[str] = None, ssl_context
             create_database(disk_DB_URL)
             sync_disk_db_engine = create_engine(disk_DB_URL)
             HololinkedHostTableBase.metadata.create_all(sync_disk_db_engine)
-            # create_tables(sync_disk_db_engine)
+            create_tables(sync_disk_db_engine)
             create_credentials(sync_disk_db_engine)
         except Exception as ex:
             if disk_DB_URL.startswith("sqlite"):
@@ -82,7 +82,8 @@ def create_system_host(db_config_file : typing.Optional[str] = None, ssl_context
         (r"/users", UsersHandler, kwargs),
         (r"/pages", PagesHandler, kwargs),
         (r"/pages/(.*)", PageHandler, kwargs),
-        (r"/app-settings/(.*)", AppSettingsHandler, kwargs),
+        (r"/app-settings", AppSettingsHandler, kwargs),
+        (r"/app-settings/(.*)", AppSettingHandler, kwargs),
         (r"/subscribers", SubscribersHandler, kwargs),
         # (r"/remote-objects", RemoteObjectsHandler),
         (r"/login", LoginHandler, kwargs),

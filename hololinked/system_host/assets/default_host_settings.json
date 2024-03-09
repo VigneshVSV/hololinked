@@ -12,13 +12,17 @@
         "allowHTTP" : false
     },     
     "remoteObjectViewer" : {
-        "stringifyConsoleOutput" : false,
-        "consoleDefaultMaxEntries" : 15,
-        "consoleDefaultWindowSize" : 500, 
-        "consoleDefaultFontSize" : 16,
-        "stringifyLogViewerOutput" : false,
-        "logViewerDefaultMaxEntries" : 10,
-        "logViewerDefaultOutputWindowSize" : 1000,
-        "logViewerDefaultFontSize" : 16
+        "console" : {
+            "stringifyOutput" : false,
+            "defaultMaxEntries" : 15,
+            "defaultWindowSize" : 500, 
+            "defaultFontSize" : 16
+        },
+        "logViewer" : {
+            "stringifyOutput" : false,
+            "defaultMaxEntries" : 10,
+            "defaultOutputWindowSize" : 1000,
+            "defaultFontSize" : 16
+        }
     }
 }

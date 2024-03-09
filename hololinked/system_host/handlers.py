@@ -1,5 +1,6 @@
 import os
 import typing
+import copy
 from typing import List
 from argon2 import PasswordHasher
 
@@ -93,6 +94,12 @@ class SystemHostHandler(RequestHandler):
         if self.request.headers.get("Access-Control-Request-Headers", None):
             headers += ", " + self.request.headers["Access-Control-Request-Headers"]
         self.set_header("Access-Control-Allow-Headers", headers)
+
+    def set_access_control_allow_methods(self) -> None:
+        """
+        sets methods allowed so that options method can be reused in all children
+        """
+        self.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
    
     def set_custom_default_headers(self) -> None:
         """
@@ -104,7 +111,7 @@ class SystemHostHandler(RequestHandler):
       
     async def options(self):
         self.set_status(204)
-        self.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.set_access_control_allow_methods()
         self.set_custom_default_headers()
         self.finish()
 
@@ -157,15 +164,15 @@ class LoginHandler(SystemHostHandler):
                     )
                     session.commit()
         except Exception as ex:
-            self.set_status(500, f"authentication failed - {str(ex)}")
+            ex_str = str(ex)
+            if ex_str.startswith("password does not match"):
+                ex_str = "username or password not correct"
+            self.set_status(500, f"authentication failed - {ex_str)}")
         self.set_custom_default_headers()
         self.finish()
         
-    async def options(self):
-        self.set_status(204)
-        self.set_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-        self.set_custom_default_headers()
-        self.finish()
+    def set_access_control_allow_methods(self) -> None:
+        self.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
 
 class LogoutHandler(SystemHostHandler):
@@ -195,16 +202,40 @@ class LogoutHandler(SystemHostHandler):
         self.set_custom_default_headers()
         self.finish()
         
-    async def options(self):
-        self.set_status(204)
+    def set_access_control_allow_methods(self) -> None:
         self.set_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        
+
+
+class AppSettingsHandler(SystemHostHandler):
+
+    @for_authenticated_user
+    async def get(self, field : typing.Optional[str] = None):
+        self.check_headers()
+        try:
+            async with self.disk_session() as session:
+                session : asyncio_ext.AsyncSession
+                stmt = select(AppSettings)
+                data = await session.execute(stmt)
+                serialized_data = JSONSerializer.generic_dumps({
+                    result[AppSettings.__name__].field : result[AppSettings.__name__].value
+                    for result in data.mappings().all()})
+            self.set_status(200)
+            self.set_header("Content-Type", "application/json")
+            self.write(serialized_data)            
+        except Exception as ex:
+            self.set_status(500, str(ex))
         self.set_custom_default_headers()
         self.finish()
 
-
+    async def options(self, name : typing.Optional[str] = None):
+        self.set_status(204)
+        self.set_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.set_custom_default_headers()
+        self.finish()  
     
 
-class AppSettingsHandler(SystemHostHandler):
+class AppSettingHandler(SystemHostHandler):
 
     @for_authenticated_user
     async def post(self):
@@ -227,17 +258,19 @@ class AppSettingsHandler(SystemHostHandler):
         self.finish()
 
     @for_authenticated_user
-    async def patch(self, name : str):
+    async def patch(self, field : str):
         self.check_headers()
         try:
             value = JSONSerializer.generic_loads(self.request.body)
-            field = value["field"]
-            value = value["value"]
             async with self.disk_session() as session, session.begin():
+                session : asyncio_ext.AsyncSession
                 stmt = select(AppSettings).filter_by(field=field)
                 data = await session.execute(stmt)
                 setting : AppSettings = data.scalar()
-                setting.value = {"value" : value}
+                new_value = copy.deepcopy(setting.value)
+                for key, val in value.items():
+                    new_value[key]= val
+                setting.value = new_value
                 await session.commit()
             self.set_status(200)
         except Exception as ex:
@@ -245,28 +278,9 @@ class AppSettingsHandler(SystemHostHandler):
         self.set_custom_default_headers()
         self.finish()
 
-    @for_authenticated_user
-    async def get(self):
-        self.check_headers()
-        try:
-            async with self.disk_session() as session:
-                session : asyncio_ext.AsyncSession
-                stmt = select(AppSettings)
-                data = await session.execute(stmt)
-                serialized_data = JSONSerializer.generic_dumps({
-                    result[AppSettings.__name__].field : result[AppSettings.__name__].value
-                    for result in data.mappings().all()})
-            self.set_status(200)
-            self.set_header("Content-Type", "application/json")
-            self.write(serialized_data)            
-        except Exception as ex:
-            self.set_status(500, str(ex))
-        self.set_custom_default_headers()
-        self.finish()
-
     async def options(self, name : typing.Optional[str] = None):
         self.set_status(204)
-        self.set_header("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
+        self.set_header("Access-Control-Allow-Methods", "POST, PATCH, OPTIONS")
         self.set_custom_default_headers()
         self.finish()
 
@@ -432,6 +446,7 @@ __all__ = [
     SystemHostHandler.__name__,
     UsersHandler.__name__,
     AppSettingsHandler.__name__,
+    AppSettingHandler.__name__,
     LoginHandler.__name__,
     PagesHandler.__name__,
     PageHandler.__name__,
