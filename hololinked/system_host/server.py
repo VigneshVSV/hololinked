@@ -13,9 +13,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.ext import asyncio as asyncio_ext
 from sqlalchemy_utils import database_exists, create_database, drop_database
-from tornado.web import Application, StaticFileHandler
-from tornado.routing import RuleRouter, PathMatches
+from tornado.web import Application, StaticFileHandler, RequestHandler
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
+from tornado import ioloop
 
 from ..server.serializers import JSONSerializer
 from ..server.database import BaseDB
@@ -25,7 +25,7 @@ from .handlers import *
 
 
 def create_system_host(db_config_file : typing.Optional[str] = None, ssl_context : typing.Optional[ssl.SSLContext] = None, 
-                    **server_settings) -> TornadoHTTP1Server:
+                    handlers : typing.List[typing.Tuple[str, RequestHandler, dict]] = [], **server_settings) -> TornadoHTTP1Server:
     """
     global function for creating system hosting server using a database configuration file, SSL context & certain 
     server settings. Currently supports only one server per process due to usage of some global variables. 
@@ -73,24 +73,37 @@ def create_system_host(db_config_file : typing.Optional[str] = None, ssl_context
         mem_session=mem_session
     )
 
+    system_host_compatible_handlers = []
+    for handler in handlers:
+        system_host_compatible_handlers.append((handler[0], handler[1], kwargs))
+
     app = Application([
         (r"/", MainHandler, dict(IP="https://localhost:8080", swagger=True, **kwargs)),
         (r"/users", UsersHandler, kwargs),
-        (r"/dashboards", DashboardsHandler, kwargs),
-        (r"/app-settings", AppSettingsHandler, kwargs),
+        (r"/pages", PagesHandler, kwargs),
+        (r"/pages/(.*)", PageHandler, kwargs),
+        (r"/app-settings/(.*)", AppSettingsHandler, kwargs),
         (r"/subscribers", SubscribersHandler, kwargs),
         # (r"/remote-objects", RemoteObjectsHandler),
         (r"/login", LoginHandler, kwargs),
         (r"/logout", LogoutHandler, kwargs),
         (r"/swagger-ui", SwaggerUIHandler, kwargs),
-        (r"/(.*)", StaticFileHandler, { "path" : os.path.join(os.path.dirname(__file__),
-                    f"assets{os.sep}hololinked-server-swagger-api{os.sep}system-host-api") }),
+        *system_host_compatible_handlers,
+        (r"/(.*)", StaticFileHandler, dict(path=os.path.join(os.path.dirname(__file__),
+                    f"assets{os.sep}hololinked-server-swagger-api{os.sep}system-host-api"))
+        ),
     ], 
     cookie_secret=base64.b64encode(os.urandom(32)).decode('utf-8'), 
     **server_settings)
     
-    return TornadoHTTP1Server(app, ssl_options=ssl_context, auto)
+    return TornadoHTTP1Server(app, ssl_options=ssl_context)
  
+
+def start_tornado_server(server : TornadoHTTP1Server, port : int = 8080):
+    server.listen(port)
+    event_loop = ioloop.IOLoop.current()
+    print("starting server")
+    event_loop.start()
 
 
 def create_tables(engine):

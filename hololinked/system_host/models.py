@@ -10,11 +10,11 @@ from ..server.constants import JSONSerializable
 class HololinkedHostTableBase(DeclarativeBase):
     pass 
     
-class Dashboards(HololinkedHostTableBase, MappedAsDataclass):
-    __tablename__ = "dashboards"
+class Pages(HololinkedHostTableBase, MappedAsDataclass):
+    __tablename__ = "pages"
 
-    name : Mapped[str] = mapped_column(String(1024), primary_key=True)
-    URL  : Mapped[str] = mapped_column(String(1024), unique=True)
+    name : Mapped[str] = mapped_column(String(1024), primary_key=True, nullable=False)
+    URL  : Mapped[str] = mapped_column(String(1024), unique=True, nullable=False)
     description : Mapped[str] = mapped_column(String(16384))
     json_specfication : Mapped[typing.Dict[str, typing.Any]] = mapped_column(JSON, nullable=True)
 
@@ -92,7 +92,7 @@ class UserSession(HololinkedHostInMemoryTableBase, MappedAsDataclass):
 __all__ = [
     HololinkedHostTableBase.__name__,
     HololinkedHostInMemoryTableBase.__name__,
-    Dashboards.__name__,
+    Pages.__name__,
     AppSettings.__name__,
     LoginCredentials.__name__,
     Server.__name__,

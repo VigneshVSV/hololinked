@@ -1,0 +1,24 @@
+{
+    "dashboards" : {
+                "deleteWithoutAsking" : true,
+                "showRecentlyUsed" : true
+    }, 
+    "login" : {
+        "footer" : "",
+        "footerLink" : "",
+        "displayFooter" : true
+    },
+    "servers" : {
+        "allowHTTP" : false
+    },     
+    "remoteObjectViewer" : {
+        "stringifyConsoleOutput" : false,
+        "consoleDefaultMaxEntries" : 15,
+        "consoleDefaultWindowSize" : 500, 
+        "consoleDefaultFontSize" : 16,
+        "stringifyLogViewerOutput" : false,
+        "logViewerDefaultMaxEntries" : 10,
+        "logViewerDefaultOutputWindowSize" : 1000,
+        "logViewerDefaultFontSize" : 16
+    }
+}

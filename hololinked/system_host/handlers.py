@@ -3,9 +3,10 @@ import typing
 from typing import List
 from argon2 import PasswordHasher
 
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, update
 from sqlalchemy.orm import Session
 from sqlalchemy.ext import asyncio as asyncio_ext
+from sqlalchemy.exc import SQLAlchemyError
 from tornado.web import RequestHandler, HTTPError, authenticated
 
 from .models import *
@@ -16,9 +17,9 @@ from ..server.utils import uuid4_in_bytes
 
 
 def for_authenticated_user(method):
-    async def authenticated_method(self : "SystemHostHandler") -> None:
+    async def authenticated_method(self : "SystemHostHandler", *args, **kwargs) -> None:
         if self.current_user_valid:
-            return await method(self)
+            return await method(self, *args, **kwargs)
         self.set_status(403)
         self.set_custom_default_headers()
         self.finish()
@@ -136,7 +137,7 @@ class LoginHandler(SystemHostHandler):
                 data = await session.execute(stmt)
                 data = data.scalars().all() # type: typing.List[LoginCredentials]
             if len(data) == 0:
-                self.set_status(404, "authentication failed - no username found")    
+                self.set_status(404, "authentication failed - username not found")    
             else:
                 data = data[0] # type: LoginCredentials
                 ph = PasswordHasher(time_cost=global_config.PWD_HASHER_TIME_COST)
@@ -171,6 +172,8 @@ class LogoutHandler(SystemHostHandler):
     """
     Performs logout and clears the signed cookie of session
     """
+
+    @for_authenticated_user
     async def post(self):
         self.check_headers()
         try:
@@ -216,20 +219,22 @@ class AppSettingsHandler(SystemHostHandler):
                 ))
                 await session.commit()
             self.set_status(200)
+        except SQLAlchemyError as ex:
+            self.set_status(500, "Database error - check message on server")
         except Exception as ex:
             self.set_status(500, str(ex))
         self.set_custom_default_headers()
         self.finish()
 
     @for_authenticated_user
-    async def patch(self):
+    async def patch(self, name : str):
         self.check_headers()
         try:
             value = JSONSerializer.generic_loads(self.request.body)
             field = value["field"]
             value = value["value"]
             async with self.disk_session() as session, session.begin():
-                stmt = select(AppSettings).filter_by(field = field)
+                stmt = select(AppSettings).filter_by(field=field)
                 data = await session.execute(stmt)
                 setting : AppSettings = data.scalar()
                 setting.value = {"value" : value}
@@ -259,37 +264,110 @@ class AppSettingsHandler(SystemHostHandler):
         self.set_custom_default_headers()
         self.finish()
 
-    
-class DashboardsHandler(SystemHostHandler):
-
-    @for_authenticated_user
-    async def post(self):
-        self.check_headers()
-        try:
-            data = JSONSerializer.generic_loads(self.request.body)
-            async with self.disk_session() as session, session.begin():
-                session.add(Dashboards(**data))
-                await session.commit()
-            self.set_status(200)
-        except Exception as ex:
-            self.set_status(500, str(ex))
+    async def options(self, name : typing.Optional[str] = None):
+        self.set_status(204)
+        self.set_header("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
         self.set_custom_default_headers()
         self.finish()
+
+    
+class PagesHandler(SystemHostHandler):
+    """
+    get all pages - endpoint /pages
+    """
 
     @for_authenticated_user
     async def get(self):
         self.check_headers()
         try:
             async with self.disk_session() as session:
-                stmt = select(Dashboards)
+                session : asyncio_ext.AsyncSession
+                stmt = select(Pages)
                 data = await session.execute(stmt)
-                serialized_data = JSONSerializer.generic_dumps([result[Dashboards.__name__].json() for result 
+                serialized_data = JSONSerializer.generic_dumps([result[Pages.__name__].json() for result 
                                                in data.mappings().all()])           
             self.set_status(200)
             self.set_header("Content-Type", "application/json")
             self.write(serialized_data)
+        except SQLAlchemyError as ex:
+            self.set_status(500, "database error - check message on server")
         except Exception as ex:
             self.set_status(500, str(ex))
+        self.set_custom_default_headers()
+        self.finish()
+
+
+class PageHandler(SystemHostHandler):
+    """
+    add or edit a single page. endpoint - /pages/{name}
+    """
+
+    @for_authenticated_user
+    async def post(self, name):
+        self.check_headers()
+        try:
+            data = JSONSerializer.generic_loads(self.request.body)
+            # name = self.request.arguments
+            async with self.disk_session() as session, session.begin():
+                session : asyncio_ext.AsyncSession
+                session.add(Pages(name=name, **data))
+                await session.commit()
+            self.set_status(201)
+        except SQLAlchemyError as ex:
+            self.set_status(500, "Database error - check message on server")
+        except Exception as ex:
+            self.set_status(500, str(ex))
+        self.set_custom_default_headers()
+        self.finish()
+
+    @for_authenticated_user
+    async def put(self, name):
+        self.check_headers()
+        try:
+            updated_data = JSONSerializer.generic_loads(self.request.body)
+            async with self.disk_session() as session, session.begin():
+                session : asyncio_ext.AsyncSession
+                stmt = select(Pages).filter_by(name=name)
+                page = (await session.execute(stmt)).mappings().all()
+                if(len(page) == 0):
+                    self.set_status(404, f"no such page with given name {name}") 
+                else:
+                    existing_data = page[0][Pages.__name__] # type: Pages
+                    if updated_data.get("description", None):
+                        existing_data.description = updated_data["description"]
+                    if updated_data.get("URL", None):
+                        existing_data.URL = updated_data["URL"]
+                    await session.commit()
+                self.set_status(204)
+        except SQLAlchemyError as ex:
+            self.set_status(500, "Database error - check message on server")
+        except Exception as ex:
+            self.set_status(500, str(ex))
+        self.set_custom_default_headers()
+        self.finish()
+
+
+    @for_authenticated_user
+    async def delete(self, name):
+        self.check_headers()
+        try:
+            async with self.disk_session() as session:
+                session : asyncio_ext.AsyncSession
+                stmt = delete(Pages).filter_by(name=name)
+                ret = await session.execute(stmt)
+                await session.commit()
+            self.set_status(204)
+        except SQLAlchemyError as ex:
+            self.set_status(500, "Database error - check message on server")
+        except Exception as ex:
+            self.set_status(500, str(ex))
+        self.set_custom_default_headers()
+        self.finish()
+
+    async def options(self, name):
+        print("name is ", name)
+        self.set_status(204)
+        self.set_header("Access-Control-Allow-Methods", "POST, PUT, DELETE, OPTIONS")
         self.set_custom_default_headers()
         self.finish()
 
@@ -355,7 +433,8 @@ __all__ = [
     UsersHandler.__name__,
     AppSettingsHandler.__name__,
     LoginHandler.__name__,
-    DashboardsHandler.__name__,
+    PagesHandler.__name__,
+    PageHandler.__name__,
     SubscribersHandler.__name__,
     MainHandler.__name__,
     LogoutHandler.__name__,
