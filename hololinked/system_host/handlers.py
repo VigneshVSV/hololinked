@@ -167,7 +167,7 @@ class LoginHandler(SystemHostHandler):
             ex_str = str(ex)
             if ex_str.startswith("password does not match"):
                 ex_str = "username or password not correct"
-            self.set_status(500, f"authentication failed - {ex_str)}")
+            self.set_status(500, f"authentication failed - {ex_str}")
         self.set_custom_default_headers()
         self.finish()
         
@@ -262,14 +262,19 @@ class AppSettingHandler(SystemHostHandler):
         self.check_headers()
         try:
             value = JSONSerializer.generic_loads(self.request.body)
+            if field == 'remote-object-viewer':
+                field = 'remoteObjectViewer'
             async with self.disk_session() as session, session.begin():
                 session : asyncio_ext.AsyncSession
                 stmt = select(AppSettings).filter_by(field=field)
                 data = await session.execute(stmt)
                 setting : AppSettings = data.scalar()
                 new_value = copy.deepcopy(setting.value)
-                for key, val in value.items():
-                    new_value[key]= val
+                self.deepupdate_dict(new_value, value)
+                # for key, val in value.items():
+                #     if isinstance(val, dict):
+
+                #     new_value[key]= val
                 setting.value = new_value
                 await session.commit()
             self.set_status(200)
@@ -283,6 +288,14 @@ class AppSettingHandler(SystemHostHandler):
         self.set_header("Access-Control-Allow-Methods", "POST, PATCH, OPTIONS")
         self.set_custom_default_headers()
         self.finish()
+
+    def deepupdate_dict(self, d : dict, u : dict):
+        for k, v in u.items():
+            if isinstance(v, dict):
+                d[k] = self.deepupdate_dict(d.get(k, {}), v)
+            else:
+                d[k] = v
+        return d
 
     
 class PagesHandler(SystemHostHandler):
@@ -437,7 +450,7 @@ class MainHandler(SystemHostHandler):
         self.set_custom_default_headers()
         self.write("<p><h1>I am alive!</h1><p>")
         if self.swagger:
-            self.write(f"<p>Visit <a href={self.IP+'/swagger-ui'}>here</a> for my swagger doc</p>")
+            self.write(f"<p>Visit <a href={self.IP+'/swagger-ui'}>here</a> to login and use my swagger doc</p>")
         self.finish()
 
 

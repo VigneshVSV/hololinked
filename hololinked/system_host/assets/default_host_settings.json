@@ -1,7 +1,8 @@
 {
     "dashboards" : {
-                "deleteWithoutAsking" : true,
-                "showRecentlyUsed" : true
+        "deleteWithoutAsking" : true,
+        "showRecentlyUsed" : true,
+        "use" : true
     }, 
     "login" : {
         "footer" : "",
@@ -19,10 +20,13 @@
             "defaultFontSize" : 16
         },
         "logViewer" : {
-            "stringifyOutput" : false,
             "defaultMaxEntries" : 10,
-            "defaultOutputWindowSize" : 1000,
-            "defaultFontSize" : 16
+            "defaultWindowSize" : 500,
+            "defaultFontSize" : 16,
+            "defaultInterval" : 2
         }
+    },
+    "others" : {
+        "WOTTerminology" : false 
     }
 }
