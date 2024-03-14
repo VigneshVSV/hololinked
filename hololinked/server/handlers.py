@@ -22,8 +22,9 @@ class BaseHandler(RequestHandler):
     logger : logging.Logger
     application : Application
 
-    def initialize(self, resource : typing.Union[HTTPResource, ServerSentEvent]) -> None:
+    def initialize(self, resource : typing.Union[HTTPResource, ServerSentEvent], CORS : typing.List[str] = []) -> None:
         self.resource = resource
+        self.CORS = CORS
 
     def set_headers(self):
         raise NotImplementedError("implement set headers in child class to call it",
@@ -53,76 +54,70 @@ class BaseHandler(RequestHandler):
 
 class RPCHandler(BaseHandler):
 
-    def set_headers(self):
-        self.set_status(200)
-        self.set_header("Content-Type" , "application/json")  
-
-
+    
     async def get(self):
-        if 'GET' not in self.resource.instructions:
-            self.set_status(404)
-        else:
-            self.set_headers()
-            await self.handle_through_remote_object('GET')        
+        await self.handled_through_remote_object('GET')    
         self.finish()
 
     async def post(self):
-        if 'POST' not in self.resource.instructions:
-            self.set_status(404, "not found")
-        else:
-            self.set_headers()
-            await self.handle_through_remote_object()        
+        await self.handled_through_remote_object('POST')
         self.finish()
     
     async def patch(self):
-        if 'PATCH' not in self.resource.instructions:
-            self.set_status(404, "not found")
-        else:
-            self.set_headers()
-            await self.handle_through_remote_object()        
+        await self.handled_through_remote_object('PATCH')        
         self.finish()
     
     async def put(self):
-        if 'PUT' not in self.resource.instructions:
-            self.set_status(404, "not found")
-        else:
-            self.set_headers()
-            await self.handle_through_remote_object()        
+        await self.handle_through_remote_object('PUT')        
         self.finish()
     
     async def delete(self):
-        if 'DELETE' not in self.resource.instructions:
-            self.set_status(404, "not found")
-        else:
-            self.set_headers()
-            await self.handle_through_remote_object()        
+        await self.handle_through_remote_object('DELETE')  
         self.finish()
+
+    def set_custom_default_headers(self):
+        self.set_status(200)
+        self.set_header("Content-Type" , "application/json")    
+        self.set_header("Access-Control-Allow-Credentials", "true")
+    
+    @property
+    def has_access_control(self):
+        return True
+        origin = self.request.headers.get("Origin")
+        if origin is not None and (origin in self.CORS or origin + '/' in self.CORS):
+            self.set_header("Access-Control-Allow-Origin", origin)
 
     async def options(self):
         self.set_status(204)
         self.add_header("Access-Control-Allow-Origin", self.clients)
         self.set_header("Access-Control-Allow-Headers", "*")
-        self.set_header("Access-Control-Allow-Methods", ', '.join(self.resource.method))
+        self.set_header("Access-Control-Allow-Methods", ', '.join(self.resource.instructions.keys()))
         self.finish()
     
 
-    async def handle_through_remote_object(self, method) -> None:
-        try:
-            arguments = self.prepare_arguments()
-            context = dict(fetch_execution_logs=arguments.pop('fetch_execution_logs', False))
-            timeout = arguments.pop('timeout', None)
-            if self.resource.request_as_argument:
-                arguments['request'] = self.request
-            reply = await self.zmq_client_pool.async_execute(self.resource.instance_name, 
-                                    self.resource.instructions.__dict__[method], arguments,
-                                    context=context, raise_client_side_exception=True, 
-                                    server_timeout=timeout, client_timeout=None) # type: ignore
-            # message mapped client pool currently strips the data part from return message
-            # and provides that as reply directly 
-        except Exception as ex:
-            reply = self.json_serializer.dumps(format_exception_as_json(ex))
-        if reply:
-            self.write(reply)
+    async def handle_through_remote_object(self, http_method : str) -> None:
+        if http_method not in self.resource.instructions:
+            self.set_status(404, "not found")
+        elif self.has_access_control:
+            try:
+                arguments = self.prepare_arguments()
+                context = dict(fetch_execution_logs=arguments.pop('fetch_execution_logs', False))
+                timeout = arguments.pop('timeout', None)
+                if self.resource.request_as_argument:
+                    arguments['request'] = self.request
+                reply = await self.zmq_client_pool.async_execute(self.resource.instance_name, 
+                                        self.resource.instructions.__dict__[http_method], arguments,
+                                        context=context, raise_client_side_exception=True, 
+                                        server_timeout=timeout, client_timeout=None) # type: ignore
+                self.set_custom_default_headers()
+                # message mapped client pool currently strips the data part from return message
+                # and provides that as reply directly 
+            except Exception as ex:
+                reply = self.json_serializer.dumps(format_exception_as_json(ex))
+            if reply:
+                self.write(reply)
+        else:
+            self.set_status(403, "not autheticated")    
         
 
 

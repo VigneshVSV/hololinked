@@ -119,6 +119,9 @@ class ServerTypes(Enum):
        
 
 class HTTPServerTypes(StrEnum):
+    """
+    types of HTTP server
+    """
 
     SYSTEM_HOST = 'SYSTEM_HOST'
     REMOTE_OBJECT_SERVER = 'REMOTE_OBJECT_SERVER'
