@@ -1,14 +1,21 @@
+import asyncio
 import logging
+import socket
 import ssl
 import typing
 from tornado import ioloop
 from tornado.web import Application
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+
+from hololinked.server.constants import HTTPServerTypes
 # from tornado_http2.server import Server as TornadoHTTP2Server 
+
 
 from ..param import Parameterized
 from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector, 
                     TypedList, String)
+from ..server.webserver_utils import get_IP_from_interface
 from .utils import create_default_logger, run_coro_sync
 from .serializers import JSONSerializer
 from .zmq_message_brokers import MessageMappedZMQClientPool
@@ -78,6 +85,7 @@ class HTTPServer(Parameterized):
             network_interface=network_interface,
             request_handler=request_handler
         )
+        self._type = HTTPServerTypes.REMOTE_OBJECT_SERVER
         
 
     @property
@@ -98,24 +106,61 @@ class HTTPServer(Parameterized):
         BaseHandler.zmq_client_pool = self.zmq_client_pool
         BaseHandler.json_serializer = self.serializer
         BaseHandler.logger = self.logger
-        BaseHandler.clients = ', '.join(self.allowed_clients)
+        BaseHandler.clients = ', '.join(self.allowed_clients) if self.allowed_clients is not None else []
         BaseHandler.application = self.app
 
-        return True
-
-
-    def listen(self) -> None:
-        assert self.all_ok, 'HTTPServer all is not ok before starting' 
-        # Will always be True or cause some other exception   
-        self.event_loop = ioloop.IOLoop.current()
-        self.event_loop.add_future(RemoteObjectsHandler.connect_to_remote_object(
-            [client for client in self.zmq_client_pool]))
+        event_loop = asyncio.get_event_loop()
+        # self.event_loop.add_future(RemoteObjectsHandler.connect_to_remote_object(
+        #     [client for client in self.zmq_client_pool]))
+        event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
         
         if self.protocol_version == 2:
             raise NotImplementedError("Current HTTP2 is not implemented.")
             self.server = TornadoHTTP2Server(router, ssl_options=self.ssl_context)
         else:
             self.server = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)
+
+        return True
+    
+
+    async def subscribe_to_host(self):
+        if self.host is None:
+            return
+        client = AsyncHTTPClient()
+        for i in range(300): # try for five minutes
+            try:
+                res = await client.fetch(HTTPRequest(
+                        url=f"{self.host}/subscribers",
+                        method='POST',
+                        body=JSONSerializer.generic_dumps(dict(
+                                hostname=socket.gethostname(),
+                                IPAddress=get_IP_from_interface(self.network_interface), 
+                                port=self.port, 
+                                type=self._type,
+                                https=self.ssl_context is not None 
+                            )),
+                        validate_cert=False,
+                        headers={"content-type" : "application/json"}
+                    ))
+            except Exception as ex:
+                self.logger.error(f"Could not subscribe to host {self.host}. error : {str(ex)}, error type : {type(ex)}.")
+                if i >= 299:
+                    raise ex from None
+            else: 
+                if res.code in [200, 201]:
+                    self.logger.info(f"subsribed successfully to host {self.host}")
+                    break
+                elif i >= 299:
+                    raise RuntimeError(f"could not subsribe to host {self.host}. response {JSONSerializer.generic_loads(res.body)}")
+            await asyncio.sleep(1)
+        # we lose the client anyway so we close it. if we decide to reuse the client, changes needed
+        client.close() 
+
+
+    def listen(self) -> None:
+        assert self.all_ok, 'HTTPServer all is not ok before starting' 
+        # Will always be True or cause some other exception   
+        self.event_loop = ioloop.IOLoop.current()
         self.server.listen(port=self.port, address=self.address)    
         self.logger.info(f'started webserver at {self._IP}, ready to receive requests.')
         self.event_loop.start()

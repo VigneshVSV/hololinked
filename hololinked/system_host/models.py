@@ -48,15 +48,16 @@ class Server(HololinkedHostTableBase, MappedAsDataclass):
     type : Mapped[str] = mapped_column(String)
     port : Mapped[int] = mapped_column(Integer)
     IPAddress : Mapped[str] = mapped_column(String)
-    remote_objects : Mapped[typing.List[str]] = mapped_column(ARRAY(String))
     https : Mapped[bool] = mapped_column(Boolean) 
-    qualifiedIP : Mapped[str] = field(init = False)
-
-    def __post_init__(self):
-        self.qualifiedIP = '{}:{}'.format(self.hostname, self.port)
-
+  
     def json(self):
-        return asdict(self)
+        return {
+            "hostname" : self.hostname,
+            "type" : self.type, 
+            "port" : self.port, 
+            "IPAddress" : self.IPAddress,
+            "https" : self.https
+        }
     
 class RemoteObjectInformation(HololinkedHostTableBase, MappedAsDataclass):
     __tablename__ = "remote_objects"
@@ -71,7 +72,15 @@ class RemoteObjectInformation(HololinkedHostTableBase, MappedAsDataclass):
     level_type     : Mapped[str] = mapped_column(String)
 
     def json(self):
-        return asdict(self)
+        return {
+            "instance_name" : self.instance_name,
+            "class_name" : self.class_name,
+            "script" : self.script,
+            "kwargs" : self.kwargs,
+            "eventloop_instance_name" : self.eventloop_instance_name,
+            "http_server" : self.http_server,
+            "level" : self.level, 
+        }
     
 
 

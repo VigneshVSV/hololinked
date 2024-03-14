@@ -1,4 +1,5 @@
 import os
+import socket
 import typing
 import copy
 from typing import List
@@ -8,13 +9,14 @@ from sqlalchemy import select, delete, update
 from sqlalchemy.orm import Session
 from sqlalchemy.ext import asyncio as asyncio_ext
 from sqlalchemy.exc import SQLAlchemyError
-from tornado.web import RequestHandler, HTTPError, authenticated
+from tornado.web import RequestHandler, HTTPError, authenticated 
+
 
 from .models import *
 from ..server.serializers import JSONSerializer
 from ..server.config import global_config
-from ..server.utils import uuid4_in_bytes 
-
+from ..server.utils import uuid4_in_bytes
+from ..server.webserver_utils import get_IP_from_interface
 
 
 def for_authenticated_user(method):
@@ -39,7 +41,8 @@ class SystemHostHandler(RequestHandler):
         self.disk_session = disk_session
         self.mem_session = mem_session
 
-    def check_headers(self):
+    @property
+    def headers_ok(self):
         """
         check suitable values for headers before processing the request
         """
@@ -47,6 +50,8 @@ class SystemHostHandler(RequestHandler):
         if content_type and content_type != "application/json":
             self.set_status(400, "request body is not JSON.")
             self.finish()
+            return False 
+        return True
 
     @property
     def current_user_valid(self) -> bool:
@@ -132,7 +137,8 @@ class LoginHandler(SystemHostHandler):
     performs login and supplies a signed cookie for session
     """
     async def post(self):
-        self.check_headers()
+        if not self.headers_ok: 
+            return
         try:
             body = JSONSerializer.generic_loads(self.request.body)
             email = body["email"]
@@ -182,7 +188,8 @@ class LogoutHandler(SystemHostHandler):
 
     @for_authenticated_user
     async def post(self):
-        self.check_headers()
+        if not self.headers_ok: 
+            return
         try:
             if not self.current_user_valid:
                 self.set_status(409, "not a valid user to logout")
@@ -206,12 +213,37 @@ class LogoutHandler(SystemHostHandler):
         self.set_header("Access-Control-Allow-Methods", "POST, OPTIONS")
         
 
+class WhoAmIHandler(SystemHostHandler):
+
+    @for_authenticated_user
+    async def get(self):
+        
+        with self.mem_session() as session:
+            session : Session
+            stmt = select(UserSession).filter_by(session_key=user)
+            data = session.execute(stmt)
+            data = data.scalars().all()
+    
+    
+            user = self.get_current_user() 
+            with self.mem_session() as session:
+                session : Session 
+                stmt = delete(UserSession).filter_by(session_key=user)
+                result = session.execute(stmt)
+                if result.rowcount != 1:
+                    self.set_status(500, "found user but could not logout") # never comes here
+                session.commit()
+            self.set_status(204, "logged out")
+            self.clear_cookie("user")   
+
+
 
 class AppSettingsHandler(SystemHostHandler):
 
     @for_authenticated_user
     async def get(self, field : typing.Optional[str] = None):
-        self.check_headers()
+        if not self.headers_ok:
+            return  
         try:
             async with self.disk_session() as session:
                 session : asyncio_ext.AsyncSession
@@ -239,7 +271,8 @@ class AppSettingHandler(SystemHostHandler):
 
     @for_authenticated_user
     async def post(self):
-        self.check_headers()
+        if not self.headers_ok: 
+            return
         try:
             value = JSONSerializer.generic_loads(self.request.body["value"])
             async with self.disk_session() as session:
@@ -259,7 +292,8 @@ class AppSettingHandler(SystemHostHandler):
 
     @for_authenticated_user
     async def patch(self, field : str):
-        self.check_headers()
+        if not self.headers_ok: 
+            return
         try:
             value = JSONSerializer.generic_loads(self.request.body)
             if field == 'remote-object-viewer':
@@ -271,10 +305,6 @@ class AppSettingHandler(SystemHostHandler):
                 setting : AppSettings = data.scalar()
                 new_value = copy.deepcopy(setting.value)
                 self.deepupdate_dict(new_value, value)
-                # for key, val in value.items():
-                #     if isinstance(val, dict):
-
-                #     new_value[key]= val
                 setting.value = new_value
                 await session.commit()
             self.set_status(200)
@@ -305,7 +335,8 @@ class PagesHandler(SystemHostHandler):
 
     @for_authenticated_user
     async def get(self):
-        self.check_headers()
+        if not self.headers_ok:
+            return 
         try:
             async with self.disk_session() as session:
                 session : asyncio_ext.AsyncSession
@@ -331,7 +362,8 @@ class PageHandler(SystemHostHandler):
 
     @for_authenticated_user
     async def post(self, name):
-        self.check_headers()
+        if not self.headers_ok:
+            return 
         try:
             data = JSONSerializer.generic_loads(self.request.body)
             # name = self.request.arguments
@@ -349,7 +381,8 @@ class PageHandler(SystemHostHandler):
 
     @for_authenticated_user
     async def put(self, name):
-        self.check_headers()
+        if not self.headers_ok:
+            return 
         try:
             updated_data = JSONSerializer.generic_loads(self.request.body)
             async with self.disk_session() as session, session.begin():
@@ -376,9 +409,10 @@ class PageHandler(SystemHostHandler):
 
     @for_authenticated_user
     async def delete(self, name):
-        self.check_headers()
+        if not self.headers_ok:
+            return 
         try:
-            async with self.disk_session() as session:
+            async with self.disk_session() as session, session.begin():
                 session : asyncio_ext.AsyncSession
                 stmt = delete(Pages).filter_by(name=name)
                 ret = await session.execute(stmt)
@@ -401,23 +435,83 @@ class PageHandler(SystemHostHandler):
 
 class SubscribersHandler(SystemHostHandler):
 
-    @for_authenticated_user
     async def post(self):
-        if self.request.headers["Content-Type"] == "application/json":
-            self.set_status(200)
-            server = SubscribedHTTPServers(**JSONSerializer.generic_loads(self.request.body))
+        if not self.headers_ok:
+            return 
+        try: 
+            server = Server(**JSONSerializer.generic_loads(self.request.body))
             async with self.disk_session() as session, session.begin():
+                session : asyncio_ext.AsyncSession
                 session.add(server)
                 await session.commit()
-            self.finish()
+            self.set_status(201)
+        except SQLAlchemyError as ex:
+            self.set_status(500, "Database error - check message on server")
+        except Exception as ex:
+            self.set_status(500, str(ex))
+        self.set_custom_default_headers()
+        self.finish()
 
-    @for_authenticated_user
     async def get(self):
-        self.set_status(200)
-        self.set_header("Content-Type", "application/json")
-        async with self.disk_session() as session:
-            result = select(Server)
-            self.write(JSONSerializer.generic_dumps(result.scalars().all()))
+        if not self.headers_ok:
+            return 
+        try: 
+            async with self.disk_session() as session, session.begin():
+                session : asyncio_ext.session
+                stmt = select(Server)
+                result = await session.execute(stmt)
+                serialized_data = JSONSerializer.generic_dumps([val[Server.__name__].json() for val in result.mappings().all()])
+            self.set_status(200)
+            self.set_header("Content-Type", "application/json")
+            self.write(serialized_data)
+        except SQLAlchemyError as ex:
+            self.set_status(500, "Database error - check message on server")
+        except Exception as ex: 
+            self.set_status(500, str(ex))
+        self.set_custom_default_headers()
+        self.finish()
+
+    async def put(self):
+        if not self.headers_ok:
+            return 
+        try: 
+            server = JSONSerializable.loads(self.request.body)
+            async with self.disk_session() as session, session.begin():
+                session : asyncio_ext.session
+                stmt = select(Server).filter_by(name=server.get("name", None))
+                result = (await session.execute(stmt)).mappings().all()
+                if len(result) == 0:
+                    self.set_status(404)
+                else: 
+                    result = result[0][Server.__name__] # type: Server
+                    await session.commit()            
+                    self.set_status(204)
+        except SQLAlchemyError as ex:
+            self.set_status(500, "Database error - check message on server")
+        except Exception as ex: 
+            self.set_status(500, str(ex))
+        self.set_custom_default_headers()
+        self.finish()
+
+    async def delete(self):
+        if not self.headers_ok:
+            return 
+        try: 
+            server = JSONSerializable.loads(self.request.body)
+            async with self.disk_session() as session, session.begin():
+                session : asyncio_ext.session
+                stmt = delete(Server).filter_by(name=server.get("name", None))
+                ret = await session.execute(stmt)
+            self.set_status(204)
+        except SQLAlchemyError as ex:
+            self.set_status(500, "Database error - check message on server")
+        except Exception as ex: 
+            self.set_status(500, str(ex))
+        self.set_custom_default_headers()
+        self.finish()
+        
+    def set_access_control_allow_methods(self) -> None:
+        self.set_header("access-control-allow-methods", "GET, POST, PUT, DELETE, OPTIONS")
 
 
 class SubscriberHandler(SystemHostHandler):
@@ -445,7 +539,8 @@ class MainHandler(SystemHostHandler):
         return super().initialize(CORS, disk_session, mem_session)
 
     async def get(self):
-        self.check_headers()
+        if not self.headers_ok: 
+            return
         self.set_status(200)
         self.set_custom_default_headers()
         self.write("<p><h1>I am alive!</h1><p>")
@@ -455,16 +550,21 @@ class MainHandler(SystemHostHandler):
 
 
 
+
+    
+
+
 __all__ = [
     SystemHostHandler.__name__,
     UsersHandler.__name__,
     AppSettingsHandler.__name__,
     AppSettingHandler.__name__,
     LoginHandler.__name__,
+    LogoutHandler.__name__,
+    WhoAmIHandler.__name__,
     PagesHandler.__name__,
     PageHandler.__name__,
     SubscribersHandler.__name__,
-    MainHandler.__name__,
-    LogoutHandler.__name__,
-    SwaggerUIHandler.__name__
+    SwaggerUIHandler.__name__,
+    MainHandler.__name__
 ]

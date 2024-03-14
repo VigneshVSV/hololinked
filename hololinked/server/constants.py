@@ -118,4 +118,9 @@ class ServerTypes(Enum):
     POOL = b'POOL'
        
 
+class HTTPServerTypes(StrEnum):
+
+    SYSTEM_HOST = 'SYSTEM_HOST'
+    REMOTE_OBJECT_SERVER = 'REMOTE_OBJECT_SERVER'
+
 
