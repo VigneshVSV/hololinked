@@ -272,7 +272,7 @@ class EventLoop(RemoteObject):
             action = instruction_str.split('/')[-1]
             parameter : RemoteParameter = resource.obj
             owner_inst : RemoteObject = resource.bound_obj
-            if action == WRITE: 
+            if action == "WRITE": 
                 if resource.state is None or (hasattr(instance, 'state_machine') and  
                                         instance.state_machine.current_state in resource.state):
                     return parameter.__set__(owner_inst, arguments["value"])

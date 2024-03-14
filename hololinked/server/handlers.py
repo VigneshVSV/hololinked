@@ -34,10 +34,11 @@ class BaseHandler(RequestHandler):
         merges all arguments to a single JSON body (for example, to provide it to 
         method execution as parameters)
         """
-        try:
-            arguments = self.json_serializer.loads(self.request.arguments)
-        except JSONDecodeError:
-            arguments = {}
+        # try:
+        #     print(self.request.arguments)
+        #     arguments = self.json_serializer.loads(self.request.arguments)
+        # except JSONDecodeError:
+        arguments = {}
         if len(self.request.query_arguments) >= 1:
             for key, value in self.request.query_arguments.items():
                 if len(value) == 1:
@@ -58,15 +59,15 @@ class RPCHandler(BaseHandler):
 
 
     async def get(self):
-        if not self.resource.method == 'GET':
+        if 'GET' not in self.resource.instructions:
             self.set_status(404)
         else:
             self.set_headers()
-            await self.handle_through_remote_object()        
+            await self.handle_through_remote_object('GET')        
         self.finish()
 
     async def post(self):
-        if not self.resource.method == 'POST':
+        if 'POST' not in self.resource.instructions:
             self.set_status(404, "not found")
         else:
             self.set_headers()
@@ -74,7 +75,7 @@ class RPCHandler(BaseHandler):
         self.finish()
     
     async def patch(self):
-        if not self.resource.method == 'PATCH':
+        if 'PATCH' not in self.resource.instructions:
             self.set_status(404, "not found")
         else:
             self.set_headers()
@@ -82,7 +83,7 @@ class RPCHandler(BaseHandler):
         self.finish()
     
     async def put(self):
-        if not self.resource.method == 'PUT':
+        if 'PUT' not in self.resource.instructions:
             self.set_status(404, "not found")
         else:
             self.set_headers()
@@ -90,7 +91,7 @@ class RPCHandler(BaseHandler):
         self.finish()
     
     async def delete(self):
-        if not self.resource.method == 'DELETE':
+        if 'DELETE' not in self.resource.instructions:
             self.set_status(404, "not found")
         else:
             self.set_headers()
@@ -105,7 +106,7 @@ class RPCHandler(BaseHandler):
         self.finish()
     
 
-    async def handle_through_remote_object(self) -> None:
+    async def handle_through_remote_object(self, method) -> None:
         try:
             arguments = self.prepare_arguments()
             context = dict(fetch_execution_logs=arguments.pop('fetch_execution_logs', False))
@@ -113,7 +114,7 @@ class RPCHandler(BaseHandler):
             if self.resource.request_as_argument:
                 arguments['request'] = self.request
             reply = await self.zmq_client_pool.async_execute(self.resource.instance_name, 
-                                    self.resource.instruction, arguments,
+                                    self.resource.instructions.__dict__[method], arguments,
                                     context=context, raise_client_side_exception=True, 
                                     server_timeout=timeout, client_timeout=None) # type: ignore
             # message mapped client pool currently strips the data part from return message
@@ -236,8 +237,8 @@ class RemoteObjectsHandler(BaseHandler):
         await self.connect_to_remote_object()
         self.finish()
 
-    
-    async def connect_to_remote_object(self, clients : typing.List[AsyncZMQClient]):
+    @classmethod
+    async def connect_to_remote_object(self, clients : typing.List[AsyncZMQClient], request_handler = None):
         resources = dict()
         for client in clients:
             await client.handshake_complete()
@@ -250,7 +251,8 @@ class RemoteObjectsHandler(BaseHandler):
         
         handlers = []
         for route, http_resource in resources.items():
-            handlers.append((route, self.request_handler, {'resource' : http_resource}))
+            if http_resource["what"] != "EVENT":
+                handlers.append((route, request_handler or self.request_handler, {'resource' : HTTPResource(**http_resource)}))
             """
             for handler based tornado rule matcher, the Rule object has following
             signature

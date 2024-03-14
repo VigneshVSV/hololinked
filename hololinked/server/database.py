@@ -24,6 +24,30 @@ class SerializedParameter(MappedAsDataclass, RemoteObjectTableBase):
     name : Mapped[str] = mapped_column(String)
     serialized_value : Mapped[bytes] = mapped_column(LargeBinary) 
 
+
+class RemoteObjectInformation(MappedAsDataclass, RemoteObjectTableBase):
+    __tablename__ = "remote_objects"
+
+    instance_name  : Mapped[str] = mapped_column(String, primary_key=True)
+    class_name     : Mapped[str] = mapped_column(String)
+    script         : Mapped[str] = mapped_column(String)
+    kwargs         : Mapped[JSONSerializable] = mapped_column(JSON)
+    eventloop_instance_name : Mapped[str] = mapped_column(String)
+    http_server    : Mapped[str] = mapped_column(String)
+    level          : Mapped[int] = mapped_column(Integer)
+    level_type     : Mapped[str] = mapped_column(String)
+
+    def json(self):
+        return {
+            "instance_name" : self.instance_name,
+            "class_name" : self.class_name,
+            "script" : self.script,
+            "kwargs" : self.kwargs,
+            "eventloop_instance_name" : self.eventloop_instance_name,
+            "http_server" : self.http_server,
+            "level" : self.level, 
+        }
+
 @dataclass 
 class DeserializedParameter: # not part of database
     name : str 

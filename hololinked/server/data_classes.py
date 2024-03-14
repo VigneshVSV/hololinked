@@ -125,7 +125,7 @@ class RemoteResource:
         return json_dict                 
     
 
-
+@dataclass
 class HTTPMethodInstructions:
     GET :  typing.Optional[str] = field(default=None)
     POST :  typing.Optional[str] = field(default=None)
@@ -133,6 +133,11 @@ class HTTPMethodInstructions:
     DELETE :  typing.Optional[str] = field(default=None)
     PATCH : typing.Optional[str] = field(default=None) 
 
+    def json(self):
+        return asdict(self)
+    
+    def __contains__(self, value):
+        return value in self.__dict__ 
 
 @dataclass
 class HTTPResource:
@@ -172,8 +177,11 @@ class HTTPResource:
         self.instance_name = instance_name
         self.fullpath = fullpath
         self.request_as_argument = request_as_argument
-        self.instruction = HTTPMethodInstructions(**instructions)
-    
+        if instructions.get('instructions', None):
+            self.instructions = HTTPMethodInstructions(**instructions.get('instructions', None))
+        else: 
+            self.instructions = HTTPMethodInstructions(**instructions)
+
     def __getstate__(self):
         return self.json()
     
@@ -190,7 +198,7 @@ class HTTPResource:
             "what" : self.what, 
             "instance_name" : self.instance_name,
             'fullpath' : self.fullpath,
-            "instruction" : self.instruction,
+            "instructions" : self.instructions,
             "request_as_argument" : self.request_as_argument
         }
     

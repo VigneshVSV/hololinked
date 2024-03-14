@@ -6,7 +6,8 @@ import typing
 from tornado import ioloop
 from tornado.web import Application
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
-from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest 
+from tornado.httputil import HTTPServerRequest
 
 from hololinked.server.constants import HTTPServerTypes
 # from tornado_http2.server import Server as TornadoHTTP2Server 
@@ -77,7 +78,7 @@ class HTTPServer(Parameterized):
             host=host,
             logger=logger, 
             log_level=log_level,
-            serializer=serializer, 
+            serializer=serializer or JSONSerializer(), 
             protocol_version=protocol_version,
             certfile=certfile, 
             keyfile=keyfile,
@@ -110,9 +111,10 @@ class HTTPServer(Parameterized):
         BaseHandler.application = self.app
 
         event_loop = asyncio.get_event_loop()
-        # self.event_loop.add_future(RemoteObjectsHandler.connect_to_remote_object(
-        #     [client for client in self.zmq_client_pool]))
+        event_loop.call_soon(lambda : asyncio.create_task(RemoteObjectsHandler.connect_to_remote_object(
+                    [client for client in self.zmq_client_pool], request_handler=self.request_handler)))
         event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
+        event_loop.call_soon(lambda : asyncio.create_task(self.zmq_client_pool.poll()) )
         
         if self.protocol_version == 2:
             raise NotImplementedError("Current HTTP2 is not implemented.")

@@ -13,7 +13,7 @@ from enum import EnumMeta, StrEnum
 
 from ..param.parameterized import Parameterized, ParameterizedMetaclass 
 from .constants import (CallableType, LOGLEVEL, ZMQ_PROTOCOLS, HTTP_METHODS, ResourceOperations, ResourceTypes)
-from .database import RemoteObjectDB
+from .database import RemoteObjectDB, RemoteObjectInformation
 from .serializers import *
 from .exceptions import BreakInnerLoop
 from .decorators import remote_method
@@ -104,7 +104,7 @@ class StateMachine:
         for state, objects in self.machine.items():
             if state in self:
                 for resource in objects:
-                    if hasattr(resource, 'scada_info'):
+                    if hasattr(resource, '_remote_info'):
                         assert isinstance(resource._remote_info, RemoteResourceInfoValidator)
                         if resource._remote_info.iscallable and resource._remote_info.obj_name not in owner_methods: # type: ignore
                             raise AttributeError("Given object {} for state machine does not belong to class {}".format(
@@ -276,7 +276,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
                         doc="GUI specified here will become visible at GUI tab of hololinked-portal dashboard tool") # type: typing.Optional[ReactApp]
     
 
-    def __new__(cls):
+    def __new__(cls, **kwargs):
         """
         custom defined __new__ method to assign some important attributes at instance creation time directly instead of 
         super().__init__(instance_name = val1 , users_own_kw_argument1 = users_val1, ..., users_own_kw_argumentn = users_valn) 
@@ -345,8 +345,8 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
                                             what=ResourceTypes.CALLABLE,
                                             instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
                                             fullpath=fullpath,
-                                            request_as_argument=remote_info.request_as_argument 
-                                            **{http_method : fullpath},
+                                            request_as_argument=remote_info.request_as_argument,
+                                            **{ remote_info.http_method[0] : fullpath },
                                         )
                 rpc_resources[fullpath] = RPCResource(
                                                 what=ResourceTypes.CALLABLE,
@@ -367,8 +367,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
             # above assertion is only a typing convenience
             resource._owner = self
             resource._prepare_resources()                 
-            for http_method, resources in resource.httpserver_resources.items():
-                httpserver_resources[http_method].update(resources)
+            httpserver_resources.update(resource.httpserver_resources)
             rpc_resources.update(resource.rpc_resources)
             instance_resources.update(resource.instance_resources)
         # Events
@@ -379,7 +378,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
             resource._owner = self
             resource._unique_event_name = bytes(f"{self._full_URL_path_prefix}{resource.URL_path}", encoding='utf-8')
             resource.publisher = self._event_publisher                
-            httpserver_resources[HTTP_METHODS.GET]['{}{}'.format(
+            httpserver_resources['{}{}'.format(
                         self._full_URL_path_prefix, resource.URL_path)] = ServerSentEvent(
                                                             # event URL_path has '/' prefix
                                                             what=ResourceTypes.EVENT,
@@ -435,16 +434,15 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
                 script_path = os.path.dirname(os.path.abspath(inspect.getfile(self.__class__)))
             except:
                 script_path = ''
-        return RemoteObjectDB.RemoteObjectInfo(
+        return RemoteObjectInformation(
                     instance_name  = self.instance_name, 
                     class_name     = self.__class__.__name__,
                     script         = script_path,
-                    http_server    = ConfigInfo.USER_MANAGED.name, 
-                    args           = ConfigInfo.USER_MANAGED.name, 
-                    kwargs         = ConfigInfo.USER_MANAGED.name,  
-                    eventloop_name = ConfigInfo.USER_MANAGED.name, 
-                    level          = ConfigInfo.USER_MANAGED.name, 
-                    level_type     = ConfigInfo.USER_MANAGED.name, 
+                    http_server    = "USER_MANAGED", 
+                    kwargs         = "USER_MANAGED",  
+                    eventloop_instance_name = "USER_MANAGED", 
+                    level          = "USER_MANAGED", 
+                    level_type     = "USER_MANAGED"
                 )  
     
 

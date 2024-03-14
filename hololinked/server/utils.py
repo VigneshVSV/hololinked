@@ -186,16 +186,14 @@ def run_method_somehow(method : typing.Union[typing.Callable, typing.Coroutine])
     """
     either schedule the coroutine or run it until its complete
     """
-    if not asyncio.iscoroutinefunction(method):
+    if not (asyncio.iscoroutinefunction(method) or asyncio.iscoroutine(method)):
         return method()
-    elif not asyncio.iscoroutine(method):
-        task = lambda : asyncio.create_task(method) #check later if lambda is necessary
-    else:
-        task = method
     eventloop = asyncio.get_event_loop()
     if eventloop.is_running():    
+        task = lambda : asyncio.create_task(method) # check later if lambda is necessary
         eventloop.call_soon(task)
     else:
+        task = method
         eventloop.run_until_complete(task)
 
 
