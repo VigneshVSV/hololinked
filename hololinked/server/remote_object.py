@@ -467,9 +467,9 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
     @events.getter
     def _get_events(self) -> typing.Dict[str, typing.Any]:
         return {
-            event._event_unique_str.decode() : dict(
+            event._unique_event_name.decode() : dict(
                 name = event.name,
-                instruction = event._event_unique_str.decode(),
+                instruction = event._unique_event_name.decode(),
                 owner = event.owner.__class__.__name__,
                 owner_instance_name =  event.owner.instance_name,
                 address = self.event_publisher.socket_address
@@ -505,25 +505,25 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
                     remote_info is not correct because the unbound method is used by multiple instances. 
                     """
                     gui_resources.parameters[path_without_RW]["owner_instance_name"] = remote_info.bound_obj.instance_name
-                    if isinstance(remote_info.obj, PlotlyFigure):
-                        gui_resources.parameters[path_without_RW]['default'] = None
-                        gui_resources.parameters[path_without_RW]['visualization'] = {
-                                'type' : 'plotly',
-                                'plot' : remote_info.obj.__get__(self, type(self)),
-                                'sources' : remote_info.obj.data_sources,
-                                'actions' : {
-                                    remote_info.obj._action_stub.id : remote_info.obj._action_stub
-                                },
-                        }
-                    elif isinstance(remote_info.obj, Image):
-                        gui_resources.parameters[path_without_RW]['default'] = None
-                        gui_resources.parameters[path_without_RW]['visualization'] = {
-                            'type' : 'sse-video',
-                            'sources' : remote_info.obj.data_sources,
-                            'actions' : {
-                                    remote_info.obj._action_stub.id : remote_info.obj._action_stub
-                                },
-                        }
+                    # if isinstance(remote_info.obj, PlotlyFigure):
+                    #     gui_resources.parameters[path_without_RW]['default'] = None
+                    #     gui_resources.parameters[path_without_RW]['visualization'] = {
+                    #             'type' : 'plotly',
+                    #             'plot' : remote_info.obj.__get__(self, type(self)),
+                    #             'sources' : remote_info.obj.data_sources,
+                    #             'actions' : {
+                    #                 remote_info.obj._action_stub.id : remote_info.obj._action_stub
+                    #             },
+                    #     }
+                    # elif isinstance(remote_info.obj, Image):
+                    #     gui_resources.parameters[path_without_RW]['default'] = None
+                    #     gui_resources.parameters[path_without_RW]['visualization'] = {
+                    #         'type' : 'sse-video',
+                    #         'sources' : remote_info.obj.data_sources,
+                    #         'actions' : {
+                    #                 remote_info.obj._action_stub.id : remote_info.obj._action_stub
+                    #             },
+                    #     }
         return gui_resources
 
        

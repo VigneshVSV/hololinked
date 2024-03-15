@@ -424,7 +424,7 @@ class RemoteClassParameters(ClassParameters):
         for param in objects.values():
             state = param.__getstate__()
             info[param.name] = dict(
-                scada_info = state.get("scada_info", None).create_dataclass(),
+                scada_info = state.get("_remote_info", None).to_dataclass(),
                 type = param.__class__.__name__,
                 owner = param.owner.__name__
             )
