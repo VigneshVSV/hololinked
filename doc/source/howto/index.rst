@@ -5,4 +5,6 @@ Quickstart & How Tos
    :maxdepth: 1
    :caption: Contents:
 
-   remote_object
+   basics
+   parameters/index
+  
