@@ -18,7 +18,7 @@ separate the concerns of GUI & device or integrate with web-browser for a modern
 based tools. |module-highlighted| is being developed with the following features in mind:  
  
 * being truly pythonic - all code in python & all features of python
-* reasonable integration with HTTP to take advantage of modern web practices and Javascript GUI frameworks like React
+* reasonable integration with HTTP to take advantage of modern web practices
 * easy to understand & setup
 * agnostic to system size & flexibility in topology
 * 30FPS 1280*1080*3 (8 bit) image streaming over HTTP
@@ -48,6 +48,7 @@ Please follow the documentation for examples & tutorials, how-to's and API refer
 
    installation
    examples/index
+   howto/index
    autodoc/index
    development_notes
 
@@ -60,5 +61,4 @@ Indices and tables
 * :ref:`search`
 
 
-
-last build : |today| CET
+last build : |today| UTC

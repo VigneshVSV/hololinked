@@ -1,7 +1,6 @@
 # routing ideas from https://www.tornadoweb.org/en/branch6.3/routing.html
 import typing
 import logging
-from json import JSONDecodeError
 from tornado.web import RequestHandler, StaticFileHandler, Application
 from tornado.iostream import StreamClosedError
 

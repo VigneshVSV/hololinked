@@ -1,4 +1,4 @@
-from ..server.remote_parameter import RemoteParameter as property
+from ..server.remote_parameter import RemoteParameter as Property
+from ..server.remote_parameters import *
 
-
-__all__ = ['property']
+__all__ = ['Property']

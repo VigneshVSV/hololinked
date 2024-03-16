@@ -340,3 +340,6 @@ class GUIResources:
 
     def json(self): 
         return asdict(self)
+    
+    def build(self, instance):
+        pass 

@@ -756,7 +756,7 @@ class RemoteObject(RemoteSubobject):
     def query(self, info : typing.Union[str, typing.List[str]]) -> typing.Any:
         raise NotImplementedError("arbitrary quering of {} currently not possible".format(self.__class__.__name__))
 
-    def run(self, expose_eventloop : bool = False):
+    def run(self, expose_eventloop : bool = False, http_server = None):
         from .eventloop import EventLoop
         e = EventLoop(instance_name=f'{self.instance_name}/eventloop', remote_objects=[self], log_level=self.logger.level,
                     rpc_serializer=self.rpc_serializer, json_serializer=self.json_serializer)

@@ -28,6 +28,12 @@ class VersionInfo:
 class Link:
     pass 
 
+class Form:
+    pass
+
+class SecurityScheme:
+    pass 
+
 @dataclass
 class ThingDescription:
     """
@@ -51,5 +57,8 @@ class ThingDescription:
     actions : typing.List[ActionDescription]
     events : typing.List[EventDescription]
     links : typing.Optional[typing.List[Link]] 
-    securityDefinitions : typing.Dict[str, typing.Dict]
+    forms : typing.Optional[typing.List[Form]]
+    security : typing.Union[str, typing.List[str]]
+    securityDefinitions : SecurityScheme
+    
 
