@@ -55,15 +55,15 @@ class RPCHandler(BaseHandler):
 
     
     async def get(self):
-        await self.handled_through_remote_object('GET')    
+        await self.handle_through_remote_object('GET')    
         self.finish()
 
     async def post(self):
-        await self.handled_through_remote_object('POST')
+        await self.handle_through_remote_object('POST')
         self.finish()
     
     async def patch(self):
-        await self.handled_through_remote_object('PATCH')        
+        await self.handle_through_remote_object('PATCH')        
         self.finish()
     
     async def put(self):
@@ -78,6 +78,7 @@ class RPCHandler(BaseHandler):
         self.set_status(200)
         self.set_header("Content-Type" , "application/json")    
         self.set_header("Access-Control-Allow-Credentials", "true")
+        self.set_header("Access-Control-Allow-Origin", "*")
     
     @property
     def has_access_control(self):

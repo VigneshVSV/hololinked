@@ -119,7 +119,7 @@ class RemoteResource:
         # except AttributeError: # always causes attribute error when slots are True
         json_dict = {}
         for field in fields(self):
-            if field.name != 'obj':
+            if field.name != 'obj' and field.name != 'bound_obj':
                 json_dict[field.name] = getattr(self, field.name)
         # object.__setattr__(self, '_json', json_dict) # because object is frozen 
         return json_dict                 
