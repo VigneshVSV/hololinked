@@ -261,7 +261,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
     # remote paramerters
     httpserver_resources = RemoteParameter(readonly=True, URL_path='/resources/http-server', 
                         doc="object's resources exposed to HTTP client (through hololinked.server.HTTPServer)", 
-                        fget=lambda self: self._httpserver_resources ) # type: typing.Dict[str, typing.Dict[str, HTTPResource]]
+                        fget=lambda self: self._httpserver_resources ) # type: typing.Dict[str, HTTPResource]
     rpc_resources = RemoteParameter(readonly=True, URL_path='/resources/object-proxy', 
                         doc="object's resources exposed to RPC client, similar to HTTP resources but differs in details.", 
                         fget=lambda self: self._rpc_resources) # type: typing.Dict[str, typing.Any]
@@ -488,7 +488,8 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
         for instruction, remote_info in self.instance_resources.items(): 
             if remote_info.iscallable:
                 gui_resources.methods[instruction] = self.rpc_resources[instruction].json() 
-                gui_resources.methods[instruction]["remote_info"] = remote_info.json() 
+                gui_resources.methods[instruction]["remote_info"] = self.httpserver_resources[instruction].json() 
+                gui_resources.methods[instruction]["remote_info"]["http_method"] = list(self.httpserver_resources[instruction].json()["instructions"].supported_methods())[0]
                 # to check - apparently the recursive json() calling does not reach inner depths of a dict, 
                 # therefore we call json ourselves
                 gui_resources.methods[instruction]["owner"] = self.rpc_resources[instruction].qualname.split('.')[0]
@@ -499,7 +500,9 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
                 path_without_RW = instruction.rsplit('/', 1)[0]
                 if path_without_RW not in gui_resources.parameters:
                     gui_resources.parameters[path_without_RW] = self.__class__.parameters.webgui_info(remote_info.obj)[remote_info.obj.name]
+                    gui_resources.parameters[path_without_RW]["remote_info"] = gui_resources.parameters[path_without_RW]["remote_info"].json()
                     gui_resources.parameters[path_without_RW]["instruction"] = path_without_RW
+                    gui_resources.parameters[path_without_RW]["remote_info"]["http_method"] = list(self.httpserver_resources[path_without_RW].json()["instructions"].supported_methods())
                     """
                     The instruction part has to be cleaned up to be called as fullpath. Setting the full path back into 
                     remote_info is not correct because the unbound method is used by multiple instances. 

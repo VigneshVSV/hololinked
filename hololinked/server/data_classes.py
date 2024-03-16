@@ -136,6 +136,16 @@ class HTTPMethodInstructions:
     def json(self):
         return asdict(self)
     
+    def supported_methods(self):
+        try: 
+            return self._supported_methods
+        except: 
+            self._supported_methods = []
+            for method in ["GET", "POST", "PUT", "DELETE", "PATCH"]:
+                if isinstance(self.__dict__[method], str):
+                    self._supported_methods.append(method)
+            return self._supported_methods
+    
     def __contains__(self, value):
         return value in self.__dict__ 
 
