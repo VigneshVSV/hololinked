@@ -1,5 +1,5 @@
-Quickstart & How Tos 
-====================
+How To's 
+========
 
 .. toctree::
    :maxdepth: 1

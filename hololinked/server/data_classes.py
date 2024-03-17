@@ -133,6 +133,9 @@ class HTTPMethodInstructions:
     DELETE :  typing.Optional[str] = field(default=None)
     PATCH : typing.Optional[str] = field(default=None) 
 
+    def __post_init__(self):
+        self.supported_methods()
+
     def json(self):
         return asdict(self)
     
@@ -147,7 +150,7 @@ class HTTPMethodInstructions:
             return self._supported_methods
     
     def __contains__(self, value):
-        return value in self.__dict__ 
+        return value in self._supported_methods
 
 @dataclass
 class HTTPResource:
@@ -173,10 +176,8 @@ class HTTPResource:
     instance_name : str 
     fullpath : str
     request_as_argument : bool = field(default=False)
-    instructions : typing.Dict[str, str] = field(default_factory=dict)
+    instructions : HTTPMethodInstructions
    
-    # below are all dunders, when something else is added, be careful to remember to edit ObjectProxy logic when necessary
-    
     # 'what' can be an 'ATTRIBUTE' or 'CALLABLE' (based on isparameter or iscallable) and 'instruction' 
     # stores the instructions to be sent to the eventloop. 'instance_name' maps the instruction to a particular 
     # instance of RemoteObject
