@@ -2,9 +2,9 @@ How To's
 ========
 
 .. toctree::
-   :maxdepth: 1
-   :caption: Contents:
+    :maxdepth: 1
+    :caption: Contents:
 
-   basics
-   parameters/index
-  
+    basics
+    parameters/index
+    methods/index

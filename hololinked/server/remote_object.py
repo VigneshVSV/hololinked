@@ -8,7 +8,7 @@ import typing
 import datetime
 import zmq
 from collections import deque
-from enum import EnumMeta, StrEnum
+from enum import EnumMeta, Enum, StrEnum
 
 
 from ..param.parameterized import Parameterized, ParameterizedMetaclass 
@@ -57,7 +57,7 @@ class StateMachine:
     exists: bool
         internally computed, True if states and initial_states are valid 
     """
-    initial_state = ClassSelector(default=None, allow_None=True, constant=True, class_=(StrEnum, str))
+    initial_state = ClassSelector(default=None, allow_None=True, constant=True, class_=(Enum, str))
     exists = Boolean(default=False)
     states = ClassSelector(default=None, allow_None=True, constant=True, class_=(EnumMeta, tuple, list)) 
     on_enter = TypedDict(default=None, allow_None=True, key_type=str)
@@ -174,12 +174,12 @@ class StateMachine:
             self._state = value
             if push_event and self.push_state_change_event:
                 self.state_change_event.push({self.owner.instance_name : value})
-            if isinstance(previous_state, StrEnum):
+            if isinstance(previous_state, Enum):
                 previous_state = previous_state.name
             if previous_state in self.on_exit:
                 for func in self.on_exit[previous_state]: # type: ignore
                     func(self.owner)
-            if isinstance(value, StrEnum):
+            if isinstance(value, Enum):
                 value = value.name  
             if value in self.on_enter:
                 for func in self.on_enter[value]: # type: ignore

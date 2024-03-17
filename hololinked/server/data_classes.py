@@ -175,8 +175,8 @@ class HTTPResource:
     what : str 
     instance_name : str 
     fullpath : str
-    request_as_argument : bool = field(default=False)
     instructions : HTTPMethodInstructions
+    request_as_argument : bool = field(default=False)
    
     # 'what' can be an 'ATTRIBUTE' or 'CALLABLE' (based on isparameter or iscallable) and 'instruction' 
     # stores the instructions to be sent to the eventloop. 'instance_name' maps the instruction to a particular 

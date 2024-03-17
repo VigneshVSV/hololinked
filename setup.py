@@ -9,7 +9,7 @@ setuptools.setup(
     name="hololinked",
     version="0.1.0",
     author="Vignesh Vaidyanathan",
-    author_email="vignesh.vaidyanathan@physik.uni-muenchen.de",
+    author_email="vignesh.vaidyanathan@hololinked.dev",
     description="A ZMQ-based RPC tool-kit with built-in HTTP support for instrument control/data acquisition or controlling generic python objects.",
     long_description=long_description,
     long_description_content_type="text/markdown",

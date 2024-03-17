@@ -127,7 +127,7 @@ class Bytes(String):
 
 
 class IPAddress(RemoteParameter):
-
+    
     __slots__ = ['allow_localhost', 'allow_ipv4', 'allow_ipv6']
 
     def __init__(self, default : typing.Optional[str] = "0.0.0.0", *, allow_ipv4 : bool = True, allow_ipv6 : bool = True, 
@@ -357,6 +357,8 @@ class Number(RemoteParameter):
 
     """
 
+    type = 'number'
+
     __slots__ = ['bounds', 'inclusive_bounds', 'crop_to_bounds', 'dtype', 'step']
 
     def __init__(self, default : typing.Optional[typing.Union[float, int]] = 0.0, *, bounds : typing.Optional[typing.Tuple] = None, 
@@ -492,6 +494,7 @@ class Number(RemoteParameter):
 
 
 class Integer(Number):
+
     """Numeric Parameter required to be an Integer"""
 
     def __init__(self, default : typing.Optional[int] = 0, *, bounds : typing.Optional[typing.Tuple] = None, 
