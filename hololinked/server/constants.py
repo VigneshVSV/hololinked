@@ -5,6 +5,7 @@ from enum import StrEnum, IntEnum, Enum
 
 # types
 JSONSerializable = typing.Union[typing.Dict[str, typing.Any], list, str, int, float, None]
+JSON = typing.Dict[str, JSONSerializable]
 CallableType = (FunctionType, MethodType)
 
 # decorator constants 

@@ -1,4 +1,3 @@
-# routing ideas from https://www.tornadoweb.org/en/branch6.3/routing.html
 import typing
 import logging
 from tornado.web import RequestHandler, StaticFileHandler, Application
@@ -108,7 +107,8 @@ class RPCHandler(BaseHandler):
                 reply = await self.zmq_client_pool.async_execute(self.resource.instance_name, 
                                         self.resource.instructions.__dict__[http_method], arguments,
                                         context=context, raise_client_side_exception=True, 
-                                        server_timeout=timeout, client_timeout=None) # type: ignore
+                                        invokation_timeout=timeout, execution_timeout=None, 
+                                        self.resource.argument_schema) # type: ignore
                 self.set_custom_default_headers()
                 # message mapped client pool currently strips the data part from return message
                 # and provides that as reply directly 

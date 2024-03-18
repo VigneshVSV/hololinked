@@ -5,7 +5,7 @@ from types import FunctionType
 from inspect import iscoroutinefunction, getfullargspec
 
 from .data_classes import RemoteResourceInfoValidator
-from .constants import (USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS)
+from .constants import (USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, JSON)
 from .utils import wrap_text
 
 
@@ -47,7 +47,7 @@ def is_private_attribute(attr_name: str) -> bool:
 
     
 def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.POST, 
-            state : typing.Optional[typing.Union[str, Enum]] = None) -> typing.Callable:
+            state : typing.Optional[typing.Union[str, Enum]] = None, argument_schema : typing.Optional[JSON] = None) -> typing.Callable:
     """Use this function to decorate your methods to be accessible remotely.  
     
     Parameters
@@ -113,6 +113,7 @@ def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_MET
                 obj._remote_info.http_request_as_argument = True
             obj._remote_info.iscallable = True
             obj._remote_info.iscoroutine = iscoroutinefunction(obj)
+            obj._remote_info.argument_schema = argument_schema
             return original
         else:
             raise TypeError(

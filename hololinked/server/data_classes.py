@@ -7,8 +7,8 @@ import platform
 from enum import Enum
 from dataclasses import dataclass, asdict, field, fields
 
-from ..param.parameters import String, Boolean, Tuple, TupleSelector
-from .constants import (USE_OBJECT_NAME, HTTP_METHODS, REGEX, http_methods)
+from ..param.parameters import String, Boolean, Tuple, TupleSelector, TypedDict
+from .constants import (JSON, USE_OBJECT_NAME, HTTP_METHODS, REGEX, http_methods)
 from .path_converter import compile_path
 
 
@@ -56,6 +56,7 @@ class RemoteResourceInfoValidator:
     iscallable = Boolean(default=False)
     isparameter = Boolean(default=False)
     request_as_argument = Boolean(default=False)
+    argument_schema = TypedDict(default=None, allow_None=True, key_type=str)
  
     def __init__(self, **kwargs) -> None:
         """   
@@ -176,6 +177,7 @@ class HTTPResource:
     instance_name : str 
     fullpath : str
     instructions : HTTPMethodInstructions
+    argument_schema : typing.Optional[JSON]
     request_as_argument : bool = field(default=False)
    
     # 'what' can be an 'ATTRIBUTE' or 'CALLABLE' (based on isparameter or iscallable) and 'instruction' 
@@ -183,11 +185,12 @@ class HTTPResource:
     # instance of RemoteObject
                                 
     def __init__(self, *, what : str, instance_name : str, fullpath : str, request_as_argument : bool = False,
-                **instructions) -> None:
+                argument_schema : typing.Optional[JSON] = None, **instructions) -> None:
         self.what = what 
         self.instance_name = instance_name
         self.fullpath = fullpath
         self.request_as_argument = request_as_argument
+        self.argument_schema = argument_schema
         if instructions.get('instructions', None):
             self.instructions = HTTPMethodInstructions(**instructions.get('instructions', None))
         else: 
@@ -246,9 +249,10 @@ class RPCResource:
     qualname : str
     doc : typing.Optional[str]
     top_owner : bool 
+    argument_schema : typing.Optional[JSON]
 
     def __init__(self, *, what : str, instance_name : str, instruction : str, name : str,
-                qualname : str, doc : str, top_owner : bool) -> None:
+                qualname : str, doc : str, top_owner : bool, argument_schema : typing.Optional[JSON] = None) -> None:
         self.what = what 
         self.instance_name = instance_name
         self.instruction = instruction
@@ -256,6 +260,7 @@ class RPCResource:
         self.qualname = qualname
         self.doc = doc
         self.top_owner = top_owner
+        self.argument_schema = argument_schema
 
     def json(self):
         """

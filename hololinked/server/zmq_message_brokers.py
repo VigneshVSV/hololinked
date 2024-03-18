@@ -5,6 +5,7 @@ import zmq.asyncio
 import asyncio
 import logging
 import typing
+import jsonschema
 from uuid import uuid4
 from collections import deque
 from enum import Enum
@@ -12,7 +13,7 @@ from enum import Enum
 
 from .utils import create_default_logger, run_method_somehow, wrap_text
 from .config import global_config
-from .constants import ZMQ_PROTOCOLS, ServerTypes
+from .constants import JSON, ZMQ_PROTOCOLS, ServerTypes
 from .serializers import (JSONSerializer, PickleSerializer, BaseSerializer, 
                         SerpentSerializer, serializers)
                         # DillSerializer, 
@@ -1423,7 +1424,8 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         await self._handshake_event.wait()
        
     async def async_send_instruction(self, instruction : str, arguments : typing.Dict[str, typing.Any] = EMPTY_DICT, 
-                    timeout : typing.Optional[float] = None, context : typing.Dict[str, typing.Any] = EMPTY_DICT) -> bytes:
+                    timeout : typing.Optional[float] = None, context : typing.Dict[str, typing.Any] = EMPTY_DICT, 
+                    argument_schema : typing.Optional[JSON] = None) -> bytes:
         """
         send message to server. 
 
@@ -1455,6 +1457,8 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             a byte representation of message id
         """
         message = self.craft_instruction_from_arguments(instruction, arguments, timeout, context) 
+        if argument_schema:
+            jsonschema.validate(arguments, argument_schema)
         await self.socket.send_multipart(message)
         self.logger.debug("sent instruction '{}' to server '{}' with msg-id {}".format(instruction, 
                                                             self.server_instance_name, message[SM_INDEX_MESSAGE_ID]))
@@ -1481,7 +1485,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             
     async def async_execute(self, instruction : str, arguments : typing.Dict[str, typing.Any] = EMPTY_DICT, 
                         timeout : typing.Optional[float] = None, context : typing.Dict[str, typing.Any] = EMPTY_DICT, 
-                        raise_client_side_exception = False): 
+                        raise_client_side_exception = False, argument_schema : typing.Optional[JSON] = None): 
         """
         send an instruction and receive the reply for it. 
 
@@ -1500,7 +1504,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         message id : bytes
             a byte representation of message id
         """
-        await self.async_send_instruction(instruction, arguments, timeout, context)
+        await self.async_send_instruction(instruction, arguments, timeout, context, argument_schema)
         return await self.async_recv_reply(raise_client_side_exception)
     
     def exit(self) -> None:
@@ -1653,7 +1657,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
 
     async def async_send_instruction(self, instance_name : str, instruction : str, 
                 arguments : typing.Dict[str, typing.Any] = EMPTY_DICT, timeout : typing.Optional[float] = 3,
-                context : typing.Dict[str, typing.Any] = EMPTY_DICT) -> bytes:
+                context : typing.Dict[str, typing.Any] = EMPTY_DICT, argument_schema : typing.Optional[JSON] = None) -> bytes:
         """
         Send instruction to server with instance name. Replies are automatically polled & to be retrieved using 
         ``async_recv_reply()``
@@ -1675,7 +1679,8 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         message_id: bytes
             created message ID
         """
-        message_id = await self.pool[instance_name].async_send_instruction(instruction, arguments, timeout, context)
+        message_id = await self.pool[instance_name].async_send_instruction(instruction, arguments, timeout, context, 
+                                                                           argument_schema)
         event = self.event_pool.pop()
         self.events_map[message_id] = event 
         return message_id
@@ -1734,7 +1739,8 @@ class MessageMappedZMQClientPool(BaseZMQClient):
 
     async def async_execute(self, instance_name : str, instruction : str, arguments : typing.Dict[str, typing.Any] = EMPTY_DICT, 
                     *, context : typing.Dict[str, typing.Any] = EMPTY_DICT, raise_client_side_exception = False, 
-                    server_timeout : typing.Optional[float] = 3, client_timeout : typing.Optional[float] = None) -> typing.Dict[str, typing.Any]:
+                    invokation_timeout : typing.Optional[float] = 3, execution_timeout : typing.Optional[float] = None,
+                    argument_schema : typing.Optional[JSON] = None) -> typing.Dict[str, typing.Any]:
         """
         sends message and receives reply.
 
@@ -1751,17 +1757,17 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             see execution context definitions
         raise_client_side_exceptions: bool, default False
             raise exceptions from server on client side
-        server_timeout: float, default 3 
+        invokation_timeout: float, default 3 
             server side timeout
-        client_timeout: float, default None
+        execution_timeout: float, default None
             client side timeout, not the same as timeout passed to server, recommended to be None in general cases. 
             Server side timeouts ensure start of execution of instructions within specified timeouts and 
             drops execution altogether if timeout occured. Client side timeouts only wait for message to come within 
             the timeout, but do not gaurantee non-execution.  
-
         """
-        message_id = await self.async_send_instruction(instance_name, instruction, arguments, server_timeout, context)
-        return await self.async_recv_reply(message_id, False, raise_client_side_exception, client_timeout)
+        message_id = await self.async_send_instruction(instance_name, instruction, arguments, invokation_timeout, context, 
+                                                    argument_schema)
+        return await self.async_recv_reply(message_id, False, raise_client_side_exception, execution_timeout)
 
     def start_polling(self) -> None:
         """

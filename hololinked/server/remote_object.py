@@ -255,18 +255,17 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
                         doc="""Unique string identifier of the instance. This value is used for many operations,
                         for example - creating zmq socket address, tables in databases, and to identify the instance 
                         in the HTTP Server & webdashboard clients - 
-                        (http(s)://{domain and sub domain}/{instance name}). It is suggested to use  
-                        the class name along with a unique name {class name}/{some unique name}. Instance names must be unique
+                        (http(s)://{domain and sub domain}/{instance name}). Instance names must be unique
                         in your entire system.""") # type: str
     # remote paramerters
     httpserver_resources = RemoteParameter(readonly=True, URL_path='/resources/http-server', 
-                        doc="object's resources exposed to HTTP client (through hololinked.server.HTTPServer)", 
+                        doc="object's resources exposed to HTTP client (through ``hololinked.server.HTTPServer``)", 
                         fget=lambda self: self._httpserver_resources ) # type: typing.Dict[str, HTTPResource]
     rpc_resources = RemoteParameter(readonly=True, URL_path='/resources/object-proxy', 
                         doc="object's resources exposed to RPC client, similar to HTTP resources but differs in details.", 
                         fget=lambda self: self._rpc_resources) # type: typing.Dict[str, typing.Any]
     gui_resources : typing.Dict = RemoteParameter(readonly=True, URL_path='/resources/gui', 
-                        doc="""object's data read by scadapy webdashboard GUI client, similar to http_resources but differs 
+                        doc="""object's data read by hololinked-portal GUI client, similar to http_resources but differs 
                         in details.""") # type: typing.Dict[str, typing.Any]
     events = RemoteParameter(readonly=True, URL_path='/events', 
                         doc="returns a dictionary with two fields containing event name and event information") # type: typing.Dict[str, typing.Any]
@@ -277,24 +276,18 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
     
 
     def __new__(cls, **kwargs):
-        """
-        custom defined __new__ method to assign some important attributes at instance creation time directly instead of 
-        super().__init__(instance_name = val1 , users_own_kw_argument1 = users_val1, ..., users_own_kw_argumentn = users_valn) 
-        method. The lowest child's __init__ is always called first and  then the code reaches the __init__ of RemoteObject. 
-        Therefore, when the user passes arguments to his own RemoteObject descendent, they have to again pass some required 
-        information (like instance_name) to the __init__ of super() a second time with proper keywords.
-        To avoid this hassle, we create this __new__. super().__init__() in a descendent is still not optional though. 
-        """
+        # defines some internal fixed attributes
         obj = super().__new__(cls)
         # objects created by us that require no validation but cannot be modified are called _internal_fixed_attributes
         obj._internal_fixed_attributes = ['_internal_fixed_attributes', 'instance_resources', '_owner']        
         # objects given by user which we need to validate (mostly descriptors)
         return obj
-    
+
 
     def __init__(self, instance_name : str, **params):
         super().__init__(instance_name=instance_name, **params)
-        
+        # separates out instance name as a mandatory parameter so that the user forced to supply it.
+
 
     def __post_init__(self):
         self._internal_fixed_attributes : typing.List[str]
@@ -346,6 +339,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
                                             instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
                                             fullpath=fullpath,
                                             request_as_argument=remote_info.request_as_argument,
+                                            argument_schema=remote_info.argument_schema,
                                             **{ remote_info.http_method[0] : fullpath },
                                         )
                 rpc_resources[fullpath] = RPCResource(
@@ -355,7 +349,8 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
                                                 name=getattr(resource, '__name__'),
                                                 qualname=getattr(resource, '__qualname__'), 
                                                 doc=getattr(resource, '__doc__'),
-                                                top_owner=self._owner is None
+                                                top_owner=self._owner is None,
+                                                argument_schema=remote_info.argument_schema,
                                             )
                 instance_resources[fullpath] = remote_info.to_dataclass(obj=resource, bound_obj=self) 
         # Other remote objects 
@@ -406,7 +401,8 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
                                                     **{ 
                                                         read_http_method : fullpath+ResourceOperations.PARAMETER_READ,
                                                         write_http_method : fullpath+ResourceOperations.PARAMETER_WRITE
-                                                    }
+                                                    },
+                                                    argument_schema=remote_info.argument_schema,
                                                 )
                 rpc_resources[fullpath] = RPCResource(
                                 what=ResourceTypes.PARAMETER, 
@@ -416,7 +412,8 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
                                 name=remote_info.obj_name,
                                 qualname=self.__class__.__name__ + '.' + remote_info.obj_name,
                                 # qualname is not correct probably, does not respect inheritance
-                                top_owner=self._owner is None
+                                top_owner=self._owner is None,
+                                argument_schema=remote_info.argument_schema,
                             ) 
                 dclass = remote_info.to_dataclass(obj=parameter, bound_obj=self) 
                 instance_resources[fullpath+ResourceOperations.PARAMETER_READ] = dclass
@@ -539,17 +536,15 @@ class RemoteObject(RemoteSubobject):
 
     # local parameters
     logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, remote=False, 
-                        doc = """Logger object to print log messages, should be instance of logging.Logger(). default 
-                        logger is created if none is supplied.""") # type: logging.Logger
+                        doc = """Logger object to print log messages, should be instance of ``logging.Logger()``. Default 
+                        logger is created if none supplied.""") # type: logging.Logger
     rpc_serializer = ClassSelector(class_=(SerpentSerializer, JSONSerializer, PickleSerializer, str), # DillSerializer, 
                                 allow_None=True, default='serpent', remote=False,
-                                doc="""The serializer that will be used for passing messages in zmq. For custom data 
-                                    types which have serialization problems, you can subclass the serializers and implement 
-                                    your own serialization options. Recommended serializer for exchange messages between
-                                    Proxy clients and server is Serpent and for HTTP serializer and server is JSON.""") # type: BaseSerializer
+                                doc="""Serializer used for exchanging messages with RPC clients. Subclass to implement
+                                    your own serialization requirements.""") # type: BaseSerializer
     json_serializer  = ClassSelector(class_=JSONSerializer, default=None, allow_None=True, remote=False,
-                                doc = """Serializer used for sending messages between HTTP server and remote object,
-                                subclass JSONSerializer to implement undealt serialization options.""") # type: JSONSerializer
+                                doc = """Serializer used for exchanging messages with a HTTP server,
+                                subclass JSONSerializer to implement your own serialization requirements.""") # type: JSONSerializer
  
     
     def __init__(self, instance_name : str, logger : typing.Optional[logging.Logger] = None, log_level : typing.Optional[int] = None, 
