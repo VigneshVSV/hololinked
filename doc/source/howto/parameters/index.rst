@@ -15,11 +15,10 @@ Untyped Parameter
 
 To make a parameter take any value, use the base class ``RemoteParameter``
 
-.. literalinclude:: code/4.py
+.. literalinclude:: ../code/parameters/untyped.py
     :language: python
     :linenos:
-    :lines: 1-15
-
+  
 Typed Parameter 
 ---------------
 
@@ -83,6 +82,7 @@ Common arguments to all parameters
 * if ``allow_None`` is ``True``, parameter supports ``None`` apart from its own type
 * ``readonly`` (being ``True``) makes the parameter read-only or execute the getter method
 * ``constant`` (being ``True``), again makes the parameter read-only but can be set once if ``allow_None`` is ``True``. 
+
 This is useful the set the parameter once at ``__init__()`` but remain constant after that.
 
 ``default``, ``class_member``, ``fget``, ``fset`` & ``fdel``

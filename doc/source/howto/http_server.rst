@@ -7,7 +7,7 @@ one needs to start a instance of ``HTTPServer`` before ``run()``. When passed to
 the ``HTTPServer`` will communicate with the ``RemoteObject`` through the fastest means 
 possible - intra-process communication. 
 
-.. literalinclude:: code/2.py
+.. literalinclude:: code/rpc_cum_http_server.py
     :language: python
     :linenos:
     :lines: 1, 40-
@@ -18,7 +18,7 @@ interpreter lock will still allow only one thread at a time.
 One can store captured data in parameters & push events to supply clients with the measured 
 data: 
 
-.. literalinclude:: code/2.py
+.. literalinclude:: code/rpc_cum_http_server.py
     :language: python
     :linenos:
     :lines: 1-9, 15-21, 27-38
