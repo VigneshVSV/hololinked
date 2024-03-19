@@ -108,7 +108,7 @@ class RPCHandler(BaseHandler):
                                         self.resource.instructions.__dict__[http_method], arguments,
                                         context=context, raise_client_side_exception=True, 
                                         invokation_timeout=timeout, execution_timeout=None, 
-                                        self.resource.argument_schema) # type: ignore
+                                        argument_schema=self.resource.argument_schema) # type: ignore
                 self.set_custom_default_headers()
                 # message mapped client pool currently strips the data part from return message
                 # and provides that as reply directly 

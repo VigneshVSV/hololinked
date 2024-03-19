@@ -5,7 +5,7 @@ import zmq.asyncio
 import asyncio
 import logging
 import typing
-import jsonschema
+# import jsonschema
 from uuid import uuid4
 from collections import deque
 from enum import Enum
