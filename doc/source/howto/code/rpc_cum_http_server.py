@@ -10,7 +10,7 @@ class OceanOpticsSpectrometer(RemoteObject):
 
     serial_number = String(default=None, allow_None=True, constant=True, 
                         URL_path="/serial-number",
-                        doc="serial number of the spectrometer")
+                        doc="serial number of the spectrometer") # type: str
 
     def __init__(self, instance_name, serial_number, connect, **kwargs):
         super().__init__(instance_name=instance_name, **kwargs)
@@ -21,8 +21,12 @@ class OceanOpticsSpectrometer(RemoteObject):
                                 URL_path='/intensity/measurement-event')
 
     @remote_method(URL_path='/connect', http_method="POST")
-    def connect(self):
+    def connect(self, trigger_mode = None, integration_time = None):
         self.device = Spectrometer.from_serial_number(self.serial_number)
+        if trigger_mode:
+            self.device.trigger_mode(trigger_mode)
+        if integration_time:
+            self.device.integration_time_micros(integration_time)
               
     intensity = ClassSelector(class_=(numpy.ndarray, list), default=[], 
                     doc="captured intensity", readonly=True, 
@@ -41,6 +45,4 @@ class OceanOpticsSpectrometer(RemoteObject):
 if __name__ == '__main__':
     spectrometer = OceanOpticsSpectrometer(instance_name='spectrometer', 
                         serial_number='USB2+H15897', connect=True)
-    spectrometer.run(
-        http_server=HTTPServer(port=8080)
-    )
+    spectrometer.run()

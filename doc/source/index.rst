@@ -48,7 +48,7 @@ Please follow the documentation for examples & tutorials, how-to's and API refer
 
    installation
    examples/index
-   howto/index
+   How Tos <howto/index>
    autodoc/index
    development_notes
 
