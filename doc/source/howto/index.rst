@@ -79,7 +79,7 @@ it as the type of the client.
 .. literalinclude:: code/rpc_client.py 
     :language: python
     :linenos: 
-    :lines: 22-
+    :lines: 22-28
 
 For python to python, an interface definition language is not necessary as the client attributes, methods etc.
 will be constructed dynamically after locating the server. It is suggested to use type definitions instead.  

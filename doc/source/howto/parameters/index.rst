@@ -18,12 +18,15 @@ To make a parameter take any value, use the base class ``RemoteParameter``
 .. literalinclude:: ../code/parameters/untyped.py
     :language: python
     :linenos:
-    :lines: 1-14
+    :lines: 1-11
   
 The descriptor object (instance of ``RemoteParameter``) that performs the get-set operations & auto-allocation 
 of an internal instance variable for the parameter can be accessed by the instance under 
 ``self.parameters.descriptors["<parameter name>"]``. Expectedly, the value of the parameter must 
 be serializable to be read by the clients. Read the serializer section for further details & customization. 
+
+Custom Typed
+------------
 
 To support custom get & set methods so that an internal instance variable is not created automatically, 
 use the getter & setter decorator or pass a method to the fget & fset arguments of the parameter:
@@ -31,13 +34,13 @@ use the getter & setter decorator or pass a method to the fget & fset arguments 
 .. literalinclude:: ../code/parameters/untyped.py
     :language: python
     :linenos:
-    :lines: 1-10, 14-
+    :lines: 1-30
 
 
-Typed Parameter 
----------------
+Typed Parameters
+----------------
 
-The following tables summarizes parameters already existing in ``hololinked.server.remote_parameters``, 
+Certain typed parameters are already available in ``hololinked.server.remote_parameters``, 
 defined by ``param``. 
 
 .. list-table::
@@ -80,7 +83,7 @@ defined by ``param``.
         - 
     *   - datetime 
         - ``Date``
-        - 
+        - format
     *   - typed list 
         - ``TypedList``
         - typed appends, extends 
@@ -88,7 +91,17 @@ defined by ``param``.
         - ``TypedDict``, ``TypedKeyMappingsDict``
         - typed updates, assignments    
 
- 
+As an example:
+
+.. literalinclude:: ../code/parameters/typed.py 
+    :language: python
+    :linenos:
+
+When providing a custom setter for typed parameters, the value is internally validated before 
+passing to the setter method. The return value of getter method is never validated and 
+is left to the programmer's choice. 
+
+
 Common arguments to all parameters 
 ----------------------------------
 
