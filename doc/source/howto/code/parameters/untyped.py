@@ -20,7 +20,7 @@ class OceanOpticsSpectrometer(RemoteObject):
         try:
             return self._foo     
         except AttributeError:
-            self.parameters.descriptors["my_custom_typed_serilizable_parameter"].default 
+            self.parameters.descriptors["my_custom_typed_serializable_attribute"].default 
 
     @my_custom_typed_serializable_attribute.setter
     def set_param(self, value):
