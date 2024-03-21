@@ -46,7 +46,9 @@ For methods to be exposed on the network, one can use the ``remote_method`` deco
     :language: python
     :linenos:
     :lines: 3-9, 14-18, 20-28
-    
+
+Arbitrary signature is permitted and arguments are loosely typed in general. 
+
 To start a ``RemoteObject`` server, one can call the ``run()`` method 
 
 .. literalinclude:: code/rpc.py

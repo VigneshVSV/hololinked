@@ -1236,6 +1236,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                             client_type=client_type, **kwargs)
         BaseSyncZMQ.__init__(self)
         self.create_socket(server_instance_name, context, identity=identity, protocol=protocol, **kwargs)
+        self.protocol = protocol
         self._terminate_context = context == None
         if handshake:
             self.handshake()

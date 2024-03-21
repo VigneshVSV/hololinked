@@ -3,7 +3,6 @@ import asyncio
 import typing 
 import logging
 import uuid
-from typing import Any
 
 from ..server.data_classes import RPCResource
 from ..server.zmq_message_brokers import SyncZMQClient, EventConsumer, PROXY
@@ -39,7 +38,7 @@ class ObjectProxy:
     def __del__(self):
         self._zmq_client.exit()
 
-    def __getattribute__(self, __name: str) -> Any:
+    def __getattribute__(self, __name: str) -> typing.Any:
         obj = super().__getattribute__(__name)
         if isinstance(obj, _RemoteParameter):
             return obj.get()
@@ -47,32 +46,32 @@ class ObjectProxy:
 
     def __setattr__(self, __name : str, __value : typing.Any):
         if __name in ObjectProxy._own_attrs or (__name not in self.__dict__ and isinstance(__value, __allowed_attribute_types__)):
-            print(f"setting {__name}")
+            # allowed attribute types are _RemoteParameter and _RemoteMethod defined after this class
             return super(ObjectProxy, self).__setattr__(__name, __value)
         elif __name in self.__dict__:
             obj = self.__dict__[__name]
             if isinstance(obj, _RemoteParameter):
                 obj.set(value=__value)
                 return
-            raise AttributeError(f"Cannot reset attribute {__name} again to ObjectProxy for {self.instance_name}.")
-        raise AttributeError(f"Cannot set foreign attribute {__name} to ObjectProxy for {self.instance_name}. Given attribute not found in RemoteObject.")
+            raise AttributeError(f"Cannot set attribute {__name} again to ObjectProxy for {self.instance_name}.")
+        raise AttributeError(f"Cannot set foreign attribute {__name} to ObjectProxy for {self.instance_name}. Given attribute not found in server object.")
 
     def __repr__(self):
         return f'ObjectProxy {self.instance_name}'
 
     def __enter__(self):
         raise NotImplementedError("with statement is not completely implemented yet. Avoid.")
-        return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         raise NotImplementedError("with statement is not completely implemented yet. Avoid.")
     
-    def __bool__(self): return True
+    def __bool__(self): 
+        self._zmq_client
 
     def __eq__(self, other):
         if other is self:
             return True
-        return isinstance(other, ObjectProxy) and other.instance_name == self.instance_name
+        return isinstance(other, ObjectProxy) and other.instance_name == self.instance_name and other
 
     def __ne__(self, other):
         if other and isinstance(other, ObjectProxy):
