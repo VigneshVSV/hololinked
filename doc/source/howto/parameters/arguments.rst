@@ -32,7 +32,9 @@ which in turn has precedence over ``default``.
 .. literalinclude:: ../code/parameters/common_arg_2.py
     :language: python
     :linenos:
-    :lines: 5-28
+    :lines: 5-29
+
+``class_member`` can still be used with a default value if there is no custom fget-fset-fdel. 
 
 ``doc`` and ``label``
 ++++++++++++++++++++++

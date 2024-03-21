@@ -7,19 +7,37 @@
 API Reference
 =============
 
-hololinked.server 
------------------
+``hololinked.server`` 
+---------------------
 
 .. toctree::
     :maxdepth: 1
 
     server/remote_object
-    server/eventloop
     server/http_server
     server/remote_parameter/index
-    server/system_host/index
     server/decorators
+    server/eventloop
     server/database/index
     server/zmq_message_brokers/index
     server/data_classes/index
+    
+
+    
+``hololinked.client``
+---------------------
+
+.. toctree:: 
+    :maxdepth: 1 
+
+    client/index
+
+
+``hololinked.system_host``
+--------------------------
+
+.. toctree:: 
+    :maxdepth: 1 
+
+    server/system_host/index
 
