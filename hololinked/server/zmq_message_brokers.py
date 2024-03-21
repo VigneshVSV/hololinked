@@ -1039,7 +1039,7 @@ class BaseZMQClient(BaseZMQ):
     ----------
     server_instance_name: str
         The instance name of the server (or ``RemoteObject``)
-   client_type: str
+    client_type: str
         RPC or HTTP Server
     **kwargs:
         rpc_serializer: BaseSerializer
@@ -1088,14 +1088,11 @@ class BaseZMQClient(BaseZMQ):
         exception: Dict[str, Any]
             exception dictionary made by server with following keys - type, message, traceback, notes
 
-        Raises
-        ------
-        python exception based on type. If not found in builtins 
         """
         if isinstance(exception, Exception):
             raise exception from None
         exc = getattr(builtins, exception["type"], None)
-        message = f"server raised exception, check following for server side traceback & above for client side traceback : "
+        message = exception["message"]
         if exc is None:
             ex = Exception(message)
         else: 
@@ -1121,6 +1118,8 @@ class BaseZMQClient(BaseZMQ):
         
         Raises
         ------
+        NotImplementedError:
+            if message type is not reply, handshake or invalid
         """
        
         message_type = message[SM_INDEX_MESSAGE_TYPE]
@@ -1242,7 +1241,8 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             self.handshake()
     
     def send_instruction(self, instruction : str, arguments : typing.Dict[str, typing.Any] = EMPTY_DICT, 
-                        timeout : typing.Optional[float] = None, context : typing.Dict[str, typing.Any] = EMPTY_DICT) -> bytes:
+                        timeout : typing.Optional[float] = None, context : typing.Dict[str, typing.Any] = EMPTY_DICT,
+                        argument_schema : typing.Optional[JSON] = None) -> bytes:
         """
         send message to server. 
 
@@ -1275,6 +1275,8 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             a byte representation of message id
         """
         message = self.craft_instruction_from_arguments(instruction, arguments, timeout, context)
+        if argument_schema:
+            jsonschema.validate(arguments, argument_schema)
         self.socket.send_multipart(message)
         self.logger.debug("sent instruction '{}' to server '{}' with msg-id {}".format(instruction, 
                                                     self.server_instance_name, message[SM_INDEX_MESSAGE_ID]))
@@ -1301,7 +1303,8 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                 
     def execute(self, instruction : str, arguments : typing.Dict[str, typing.Any] = EMPTY_DICT, 
                 timeout : typing.Optional[float] = None, context : typing.Dict[str, typing.Any] = EMPTY_DICT, 
-                raise_client_side_exception : bool = False) -> typing.List[typing.Union[bytes, typing.Dict[str, typing.Any]]]:
+                raise_client_side_exception : bool = False, 
+                argument_schema : typing.Optional[JSON] = None) -> typing.List[typing.Union[bytes, typing.Dict[str, typing.Any]]]:
         """
         send an instruction and receive the reply for it. 
 
@@ -1320,17 +1323,22 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         message id : bytes
             a byte representation of message id
         """
-        self.send_instruction(instruction, arguments, timeout, context)
+        self.send_instruction(instruction, arguments, timeout, context, argument_schema)
         return self.recv_reply(raise_client_side_exception)
     
 
-    def handshake(self) -> None: 
+    def handshake(self, num_of_tries : typing.Optional[int] = None) -> None: 
         """
         hanshake with server
         """
         poller = zmq.Poller()
         poller.register(self.socket, zmq.POLLIN)
+        i = 0
         while True:
+            if num_of_tries & i > num_of_tries:   
+                poller.unregister(self.socket)
+                raise RuntimeError("Could not handshake within number of tries") 
+            i += 1
             self.socket.send_multipart(self.craft_empty_message_with_type(HANDSHAKE))
             self.logger.debug("sent Handshake to server '{}'".format(self.server_instance_name))
             if poller.poll(500):
@@ -1343,12 +1351,12 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                         self.logger.info("client '{}' handshook with server '{}'".format(self.identity,
                                                                                          self.server_instance_name))
                         self.server_type = message[SM_INDEX_SERVER_TYPE]
-                        break
+                        poller.unregister(self.socket)
+                        return
                     else:
-                        raise ValueError('Handshake cannot be done. Another message arrived before handshake complete.')
-        poller.unregister(self.socket)
-        del poller 
-
+                        poller.unregister(self.socket)
+                        raise RuntimeError('Handshake cannot be done. Another message arrived before handshake complete.')
+ 
     def exit(self) -> None:
         try:
             self.socket.close(0)
@@ -1895,8 +1903,9 @@ class Event:
         self.name = name 
         # self.name_bytes = bytes(name, encoding = 'utf-8')
         self.URL_path = URL_path or '/' + name
-        self._unique_event_name = None # type: typing.Optional[str]
+        self._unique_identifier = None # type: typing.Optional[str]
         self._owner = None  # type: typing.Optional[Parameterized]
+        # above two attributes are not really optional, they are set later. 
 
     @property
     def owner(self):
@@ -1915,7 +1924,7 @@ class Event:
             raise AttributeError("cannot reassign publisher attribute of event {}".format(self.name)) 
 
     def push(self, data : typing.Any = None, serialize : bool = True):
-        self.publisher.publish_event(self._unique_event_name, data, serialize)
+        self.publisher.publish_event(self._unique_identifier, data, serialize)
 
 
 
@@ -1959,18 +1968,21 @@ class EventPublisher(BaseZMQServer):
 
     def register_event(self, event : Event) -> None:
         # unique_str_bytes = bytes(unique_str, encoding = 'utf-8') 
-        if event._unique_event_name in self.events:
-            raise AttributeError(wrap_text(
-                """event {} already found in list of events, please use another name. 
-                Also, Remotesubobject and RemoteObject cannot share event names.""".format(event.name))
+        if event._unique_identifier in self.events:
+            raise AttributeError(
+                "event {} already found in list of events, please use another name.".format(event.name),
+                "Also, Remotesubobject and RemoteObject cannot share event names."
             )
-        self.event_ids.add(event._unique_event_name)
+        self.event_ids.add(event._unique_identifier)
         self.events.add(event) 
         self.logger.info("registered event '{}' serving at PUB socket with address : {}".format(event.name, self.socket_address))
                
     def publish_event(self, unique_str : bytes, data : typing.Any, serialize : bool = True) -> None: 
         if unique_str in self.event_ids:
-            self.socket.send_multipart([unique_str, self.json_serializer.dumps(data) if serialize else data])
+            if serialize:
+                self.socket.send_multipart([unique_str, self.json_serializer.dumps(data)])
+            else:
+                self.socket.send_multipart([unique_str, data])
         else:
             raise AttributeError("event name {} not yet registered with socket {}".format(unique_str, self.socket_address))
         

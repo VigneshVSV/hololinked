@@ -83,7 +83,7 @@ class SystemHostHandler(RequestHandler):
       
     def set_access_control_allow_origin(self) -> None:
         """
-        For credential login, access control allow origin cannot be *,
+        For credential login, access control allow origin cannot be '*',
         See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
         """
         origin = self.request.headers.get("Origin")
@@ -92,7 +92,7 @@ class SystemHostHandler(RequestHandler):
              
     def set_access_control_allow_headers(self) -> None:
         """
-        For credential login, access control allow headers cannot be *. 
+        For credential login, access control allow headers cannot be '*'. 
         See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
         """
         headers = ", ".join(self.request.headers.keys())

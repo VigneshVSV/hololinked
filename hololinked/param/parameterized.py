@@ -1720,6 +1720,10 @@ class ParameterizedMetaclass(type):
         mcs._update_docstring_signature(dict_.get('parameterized_docstring_signature', False))
 
     def _create_param_container(mcs, mcs_members : dict):
+        """
+        overridable in ``Parameterized`` child if a subclass of ``Parameters`` 
+        was created by user. 
+        """
         mcs._param_container = ClassParameters(mcs, mcs_members) # value return when accessing cls/self.param
   
     @property

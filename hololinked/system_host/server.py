@@ -29,10 +29,6 @@ def create_system_host(db_config_file : typing.Optional[str] = None, ssl_context
     """
     global function for creating system hosting server using a database configuration file, SSL context & certain 
     server settings. Currently supports only one server per process due to usage of some global variables. 
-
-    Parameters
-    ----------
-
     """
     disk_DB_URL = BaseDB.create_postgres_URL(db_config_file, database='hololinked-host', use_dialect=False)
     if not database_exists(disk_DB_URL): 

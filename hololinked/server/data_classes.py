@@ -287,9 +287,10 @@ class ServerSentEvent:
         address of the socket
 
     """
-    what : str 
-    event_name : str 
+    name : str 
+    unique_identifier : str
     socket_address : str 
+    what : str = field(default="EVENT")
 
     def json(self):
         return asdict(self)
