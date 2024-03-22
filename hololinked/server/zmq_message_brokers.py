@@ -1335,7 +1335,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         poller.register(self.socket, zmq.POLLIN)
         i = 0
         while True:
-            if num_of_tries & i > num_of_tries:   
+            if num_of_tries and i > num_of_tries:   
                 poller.unregister(self.socket)
                 raise RuntimeError("Could not handshake within number of tries") 
             i += 1

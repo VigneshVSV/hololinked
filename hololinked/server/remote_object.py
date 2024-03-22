@@ -377,7 +377,8 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
                         self._full_URL_path_prefix, resource.URL_path)] = ServerSentEvent(
                                                             # event URL_path has '/' prefix
                                                             what=ResourceTypes.EVENT,
-                                                            event_name=resource.name,
+                                                            name=resource.name,
+                                                            unique_identifier=resource._unique_identifier,
                                                             socket_address=self._event_publisher.socket_address
                                                         )
         # Parameters
@@ -551,7 +552,7 @@ class RemoteObject(RemoteSubobject):
                 log_file : typing.Optional[str] = None, logger_remote_access : bool = True, 
                 rpc_serializer : typing.Optional[BaseSerializer] = 'serpent', json_serializer : typing.Optional[JSONSerializer] = None,
                 server_protocols : typing.Optional[typing.Union[typing.List[ZMQ_PROTOCOLS], 
-                                typing.Tuple[ZMQ_PROTOCOLS], ZMQ_PROTOCOLS]] = [ZMQ_PROTOCOLS.IPC, ZMQ_PROTOCOLS.TCP, ZMQ_PROTOCOLS.INPROC], 
+                        typing.Tuple[ZMQ_PROTOCOLS], ZMQ_PROTOCOLS]] = [ZMQ_PROTOCOLS.IPC, ZMQ_PROTOCOLS.TCP, ZMQ_PROTOCOLS.INPROC], 
                 db_config_file : typing.Optional[str] = None, **params) -> None:
         
         super().__init__(instance_name=instance_name, logger=logger, rpc_serializer=rpc_serializer, 

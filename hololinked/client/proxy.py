@@ -12,7 +12,7 @@ from ..server.constants import (JSON, CommonInstructions,
                             ServerMessage, ServerMessageData, ResourceTypes)
 
 
-__WRAPPER_ASSIGNMENTS__ = functools.WRAPPER_ASSIGNMENTS + ('__kwdefaults__', '__defaults__', )
+__WRAPPER_ASSIGNMENTS__ =  ('__name__', '__qualname__', '__doc__')
 
 
 class ObjectProxy:
@@ -43,8 +43,8 @@ class ObjectProxy:
     """
 
     _own_attrs = frozenset([
-        '_zmq_client', 'identity', '__annotations__', '_allow_foreign_attributes'
-        'instance_name', 'logger', 'execution_timeout', 'invokation_timeout', '_execution_timeout', '_invokation_timeout' 
+        '_zmq_client', '_async_zmq_client', 'identity', '__annotations__', '_allow_foreign_attributes',
+        'instance_name', 'logger', 'execution_timeout', 'invokation_timeout', '_execution_timeout', '_invokation_timeout', 
         '_events'
     ])
 
@@ -69,8 +69,9 @@ class ObjectProxy:
             self.load_remote_object()
 
     def __del__(self) -> None:
-        self._zmq_client.exit()
-        if self._async_zmq_client:
+        if hasattr(self, '_zmq_client') and self._zmq_client:
+            self._zmq_client.exit()
+        if hasattr(self, '_async_zmq_client') and self._async_zmq_client:
             self._async_zmq_client.exit()
 
     def __getattribute__(self, __name: str) -> typing.Any:
@@ -352,23 +353,23 @@ class ObjectProxy:
         """
         fetch = _RemoteMethod(self._zmq_client, f'/{self.instance_name}{CommonInstructions.RPC_RESOURCES}', 
                                     self._invokation_timeout) # type: _RemoteMethod
-        reply = fetch()[SM_INDEX_DATA][SM_DATA_RETURN_VALUE] # type: typing.Dict[str, typing.Dict[str, typing.Any]]
+        reply = fetch() # type: typing.Dict[str, typing.Dict[str, typing.Any]]
 
         allowed_events = []
         for name, data in reply.items():
             if isinstance(data, dict):
-                if data.what == ResourceTypes.EVENT:
+                if data["what"] == ResourceTypes.EVENT:
                     data = ServerSentEvent(**data)
                 else:
                     data = RPCResource(**data)
-            elif not isinstance(data, RPCResource):
+            elif not isinstance(data, (RPCResource, ServerSentEvent)):
                 raise RuntimeError("Logic error - deserialized info about server not instance of hololinked.server.data_classes.RPCResource")
             if data.what == ResourceTypes.CALLABLE:
                 _add_method(self, _RemoteMethod(self._zmq_client, data.instruction, self.invokation_timeout, 
                                                 self.execution_timeout, data.argument_schema, self._async_zmq_client), data)
             elif data.what == ResourceTypes.PARAMETER:
                 _add_parameter(self, _RemoteParameter(self._zmq_client, data.instruction, self.invokation_timeout,
-                                                self.execution_timeout, data.argument_schema, self._async_zmq_client), data)
+                                                self.execution_timeout, self._async_zmq_client), data)
             elif data.what == ResourceTypes.EVENT:
                 assert isinstance(data, ServerSentEvent)
                 _add_event(self, _Event(self._zmq_client, data.name, data.unique_identifier, data.socket_address), data)
@@ -377,12 +378,12 @@ class ObjectProxy:
 
 
 # SM = Server Message
-SM_INDEX_ADDRESS = ServerMessage.ADDRESS
-SM_INDEX_SERVER_TYPE = ServerMessage.SERVER_TYPE
-SM_INDEX_MESSAGE_TYPE = ServerMessage.MESSAGE_TYPE
-SM_INDEX_MESSAGE_ID = ServerMessage.MESSAGE_ID
-SM_INDEX_DATA = ServerMessage.DATA
-SM_DATA_RETURN_VALUE = ServerMessageData.RETURN_VALUE
+SM_INDEX_ADDRESS = ServerMessage.ADDRESS.value
+SM_INDEX_SERVER_TYPE = ServerMessage.SERVER_TYPE.value
+SM_INDEX_MESSAGE_TYPE = ServerMessage.MESSAGE_TYPE.value
+SM_INDEX_MESSAGE_ID = ServerMessage.MESSAGE_ID.value
+SM_INDEX_DATA = ServerMessage.DATA.value
+SM_DATA_RETURN_VALUE = ServerMessageData.RETURN_VALUE.value
 
 class _RemoteMethod:
     """method call abstraction"""
@@ -591,8 +592,9 @@ __allowed_attribute_types__ = (_RemoteParameter, _RemoteMethod, _Event)
 
 def _add_method(client_obj : ObjectProxy, method : _RemoteMethod, func_info : RPCResource) -> None:
     if not func_info.top_owner:
+        return 
         raise RuntimeError("logic error")
-    for dunder in functools.WRAPPER_ASSIGNMENTS:
+    for dunder in __WRAPPER_ASSIGNMENTS__:
         if dunder == '__qualname__':
             info = '{}.{}'.format(client_obj.__class__.__name__, func_info.get_dunder_attr(dunder).split('.')[1])
         else:
@@ -602,6 +604,7 @@ def _add_method(client_obj : ObjectProxy, method : _RemoteMethod, func_info : RP
 
 def _add_parameter(client_obj : ObjectProxy, parameter : _RemoteParameter, parameter_info : RPCResource) -> None:
     if not parameter_info.top_owner:
+        return
         raise RuntimeError("logic error")
     for attr in ['doc', 'name']: 
         # just to imitate _add_method logic

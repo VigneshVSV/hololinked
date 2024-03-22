@@ -259,7 +259,7 @@ class EventLoop(RemoteObject):
                 # Note that because we actually find the resource within __prepare_instance__, its already bound
                 # and we dont have to separately bind it. 
                 func = resource.obj
-                args = arguments.pop('__args__')
+                args = arguments.pop('__args__', tuple())
                 if resource.iscoroutine:
                     return await func(*args, **arguments)
                 else:
