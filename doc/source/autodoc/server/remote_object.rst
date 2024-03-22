@@ -2,7 +2,7 @@ RemoteObject
 ============
 
 .. autoclass:: hololinked.server.remote_object.RemoteObject
-    :members: logger, rpc_serializer, json_serializer
+    :members: logger, rpc_serializer, json_serializer, exit, test_speed, log_to_console, run
     :show-inheritance:
 
 .. autoclass:: hololinked.server.remote_object.RemoteSubobject
