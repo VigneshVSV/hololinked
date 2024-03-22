@@ -2,7 +2,7 @@
 
 ### Description
 
-For beginners - `hololinked` is a pythonic package suited for instrument control and data acquisition over network using python.
+For beginners - `hololinked` is a pythonic package suited for instrumentation control and data acquisition over network.
 <br/> 
 For those familiar with RPC & web development - `hololinked` is a ZMQ-based RPC toolkit with customizable HTTP end-points. 
 The main goal is to develop a pythonic (& pure python) modern package for instrumentation control through network (SCADA), 

@@ -27,6 +27,7 @@ INVALID_MESSAGE = b'INVALID_MESSAGE'
 TIMEOUT = b'TIMEOUT'
 INSTRUCTION = b'INSTRUCTION'
 REPLY       = b'REPLY'
+EXCEPTION   = b'EXCEPTION'
 
 EVENT       = b'EVENT'
 EVENT_SUBSCRIPTION = b'EVENT_SUBSCRIPTION'
@@ -160,7 +161,7 @@ class BaseZMQ:
                 socket_address = kwargs.get('socket_address', None)
                 self.socket.connect(kwargs["socket_address"])
             else:
-                raise RuntimeError(f"Socket must be either bound or connected & socket address not supplied for identity - {identity}")
+                raise RuntimeError(f"Socket address not supplied for TCP connection to identity - {identity}")
         elif protocol == ZMQ_PROTOCOLS.INPROC or protocol == "INPROC":
             # inproc_instance_name = instance_name.replace('/', '_').replace('-', '_')
             socket_address = f'inproc://{instance_name}'
@@ -576,7 +577,30 @@ class AsyncZMQServer(BaseAsyncZMQServer, BaseAsyncZMQ):
         await self.socket.send_multipart(self.craft_reply_from_client_message(original_client_message, data))
         self.logger.debug("sent reply to client '{}' with msg-ID '{}'".format(original_client_message[CM_INDEX_ADDRESS], 
                                                                     original_client_message[CM_INDEX_MESSAGE_ID]))
+        
+    
+    async def async_send_reply_with_message_type(self, original_client_message : typing.List[bytes], 
+                                                message_type: bytes, data : typing.Any) -> None:
+        """
+        Send reply for an instruction. 
 
+        Parameters
+        ----------
+        original_client_message: List[bytes]
+            original message so that the reply can be properly crafted and routed
+        data: Any
+            serializable data to be sent as reply
+
+        Returns
+        -------
+        None
+        """
+        await self.socket.send_multipart(self.craft_reply_from_arguments(original_client_message[CM_INDEX_ADDRESS], 
+                                                        original_client_message[CM_INDEX_CLIENT_TYPE], message_type, 
+                                                        original_client_message[CM_INDEX_MESSAGE_ID], data))
+        self.logger.debug("sent reply to client '{}' with msg-ID '{}'".format(original_client_message[CM_INDEX_ADDRESS], 
+                                                                    original_client_message[CM_INDEX_MESSAGE_ID]))
+        
 
     def exit(self) -> None:
         """
@@ -1097,7 +1121,8 @@ class BaseZMQClient(BaseZMQ):
             ex = Exception(message)
         else: 
             ex = exc(message)
-        ex.__notes__ = exception["traceback"]
+        exception["traceback"][0] = f"Server {exception['traceback'][0]}"
+        ex.__notes__ = exception["traceback"][0:-1]
         raise ex from None 
 
 
@@ -1132,14 +1157,16 @@ class BaseZMQClient(BaseZMQ):
         elif message_type == HANDSHAKE:
             self.logger.debug("""handshake messages arriving out of order are silently dropped as receiving this message 
                 means handshake was successful before. Received hanshake from {}""".format(message[0]))
-        elif message_type == INVALID_MESSAGE:
+        elif message_type == EXCEPTION or message_type == INVALID_MESSAGE:
             if self.client_type == HTTP_SERVER:
                 message[SM_INDEX_DATA] = self.json_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
             elif self.client_type == PROXY:
                 message[SM_INDEX_DATA] = self.rpc_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
-            self.raise_local_exception(message[SM_INDEX_DATA])
-            # if message[SM_INDEX_DATA].get('exception', None) is not None and raise_client_side_exception:
-            #      self.raise_local_exception(message[SM_INDEX_DATA]['exception'])
+            if message[SM_INDEX_DATA].get('exception', None) is not None and raise_client_side_exception:
+                self.raise_local_exception(message[SM_INDEX_DATA]['exception'])
+            else:
+                raise NotImplementedError("message type {} received. No exception field found, exception field mandatory.".format(
+                    message_type))
         else:
             raise NotImplementedError("Unknown message type {} received. This message cannot be dealt.".format(message_type))
 
@@ -1694,7 +1721,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         self.events_map[message_id] = event 
         return message_id
 
-    async def async_recv_reply(self, message_id : bytes, plain_reply : bool = False, raise_client_side_exception = False,
+    async def async_recv_reply(self, message_id : bytes, raise_client_side_exception = False,
                         timeout : typing.Optional[float] = None) -> typing.Dict[str, typing.Any]:
         """
         Receive reply for specified message ID. 
@@ -1703,8 +1730,6 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         ----------
         message_id: bytes
             the message id for which reply needs to eb fetched
-        plain_reply: bool, default False
-            strip reply of any other contents like state machine state
         raise_client_side_exceptions: bool, default False
             raise exceptions from server on client side
         timeout: float, 
@@ -1740,10 +1765,9 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             self.events_map.pop(message_id)
             reply = self.message_map.pop(message_id)
             self.event_pool.completed(event)
-            if not plain_reply and reply.get('exception', None) is not None and raise_client_side_exception:
+            if raise_client_side_exception and reply.get('exception', None) is not None:
                 exc_info = reply['exception']
-                raise Exception("traceback : {},\nmessage : {},\ntype : {}".format (
-                                '\n'.join(exc_info["traceback"]), exc_info['message'], exc_info["type"]))
+                self.raise_local_exception(exc_info)
             return reply
 
     async def async_execute(self, instance_name : str, instruction : str, arguments : typing.Dict[str, typing.Any] = EMPTY_DICT, 
@@ -1776,7 +1800,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         """
         message_id = await self.async_send_instruction(instance_name, instruction, arguments, invokation_timeout, context, 
                                                     argument_schema)
-        return await self.async_recv_reply(message_id, False, raise_client_side_exception, execution_timeout)
+        return await self.async_recv_reply(message_id, raise_client_side_exception, execution_timeout)
 
     def start_polling(self) -> None:
         """

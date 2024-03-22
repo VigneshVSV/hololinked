@@ -113,7 +113,7 @@ class RPCHandler(BaseHandler):
                 # message mapped client pool currently strips the data part from return message
                 # and provides that as reply directly 
             except Exception as ex:
-                reply = self.json_serializer.dumps(format_exception_as_json(ex))
+                reply = self.json_serializer.dumps({"exception" : format_exception_as_json(ex)})
             if reply:
                 self.write(reply)
         else:
@@ -160,11 +160,11 @@ class EventHandler(BaseHandler):
                     break 
                 except Exception as ex:
                     self.write(data_header % self.json_serializer.dumps(
-                        format_exception_as_json(ex)))
+                        {"exception" : format_exception_as_json(ex)}))
             event_consumer.exit()
         except Exception as ex:
             self.write(data_header % self.json_serializer.dumps(
-                        format_exception_as_json(ex)))
+                       {"exception" : format_exception_as_json(ex)}))
 
 
     async def handled_imagestream(self) -> None:
@@ -188,11 +188,11 @@ class EventHandler(BaseHandler):
                     break 
                 except Exception as ex:
                     self.write(data_header % self.json_serializer.dumps(
-                        format_exception_as_json(ex)))
+                        {"exception" : format_exception_as_json(ex)}))
             event_consumer.exit()
         except Exception as ex:
             self.write(data_header % self.json_serializer.dumps(
-                        format_exception_as_json(ex)))
+                        {"exception" : format_exception_as_json(ex)}))
     
 
 

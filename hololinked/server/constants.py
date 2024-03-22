@@ -26,8 +26,9 @@ class ResourceTypes(StrEnum):
     EVENT = "EVENT"
 
 class ResourceOperations(StrEnum):
-    PARAMETER_READ = "/read"
-    PARAMETER_WRITE = "/write"
+    PARAMETER_READ = "read"
+    PARAMETER_WRITE = "write"
+    PARAMETER_DELETE = "delete"
 
 
 # regex logic

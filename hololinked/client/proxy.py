@@ -48,7 +48,7 @@ class ObjectProxy:
         '_events'
     ])
 
-    def __init__(self, instance_name : str, invokation_timeout : float = 5, load_remote_object = True, protocol : str = 'TCP', 
+    def __init__(self, instance_name : str, protocol : str, invokation_timeout : float = 5, load_remote_object = True, 
                     **kwargs) -> None:
         self._allow_foreign_attributes = kwargs.get('allow_foreign_attributes', False)
         self.instance_name = instance_name

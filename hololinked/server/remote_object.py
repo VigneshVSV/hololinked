@@ -400,8 +400,8 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
                                                     fullpath=fullpath,
                                                     request_as_argument=False,
                                                     **{ 
-                                                        read_http_method : fullpath+ResourceOperations.PARAMETER_READ,
-                                                        write_http_method : fullpath+ResourceOperations.PARAMETER_WRITE
+                                                        read_http_method : f"{fullpath}/{ResourceOperations.PARAMETER_READ}",
+                                                        write_http_method : f"{fullpath}/{ResourceOperations.PARAMETER_WRITE}"
                                                     },
                                                     argument_schema=remote_info.argument_schema,
                                                 )
@@ -417,8 +417,8 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
                                 argument_schema=remote_info.argument_schema,
                             ) 
                 dclass = remote_info.to_dataclass(obj=parameter, bound_obj=self) 
-                instance_resources[fullpath+ResourceOperations.PARAMETER_READ] = dclass
-                instance_resources[fullpath+ResourceOperations.PARAMETER_WRITE] = dclass  
+                instance_resources[f"{fullpath}/{ResourceOperations.PARAMETER_READ}"] = dclass
+                instance_resources[f"{fullpath}/{ResourceOperations.PARAMETER_WRITE}"] = dclass  
         # The above for-loops can be used only once, the division is only for readability
         # following are in _internal_fixed_attributes - allowed to set only once
         self._rpc_resources = rpc_resources       
@@ -725,37 +725,44 @@ class RemoteObject(RemoteSubobject):
             return None
     
     # Example of get and post decorator 
-    @post('/exit')                                                                                                                                          
+    @remote_method(URL_path='/exit', http_method=HTTP_METHODS.POST)                                                                                                                                          
     def exit(self) -> None:
+        """
+        Exit the object without killing the eventloop that runs this object. If RemoteObject was 
+        started using the run() method, the eventloop is also killed. 
+        """
         raise BreakInnerLoop
 
-    @get('/ping')
-    def ping(self) -> bool:
-        return True
-
-    @get('/test/speed')    
-    def test_speed(self, value : typing.Any):
+ 
+    @remote_method(URL_path='/test/speed', http_method=HTTP_METHODS.GET)    
+    def test_speed(self, value : typing.Any) -> typing.Any:
         """
-        This method returns whatever you give allowing speed test of different data types. 
+        This method returns whatever is provided allowing speed test of different data types. 
         The message sent is first serialized by the client, deserialized by the server and in return direction
         again serialized by server and deserialized by the client. oneway speed is twice the measured value.  
         """
         return value
              
     # example of remote_method decorator
-    @remote_method(URL_path='/log/console', http_method = HTTP_METHODS.POST)
-    def log_to_console(self, data : typing.Any = None, level : typing.Any = 'DEBUG') -> None:
-        if level not in log_levels.keys():
+    @remote_method(URL_path='/log', http_method=HTTP_METHODS.POST)
+    def log_to_console(self, data : typing.Any = None, level : str = 'DEBUG') -> None:
+        """
+        Log something to the console with specified log level
+        """
+        if level not in LOGLEVEL._member_map_.keys():
             self.logger.error("log level {} invalid. logging with level INFO.".format(level))
         if data is None:
-            self.logger.log(log_levels.get(level, logging.INFO), "{} is alive.".format(self.instance_name))
+            self.logger.log(LOGLEVEL.__members__[level], "{} is alive.".format(self.instance_name))
         else:
-            self.logger.log(log_levels.get(level, logging.INFO), "{}".format(data))
+            self.logger.log(LOGLEVEL.__members__[level], "{}".format(data))
        
     def query(self, info : typing.Union[str, typing.List[str]]) -> typing.Any:
         raise NotImplementedError("arbitrary quering of {} currently not possible".format(self.__class__.__name__))
 
-    def run(self, expose_eventloop : bool = False, http_server = None):
+    def run(self, expose_eventloop : bool = False):
+        """
+        quick-start ``RemoteObject`` server by creating a default eventloop. 
+        """
         from .eventloop import EventLoop
         e = EventLoop(instance_name=f'{self.instance_name}/eventloop', remote_objects=[self], log_level=self.logger.level,
                     rpc_serializer=self.rpc_serializer, json_serializer=self.json_serializer)

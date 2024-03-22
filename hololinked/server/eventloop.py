@@ -8,6 +8,7 @@ import threading
 
 from .utils import uuid4_in_bytes, wrap_text
 from .constants import *
+from .webserver_utils import format_exception_as_json
 from .remote_parameters import TypedDict
 from .exceptions import *
 from .http_methods import post, get
@@ -230,22 +231,17 @@ class EventLoop(RemoteObject):
                 except Exception as ex:
                     instance.logger.error("RemoteObject {} with instance name {} produced error : {}.".format(
                                                             instance.__class__.__name__, instance_name, ex))
-                    return_value = {
-                            "message" : str(ex),
-                            "type" : repr(ex).split('(', 1)[0],
-                            "traceback" : traceback.format_exc().splitlines(),
-                            "notes" : ex.__notes__ if hasattr(ex, "__notes__") else None
-                        }
                     if not plain_reply:    
                         return_value = {
-                            "exception" : return_value, 
+                            "exception" : format_exception_as_json(ex), 
                             "state"     : { 
                                 instance_name : instance.state()
                             }
                         }          
                         if fetch_execution_logs:
                             return_value["logs"] = list_handler.log_list      
-                    await instance.message_broker.async_send_reply(instruction, return_value)
+                    await instance.message_broker.async_send_reply_with_message_type(instruction, 
+                                                                    b'EXCEPTION', return_value)
                 if not plain_reply and fetch_execution_logs:
                     instance.logger.removeHandler(list_handler)
 
@@ -263,24 +259,24 @@ class EventLoop(RemoteObject):
                 if resource.iscoroutine:
                     return await func(*args, **arguments)
                 else:
-                    return func(**arguments)
+                    return func(*args, **arguments)
             else: 
                 raise StateMachineError("RemoteObject '{}' is in '{}' state, however command can be executed only in '{}' state".format(
                         instance_name, instance.state(), resource.state))
         
         elif resource.isparameter:
             action = instruction_str.split('/')[-1]
-            parameter : RemoteParameter = resource.obj
-            owner_inst : RemoteObject = resource.bound_obj
-            if action == "WRITE": 
+            parameter = resource.obj # type: RemoteParameter
+            owner_inst = resource.bound_obj # type: RemoteObject
+            if action == ResourceOperations.PARAMETER_WRITE: 
                 if resource.state is None or (hasattr(instance, 'state_machine') and  
                                         instance.state_machine.current_state in resource.state):
                     return parameter.__set__(owner_inst, arguments["value"])
                 else: 
                     raise StateMachineError("RemoteObject {} is in `{}` state, however attribute can be written only in `{}` state".format(
                         instance_name, instance.state_machine.current_state, resource.state))
-            else:
-                return parameter.__get__(owner_inst, type(owner_inst))
+            elif action == ResourceOperations.PARAMETER_READ:
+                return parameter.__get__(owner_inst, type(owner_inst))             
         raise NotImplementedError("Unimplemented execution path for RemoteObject {} for instruction {}".format(instance_name, instruction_str))
 
 
