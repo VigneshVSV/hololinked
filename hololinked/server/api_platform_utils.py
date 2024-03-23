@@ -1,7 +1,7 @@
 from typing import Dict, List, Any, Union
 from dataclasses import dataclass, field, asdict
 
-from .constants import POST
+from .constants import HTTP_METHODS
 from .serializers import JSONSerializer
 
 
@@ -23,7 +23,7 @@ class postman_collection:
     
     def json_file(self, filename = 'collection.json'):
         with open(filename, 'w') as file: 
-            JSONSerializer.general_dump(self.json(), file)
+            JSONSerializer.generic_dump(self.json(), file)
 
 @dataclass
 class postman_collection_info:
@@ -58,7 +58,7 @@ class postman_http_request:
     url : str 
     header : Union[List[Dict[str, Any]], None] = field(default=None)  
     body : Union[Dict[str, Any], None] = field(default=None)
-    method : str = field(default=POST) 
+    method : str = field(default=HTTP_METHODS.POST) 
     description : Union[str, None] = field(default=None)
 
     def json(self):

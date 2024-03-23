@@ -503,6 +503,10 @@ class Parameter(metaclass=ParameterMetaclass):
         self.overloads['fdel'] = func
         return func
     
+    def __call__(self, func: typing.Callable) -> "Parameter":
+        self.getter(func)
+        return self
+
     @classmethod
     def serialize(cls, value : typing.Any) -> typing.Any:
         "Given the parameter value, return a Python value suitable for serialization"
@@ -1716,6 +1720,10 @@ class ParameterizedMetaclass(type):
         mcs._update_docstring_signature(dict_.get('parameterized_docstring_signature', False))
 
     def _create_param_container(mcs, mcs_members : dict):
+        """
+        overridable in ``Parameterized`` child if a subclass of ``Parameters`` 
+        was created by user. 
+        """
         mcs._param_container = ClassParameters(mcs, mcs_members) # value return when accessing cls/self.param
   
     @property

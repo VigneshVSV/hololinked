@@ -53,7 +53,7 @@ Parameters and Parameterized classes.
 """
 from . import exceptions
 from .parameterized import (Parameterized, ParameterizedFunction, ParamOverrides, Parameter,
-    depends_on, instance_descriptor, discard_events, edit_constant, )
+    depends_on, instance_descriptor, discard_events, edit_constant)
 
 from .logger import get_logger, logging_level, VERBOSE
 

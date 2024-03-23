@@ -6,7 +6,7 @@ import re
 import asyncio
 import inspect
 import typing
-from typing import List
+import asyncio
 from ..param.exceptions import wrap_error_text as wrap_text
 
 
@@ -22,7 +22,7 @@ def copy_parameters(src : str = 'D:/onedrive/desktop/dashboard/scada/scadapy/sca
                         'from .remote_parameter import RemoteParameter\n',
                         'from .constants import HTTP, PROXY, USE_OBJECT_NAME, GET, PUT']
 
-    def fetch_line() -> str:
+    def fetch_line() -> typing.Generator[str]:
         with open(src, 'r') as file:
             oldlines = file.readlines()
             for line in oldlines: 
@@ -120,7 +120,7 @@ def copy_parameters(src : str = 'D:/onedrive/desktop/dashboard/scada/scadapy/sca
         file.writelines(newlines)
 
 
-def unique_id() -> bytes:
+def uuid4_in_bytes() -> bytes:
     """
     uuid.uuid4() in bytes
     """
@@ -152,10 +152,10 @@ def dashed_URL(word : str) -> str:
     return word.lower().replace('_', '-')
 
 
-def create_default_logger(name : str, log_level : int = logging.INFO, logfile = None,
+def create_default_logger(name : str, log_level : int = logging.INFO, log_file = None,
                 format : str = '%(levelname)-8s - %(asctime)s:%(msecs)03d - %(name)s - %(message)s' ) -> logging.Logger:
     """
-    the default logger used by most of scadapy package. StreamHandler is always created, pass logfile for a FileHandler
+    the default logger used by most of hololinked package. StreamHandler is always created, pass log_file for a FileHandler
     as well.
     """
     logger = logging.getLogger(name) 
@@ -163,8 +163,8 @@ def create_default_logger(name : str, log_level : int = logging.INFO, logfile = 
     default_handler = logging.StreamHandler(sys.stdout)
     default_handler.setFormatter(logging.Formatter(format, datefmt='%Y-%m-%dT%H:%M:%S'))
     logger.addHandler(default_handler)
-    if logfile:
-        file_handler = logging.FileHandler(logfile)
+    if log_file:
+        file_handler = logging.FileHandler(log_file)
         file_handler.setFormatter(logging.Formatter(format, datefmt='%Y-%m-%dT%H:%M:%S'))
         logger.addHandler(file_handler)
     return logger
@@ -182,15 +182,19 @@ def run_coro_sync(coro):
         eventloop.run_until_complete(coro)
 
 
-def run_coro_somehow(coro):
+def run_method_somehow(method : typing.Union[typing.Callable, typing.Coroutine]) -> typing.Any:
     """
     either schedule the coroutine or run it until its complete
     """
+    if not (asyncio.iscoroutinefunction(method) or asyncio.iscoroutine(method)):
+        return method()
     eventloop = asyncio.get_event_loop()
     if eventloop.is_running():    
-        eventloop.call_soon(lambda : asyncio.create_task(coro))
+        task = lambda : asyncio.create_task(method) # check later if lambda is necessary
+        eventloop.call_soon(task)
     else:
-        eventloop.run_until_complete(coro)
+        task = method
+        eventloop.run_until_complete(task)
 
 
 def get_signature(function : typing.Callable): 
@@ -206,7 +210,6 @@ def get_signature(function : typing.Callable):
         arg_types.append(arg_type)
 
     return arg_names, arg_types
-
 
 
 __all__ = ['current_datetime_ms_str', 'wrap_text', 'copy_parameters', 'dashed_URL']

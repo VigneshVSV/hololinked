@@ -1,5 +1,5 @@
 # adapted from pyro - https://github.com/irmen/Pyro5 - see following license
-# currently not used correctly because its not correctly integrated to the package 
+# currently not used correctly because its not integrated to the package 
 """
 MIT License
 
@@ -23,17 +23,26 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-
+import sys
+import asyncio
 import tempfile
 import os 
 import platform
 from . import __version__
 
 
+if sys.platform.startswith('win'):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+
+
 class Configuration:
 
     __slots__ = [
-        "APPDATA_DIR", "PRIMARY_HOST", "LOCALHOST_PORT"
+        "TEMP_DIR", "TCP_SOCKET_SEARCH_START_PORT", "TCP_SOCKET_SEARCH_END_PORT",
+        "PRIMARY_HOST", "LOCALHOST_PORT", 
+        "DB_CONFIG_FILE", "COOKIE_SECRET",
+        "PWD_HASHER_TIME_COST", "PWD_HASHER_MEMORY_COST"
     ]
 
     def __init__(self):
@@ -41,18 +50,21 @@ class Configuration:
         self.reset_actions()
 
 
-    def reset_variables(self, use_environment : bool = True):
+    def reset_variables(self, use_environment : bool = False):
         """
         Reset to default config items.
         If use_environment is False, won't read environment variables settings (useful if you can't trust your env).
         """
-        self.APPDATA_DIR = tempfile.gettempdir() + "\\hololinked"
-        return 
+        self.TEMP_DIR = f"{tempfile.gettempdir()}{os.sep}hololinked"
+        self.TCP_SOCKET_SEARCH_START_PORT = 60000
+        self.TCP_SOCKET_SEARCH_END_PORT = 65535
+        self.PWD_HASHER_TIME_COST = 15
+
         # qualname is not defined
         if use_environment:
             # environment variables overwrite config items
-            prefix = __qualname__.split('.')[0]
-            for item, envvalue in (e for e in os.environ.items() if e[0].startswith(prefix)):
+            prefix = 'hololinked'
+            for item, envvalue in (e for e in os.environ.items() if e[0].lower().startswith(prefix)):
                 item = item[len(prefix):]
                 if item not in self.__slots__:
                     raise ValueError(f"invalid environment config variable: {prefix}{item}")
@@ -79,7 +91,7 @@ class Configuration:
 
     def reset_actions(self):
         try:
-            os.mkdir(self.APPDATA_DIR)
+            os.mkdir(self.TEMP_DIR)
         except FileExistsError:
             pass
 

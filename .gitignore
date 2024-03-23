@@ -10,7 +10,7 @@ old/
 doc/build
 doc/source/generated
 extra-packages 
-*.json
+
 
 # vs-code 
 .vscode/

@@ -2,10 +2,9 @@ import typing
 import os 
 from enum import Enum
 
-from ..param.parameterized import Parameter, Parameterized, ClassParameters, raise_TypeError
-from ..param.exceptions import raise_ValueError
-from .decorators import ScadaInfoValidator
-from .constants import GET, PUT, USE_OBJECT_NAME
+from ..param.parameterized import Parameter, Parameterized, ClassParameters
+from .decorators import RemoteResourceInfoValidator
+from .constants import USE_OBJECT_NAME, HTTP_METHODS
 from .zmq_message_brokers import Event
 
 try: 
@@ -13,11 +12,11 @@ try:
 except:
     go = None 
 
-__default_parameter_write_method__ = PUT 
+__default_parameter_write_method__ = HTTP_METHODS.PUT 
 
 __parameter_info__ = [
-                'allow_None' , 'class_member', 'constant', 'db_commit', 
-                'db_first_load', 'db_memorized', 'deepcopy_default', 'per_instance_descriptor', 
+                'allow_None' , 'class_member', 'constant', 'db_init', 'db_persist', 
+                'db_commit', 'deepcopy_default', 'per_instance_descriptor', 
                 'default', 'doc', 'metadata', 'name', 'readonly'
                 # 'scada_info', 'parameter_type' # descriptor related info is also necessary
             ]
@@ -25,33 +24,28 @@ __parameter_info__ = [
 
 
 class RemoteParameter(Parameter):
+    """
+    Initialize a new Parameter object and store the supplied attributes:
 
-    __slots__ = ['db_persist', 'db_init', 'db_commit', 'scada_info']
+    Parameters
+    ----------
 
-    def __init__(self, default: typing.Any = None, *, doc : typing.Optional[str] = None, constant : bool = False, 
-                readonly : bool = False, allow_None : bool = False, 
-                URL_path : str = USE_OBJECT_NAME, 
-                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (GET, PUT), 
-                state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-                db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
-                class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
-                fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None, 
-                deepcopy_default : bool = False, per_instance_descriptor : bool = False, 
-                precedence : typing.Optional[float] = None,
-            ) -> None:
-        """Initialize a new Parameter object and store the supplied attributes:
+    default: None or corresponding to parameter type 
+        The default value of the parameter. This is owned by class for the attribute 
+        represented by the Parameter, which is overridden in an instance after 
+        setting the parameter.
 
-        default: the owning class's value for the attribute represented
-        by this Parameter, which can be overridden in an instance.
+    doc: str, default empty
+        docstring explaining what this parameter represents.
 
-        doc: docstring explaining what this parameter represents.
-
-        constant: if true, the Parameter value can be changed only at
+    constant: bool, default False
+        if true, the Parameter value can be changed only at
         the class level or in a Parameterized constructor call. The
         value is otherwise constant on the Parameterized instance,
         once it has been constructed.
 
-        readonly: if true, the Parameter value cannot ordinarily be
+    readonly: bool, default False
+        if true, the Parameter value cannot ordinarily be
         changed by setting the attribute at the class or instance
         levels at all. The value can still be changed in code by
         temporarily overriding the value of this slot and then
@@ -59,41 +53,63 @@ class RemoteParameter(Parameter):
         _user_ should never change but which do change during code
         execution.
 
-        allow_None: if True, None is accepted as a valid value for
+    allow_None: bool, default False 
+        if True, None is accepted as a valid value for
         this Parameter, in addition to any other values that are
         allowed. If the default value is defined as None, allow_None
         is set to True automatically.
 
-        db_memorized: if True, every read and write is stored in database 
-        and persists instance destruction and creation. 
-        
-        db_firstload: if True, only the first read is loaded from database.
-        further reads and writes not written to database. if db_memorized 
-        is True, this value is ignored. 
-
-        optional: some doc 
-
-        remote: set False to avoid exposing the variable for remote read 
-        and write
-
-        URL: resource locator under which the attribute is accessible through 
+    URL_path: str, uses object name by default
+        resource locator under which the attribute is accessible through 
         HTTP. when remote is True and no value is supplied, the variable name 
         is used and underscores and replaced with dash
 
-        read_method: HTTP method for attribute read, default is GET
+    remote: bool, default True
+        set to false to make the parameter local
 
-        write_method: HTTP method for attribute read, default is PUT
+    http_method: tuple, default (GET, PUT)
+        http methods for read and write respectively 
 
-        read_time    : some doc
+    state: str | Enum, default None
+        state of state machine where write can be executed
 
-        metadata: store your own JSON compatible metadata for the parameter 
+    db_persist: bool, default False
+        if True, every read and write is stored in database 
+        and persists instance destruction and creation. 
+    
+    db_init: bool, default False
+        if True, only the first read is loaded from database.
+        Further reads and writes not written to database. if db_persist
+        is True, this value is ignored. 
+
+    db_commit: bool,
+        if True, all write values are stored to database. if db_persist
+        is True, this value is ignored. 
+
+    remote: bool, default True
+        set False to avoid exposing the variable for remote read 
+        and write
+
+    metadata: dict, default None
+        store your own JSON compatible metadata for the parameter 
         which gives useful (and modifiable) information about the parameter. 
 
-        label: optional text label to be used when this Parameter is
+    label: str, default extracted from object name
+        optional text label to be used when this Parameter is
         shown in a listing. If no label is supplied, the attribute name
         for this parameter in the owning Parameterized object is used.
 
-        per_instance: whether a separate Parameter instance will be
+    fget: Callable, default None
+        custom getter method, mandatory when setter method is also custom.
+
+    fset: Callable, default None
+        custom setter method
+    
+    fdel: Callable, default None
+        custom deleter method
+        
+    per_instance_descriptor: bool, default False 
+        whether a separate Parameter instance will be
         created for every Parameterized instance. True by default.
         If False, all instances of a Parameterized class will share
         the same Parameter object, including all validation
@@ -101,7 +117,8 @@ class RemoteParameter(Parameter):
         conceptually similar but affects the Parameter value rather
         than the Parameter object.
 
-        deep_copy: controls whether the value of this Parameter will
+    deepcopy_default: bool, default False 
+        controls whether the value of this Parameter will
         be deepcopied when a Parameterized object is instantiated (if
         True), or if the single default value will be shared by all
         Parameterized instances (if False). For an immutable Parameter
@@ -120,50 +137,62 @@ class RemoteParameter(Parameter):
         because each instance, once created, will then have an
         independently deepcopied value.
 
-        class_member : To make a ... 
+    class_member : bool, default False
+        when True, parameter is set on class instead of instance. 
 
-        pickle_default_value: whether the default value should be
-        pickled. Usually, you would want the default value to be pickled,
-        but there are rare cases where that would not be the case (e.g.
-        for file search paths that are specific to a certain system).
-
-        precedence: a numeric value, usually in the range 0.0 to 1.0,
+    precedence: float, default None
+        a numeric value, usually in the range 0.0 to 1.0,
         which allows the order of Parameters in a class to be defined in
         a listing or e.g. in GUI menus. A negative precedence indicates
         a parameter that should be hidden in such listings.
 
-        default, doc, and precedence all default to None, which allows
-        inheritance of Parameter slots (attributes) from the owning-class'
-        class hierarchy (see ParameterizedMetaclass).
-        """
+    """
 
+    __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', '_remote_info']
+
+    def __init__(self, default: typing.Any = None, *, doc : typing.Optional[str] = None, constant : bool = False, 
+                readonly : bool = False, allow_None : bool = False, 
+                URL_path : str = USE_OBJECT_NAME, remote : bool = True, 
+                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (HTTP_METHODS.GET, HTTP_METHODS.PUT), 
+                state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+                db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+                class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
+                fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None, 
+                deepcopy_default : bool = False, per_instance_descriptor : bool = False, 
+                precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None
+            ) -> None:
+        
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, allow_None=allow_None,
                     per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default,
-                    class_member=class_member, fget=fget, fset=fset, precedence=precedence)
+                    class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence)
         self.db_persist = db_persist
         self.db_init    = db_init
         self.db_commit  = db_commit
         if URL_path is not USE_OBJECT_NAME:
             assert URL_path.startswith('/'), "URL path should start with a leading '/'"
-        self.scada_info = ScadaInfoValidator(
-            http_method = http_method,
-            URL_path    = URL_path,
-            state       = state,
-            isparameter = True
-        )
+        self._remote_info = None
+        if remote:
+            self._remote_info = RemoteResourceInfoValidator(
+                http_method = http_method,
+                URL_path    = URL_path,
+                state       = state,
+                isparameter = True
+            )
+        self.metadata = metadata
         
     def _post_slot_set(self, slot : str, old : typing.Any, value : typing.Any) -> None:
         if slot == 'owner' and self.owner is not None:
-            if self.scada_info.URL_path == USE_OBJECT_NAME:
-                self.scada_info.URL_path = '/' + self.name
-            self.scada_info.obj_name = self.name
+            if self._remote_info is not None:
+                if self._remote_info.URL_path == USE_OBJECT_NAME:
+                    self._remote_info.URL_path = '/' + self.name
+                self._remote_info.obj_name = self.name
             # In principle the above could be done when setting name itself however to simplify
             # we do it with owner. So we should always remember order of __set_name__ -> 1) attrib_name, 
             # 2) name and then 3) owner
         super()._post_slot_set(slot, old, value)
 
     def _post_value_set(self, obj : Parameterized, value : typing.Any) -> None:
-        if (self.db_persist or self.db_commit) and hasattr(obj, 'db_engine') and hasattr(obj.db_engine, 'edit_parameter'):
+        if (self.db_persist or self.db_commit) and hasattr(obj, 'db_engine'):
             obj.db_engine.edit_parameter(self, value)
         return super()._post_value_set(obj, value)
 
@@ -211,8 +240,7 @@ class PlotlyFigure(VisualizationParameter):
                 polled : bool = False, refresh_interval : typing.Optional[int] = None, 
                 update_event_name : typing.Optional[str] = None, doc: typing.Union[str, None] = None, 
                 URL_path : str = USE_OBJECT_NAME) -> None:
-        super().__init__(default=default_figure, doc=doc, constant=True, readonly=True, URL_path=URL_path, 
-                        http_method=(GET, PUT))
+        super().__init__(default=default_figure, doc=doc, constant=True, readonly=True, URL_path=URL_path)
         self.data_sources = data_sources    
         self.refresh_interval = refresh_interval
         self.update_event_name = update_event_name
@@ -261,7 +289,7 @@ class PlotlyFigure(VisualizationParameter):
         if not go:
             raise ImportError("plotly was not found/imported, install plotly to suport PlotlyFigure paramater")
         if not isinstance(value, go.Figure):
-            raise_TypeError(f"figure arguments accepts only plotly.graph_objects.Figure, not type {type(value)}",
+            raise TypeError(f"figure arguments accepts only plotly.graph_objects.Figure, not type {type(value)}",
                             self)
         return value
         
@@ -278,7 +306,7 @@ class Image(VisualizationParameter):
     def __init__(self, default : typing.Any = None, *, streamable : bool = True, doc : typing.Optional[str] = None, 
                 constant : bool = False, readonly : bool = False, allow_None : bool = False,  
                 URL_path : str = USE_OBJECT_NAME, 
-                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (GET, PUT), 
+                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (HTTP_METHODS.GET, HTTP_METHODS.PUT), 
                 state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
                 db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
                 class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
@@ -325,9 +353,9 @@ class FileServer(RemoteParameter):
     
     def validate_and_adapt_directory(self, value : str):
         if not isinstance(value, str):
-            raise_TypeError(f"FileServer parameter not a string, but type {type(value)}", self) 
+            raise TypeError(f"FileServer parameter not a string, but type {type(value)}", self) 
         if not os.path.isdir(value):
-            raise_ValueError(f"FileServer parameter directory '{value}' not a valid directory", self)
+            raise ValueError(f"FileServer parameter directory '{value}' not a valid directory", self)
         if not value.endswith('\\'):
             value += '\\'
         return value 
@@ -396,7 +424,7 @@ class RemoteClassParameters(ClassParameters):
         for param in objects.values():
             state = param.__getstate__()
             info[param.name] = dict(
-                scada_info = state.get("scada_info", None).create_dataclass(),
+                remote_info = state.get("_remote_info", None).to_dataclass(),
                 type = param.__class__.__name__,
                 owner = param.owner.__name__
             )

@@ -1,6 +1,6 @@
-hololinked.server.decorators
------------------------
+decorators
+==========
 
-.. automodule:: hololinked.server.decorators
-    :members:
-    :show-inheritance:
+.. autofunction:: hololinked.server.decorators.remote_method
+    
+.. autofunction:: hololinked.server.decorators.remote_parameter

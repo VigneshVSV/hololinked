@@ -54,7 +54,8 @@ class BaseSerializer(object):
     def dumps(self, data):
         raise NotImplementedError("implement in subclass")
     
-    def _convertToBytes(self, data):
+    @classmethod
+    def convert_to_bytes(self, data):
         if type(data) is bytearray:
             return bytes(data)
         if type(data) is memoryview:
@@ -127,7 +128,7 @@ class JSONSerializer(BaseSerializer):
         json.dump(data, file_desc, ensure_ascii=False, allow_nan=True, default=self.default)
 
     def loads(self, data : typing.Union[bytearray, memoryview, bytes]) -> typing.Any:
-        data : str = self._convertToBytes(data).decode("utf-8") 
+        data : str = self.convert_to_bytes(data).decode("utf-8") 
         try:
             return json.loads(data)
         except:
@@ -142,21 +143,21 @@ class JSONSerializer(BaseSerializer):
         return json.load(file_desc)
 
     @classmethod
-    def general_dumps(cls, data) -> bytes:
-        data = json.dumps(data, ensure_ascii=False, allow_nan = True)
+    def generic_dumps(cls, data) -> bytes:
+        data = json.dumps(data, ensure_ascii=False, allow_nan=True)
         return data.encode("utf-8")
 
     @classmethod
-    def general_dump(cls, data : typing.Dict[str, typing.Any], file_desc) -> None:
-        json.dump(data, file_desc, ensure_ascii = False, allow_nan = True)
+    def generic_dump(cls, data : typing.Dict[str, typing.Any], file_desc) -> None:
+        json.dump(data, file_desc, ensure_ascii=False, allow_nan=True)
     
     @classmethod
-    def general_loads(cls, data : typing.Union[bytearray, memoryview, bytes]) -> typing.Dict[str, typing.Any]:
-        data = cls._convertToBytes(data).decode("utf-8") # type: ignore
+    def generic_loads(cls, data : typing.Union[bytearray, memoryview, bytes]) -> typing.Dict[str, typing.Any]:
+        data = cls.convert_to_bytes(data).decode("utf-8") 
         return json.loads(data)
     
     @classmethod
-    def general_load(cls, file_desc) -> typing.Dict[str, typing.Any]:
+    def generic_load(cls, file_desc) -> typing.Dict[str, typing.Any]:
         return json.load(file_desc)
 
     def default(self, obj):
@@ -256,7 +257,7 @@ serializers = {
     'pickle'  : PickleSerializer,
     # 'dill'    : DillSerializer, 
     'JSON'    : JSONSerializer, 
-    'Serpent' : SerpentSerializer,
+    'serpent' : SerpentSerializer,
     None      : SerpentSerializer
 }
 
