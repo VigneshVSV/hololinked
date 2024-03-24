@@ -10,3 +10,5 @@ setuptools==68.0.0
 SQLAlchemy==2.0.21
 SQLAlchemy_Utils==0.41.1
 tornado==6.3.3
+msgspec==0.18.6
+
