@@ -21,7 +21,7 @@ based tools. |module-highlighted| is being developed with the following features
 * reasonable integration with HTTP to take advantage of modern web practices
 * easy to understand & setup
 * agnostic to system size & flexibility in topology
-* 30FPS 1280*1080*3 (8 bit) image streaming over HTTP
+.. * 30FPS 1280*1080*3 (8 bit) image streaming over HTTP
 
 In short - to use it in your home/hobby, in a lab or in a research facility & industry.
 

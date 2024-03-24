@@ -1,4 +1,4 @@
-from typing import Dict, List, Any, Union
+from typing import Dict, List, Any, Union, Optional
 from dataclasses import dataclass, field, asdict
 
 from .constants import HTTP_METHODS
@@ -24,6 +24,57 @@ class postman_collection:
     def json_file(self, filename = 'collection.json'):
         with open(filename, 'w') as file: 
             JSONSerializer.generic_dump(self.json(), file)
+
+    @classmethod
+    def build(cls, instance, domain_prefix : str) -> Dict[str, Any]:
+        from .remote_object import RemoteObject
+        from .data_classes import HTTPResource, RemoteResource
+        assert isinstance(instance, RemoteObject) # type definition
+        try:
+            return instance._postman_collection
+        except AttributeError:
+            pass 
+        parameters_folder = postman_itemgroup(name = 'parameters')
+        methods_folder = postman_itemgroup(name = 'methods')
+        events_folder = postman_itemgroup(name = 'events')
+
+        collection = postman_collection(
+            info = postman_collection_info(
+                name = instance.__class__.__name__,
+                description = "API endpoints available for Remote Object", 
+            ),
+            item = [ 
+                parameters_folder,
+                methods_folder                
+            ]
+        )
+
+        for http_method, resource in instance.httpserver_resources.items():
+            # i.e. this information is generated only on the httpserver accessible resrouces...
+            for URL_path, httpserver_data in resource.items():
+                if isinstance(httpserver_data, HTTPResource):
+                    scada_info : RemoteResource
+                    try:
+                        scada_info = instance.instance_resources[httpserver_data.instruction]
+                    except KeyError:
+                        parameter_path_without_RW = httpserver_data.instruction.rsplit('/', 1)[0]
+                        scada_info = instance.instance_resources[parameter_path_without_RW]
+                    item = postman_item(
+                        name = scada_info.obj_name,
+                        request = postman_http_request(
+                            description=scada_info.obj.__doc__,
+                            url=domain_prefix + URL_path, 
+                            method=http_method,
+                        )
+                    )
+                    if scada_info.isparameter:
+                        parameters_folder.add_item(item)
+                    elif scada_info.iscallable:
+                        methods_folder.add_item(item)
+        
+        instance._postman_collection = collection
+        return collection
+
 
 @dataclass
 class postman_collection_info:
