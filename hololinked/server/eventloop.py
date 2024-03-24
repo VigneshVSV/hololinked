@@ -145,18 +145,26 @@ class EventLoop(RemoteObject):
         async_loop.call_soon(lambda : asyncio.create_task(self.run_single_target(instance)))
 
     def run(self):
-        self._remote_object_executor = threading.Thread(target=self._run_remote_object_executor)
+        """
+        start the eventloop
+        """
+        self._remote_object_executor = threading.Thread(target=self.run_remote_object_executor)
         self._remote_object_executor.start()
-        self._run_external_message_listener()
+        self.run_external_message_listener()
         self._remote_object_executor.join()
       
-    def _run_external_message_listener(self):
+    def run_external_message_listener(self):
         """
-        Runs ZMQ's sockets which are visible to clients
+        Runs ZMQ's sockets which are visible to clients.
+        This method is automatically called by ``run()`` method. 
+        Please dont call this method when the async loop is already running. 
         """
         if threading.current_thread() != threading.main_thread():
-            async_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(async_loop)
+            try:
+                async_loop = asyncio.get_event_loop()
+            except RuntimeError:
+                async_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(async_loop)
         else:
             async_loop = asyncio.get_event_loop()
         rpc_servers = [remote_object._rpc_server for remote_object in self.remote_objects]
@@ -169,7 +177,12 @@ class EventLoop(RemoteObject):
         self.logger.info("exiting external listener event loop {}".format(self.instance_name))
         async_loop.close()
     
-    def _run_remote_object_executor(self):
+    def run_remote_object_executor(self):
+        """
+        Run ZMQ sockets which provide queued instructions to ``RemoteObject``.
+        This method is automatically called by ``run()`` method. 
+        Please dont call this method when the async loop is already running. 
+        """
         if threading.current_thread() != threading.main_thread():
             async_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(async_loop)

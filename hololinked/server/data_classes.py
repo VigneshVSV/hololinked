@@ -272,6 +272,13 @@ class RPCResource:
     def get_dunder_attr(self, __dunder_name : str):
         return getattr(self, __dunder_name.strip('_'))
 
+    def __getstate__(self):
+        return self.json()
+    
+    def __setstate__(self, values : typing.Dict):
+        for key, value in values.items():
+            setattr(self, key, value)
+
 
 @dataclass
 class ServerSentEvent:
@@ -294,6 +301,13 @@ class ServerSentEvent:
 
     def json(self):
         return asdict(self)
+
+    def __getstate__(self):
+        return self.json()
+    
+    def __setstate__(self, values : typing.Dict):
+        for key, value in values.items():
+            setattr(self, key, value)
 
 
 @dataclass

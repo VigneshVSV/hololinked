@@ -28,14 +28,15 @@ import json
 import pickle
 import traceback 
 import serpent
-# import dill
+from msgspec import json, msgpack 
+import json as pythonjson
 import inspect
 import array
 import datetime
 import uuid
 import decimal
 import typing
-from enum import Enum
+from enum import Enum, StrEnum
 
 from ..param.parameters import TypeConstrainedList, TypeConstrainedDict, TypedKeyMappingsConstrainedDict
 
@@ -46,7 +47,6 @@ dict_keys = type(dict().keys())
 
 class BaseSerializer(object):
     """Base class for (de)serializer implementations (which must be thread safe)"""
-    serializer_id = 0  # define uniquely in subclass
     
     def loads(self, data):
         raise NotImplementedError("implement in subclass")
@@ -112,68 +112,48 @@ class BaseSerializer(object):
 
 class JSONSerializer(BaseSerializer):
     """(de)serializer that wraps the json serialization protocol."""
-    serializer_id = 1  # never change this
     _type_replacements = {}
 
-    def __init__(self, use_json_method = True, split_multiline_str = True) -> None:
-        self.use_json_method  = use_json_method
-        self.prettify_strings = split_multiline_str
+    def __init__(self) -> None:
         super().__init__()
 
     def dumps(self, data) -> bytes:
-        data = json.dumps(data, ensure_ascii=False, allow_nan=True, default=self.default)
-        return data.encode("utf-8")
+        return json.encode(data, enc_hook=self.default)
 
     def dump(self, data : typing.Dict[str, typing.Any], file_desc) -> None:
-        json.dump(data, file_desc, ensure_ascii=False, allow_nan=True, default=self.default)
+        raise NotImplementedError("dump is not implemented")
+        # return json.dump(data, file_desc, ensure_ascii=False, allow_nan=True, default=self.default)
 
     def loads(self, data : typing.Union[bytearray, memoryview, bytes]) -> typing.Any:
         data : str = self.convert_to_bytes(data).decode("utf-8") 
         try:
-            return json.loads(data)
-        except:
+            return json.decode(data)
+        except Exception as ex:
             if len(data) == 0:
-                raise 
+                raise ex from None 
             elif data[0].isalpha():
                 return data 
             else:
-                raise 
+                raise ex from None
 
     def load(cls, file_desc) -> typing.Dict[str, typing.Any]:
-        return json.load(file_desc)
+        raise NotImplementedError("load is not implemented")
 
     @classmethod
-    def generic_dumps(cls, data) -> bytes:
-        data = json.dumps(data, ensure_ascii=False, allow_nan=True)
-        return data.encode("utf-8")
-
-    @classmethod
-    def generic_dump(cls, data : typing.Dict[str, typing.Any], file_desc) -> None:
-        json.dump(data, file_desc, ensure_ascii=False, allow_nan=True)
-    
-    @classmethod
-    def generic_loads(cls, data : typing.Union[bytearray, memoryview, bytes]) -> typing.Dict[str, typing.Any]:
-        data = cls.convert_to_bytes(data).decode("utf-8") 
-        return json.loads(data)
-    
-    @classmethod
-    def generic_load(cls, file_desc) -> typing.Dict[str, typing.Any]:
-        return json.load(file_desc)
-
-    def default(self, obj):
-        replacer = self._type_replacements.get(type(obj), None)
-        if replacer:
-            obj = replacer(obj)
-        if isinstance(obj, Enum):
-            return obj.name
-        if self.use_json_method and hasattr(obj, 'json'):
+    def default(cls, obj):
+        if hasattr(obj, 'json'):
             # alternative to type replacement
             return obj.json()
+        if isinstance(obj, Enum):
+            return obj.name
         if isinstance(obj, (set, dict_keys, deque, tuple)):
             # json module can't deal with sets so we make a tuple out of it
             return list(obj)  
         if isinstance(obj, (TypeConstrainedDict, TypeConstrainedList, TypedKeyMappingsConstrainedDict)):
             return obj._inner # copy has been implemented with same signature for both types 
+        replacer = cls._type_replacements.get(type(obj), None)
+        if replacer:
+            return replacer(obj)
         if isinstance(obj, uuid.UUID):
             return str(obj)
         if isinstance(obj, (datetime.datetime, datetime.date)):
@@ -187,8 +167,6 @@ class JSONSerializer(BaseSerializer):
                 "traceback" : traceback.format_exc().splitlines(),
                 "notes"   : obj.__notes__ if hasattr(obj, "__notes__") else None
             }, 
-        if hasattr(obj, 'to_json'):
-            return obj.to_json()
         if isinstance(obj, array.array):
             if obj.typecode == 'c':
                 return obj.tostring()
@@ -206,6 +184,29 @@ class JSONSerializer(BaseSerializer):
 
 
 
+class PythonBuiltinJSONSerializer(JSONSerializer):
+
+    def dumps(self, data) -> bytes:
+        data = pythonjson.dumps(data, ensure_ascii=False, allow_nan=True, default=self.default)
+        return data.encode("utf-8")
+       
+    def dump(self, data : typing.Dict[str, typing.Any], file_desc) -> None:
+        pythonjson.dump(data, file_desc, ensure_ascii=False, allow_nan=True, default=self.default)
+
+    def loads(self, data : typing.Union[bytearray, memoryview, bytes]) -> typing.Any:
+        data : str = self.convert_to_bytes(data).decode("utf-8") 
+        try:
+            return pythonjson.loads(data)
+        except Exception as ex:
+            if len(data) == 0:
+                raise ex from None 
+            elif data[0].isalpha():
+                return data 
+            else:
+                raise ex from None
+
+
+
 class PickleSerializer(BaseSerializer):
 
     serializer_id = 2  # never change this
@@ -216,18 +217,6 @@ class PickleSerializer(BaseSerializer):
     def loads(self, data):
         return pickle.loads(data)
     
-
-# class DillSerializer(BaseSerializer):
-
-#     serializer_id = 4 
-
-#     def dumps(self, data):
-#         return dill.dumps(data)
-    
-#     def loads(self, data):
-#         return dill.loads(data)
-    
-
 
 class SerpentSerializer(BaseSerializer):
     """(de)serializer that wraps the serpent serialization protocol."""
@@ -253,13 +242,34 @@ class SerpentSerializer(BaseSerializer):
         serpent.register_class(object_type, custom_serializer)
 
 
+
+class MsgpackSerializer(BaseSerializer):
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def dumps(self, value) -> bytes:
+        return msgpack.encode(value)
+
+    def loads(self, value) -> typing.Any:
+        return msgpack.decode(value)
+    
+
+
 serializers = {
     'pickle'  : PickleSerializer,
-    # 'dill'    : DillSerializer, 
-    'JSON'    : JSONSerializer, 
+    'json'    : JSONSerializer, 
     'serpent' : SerpentSerializer,
-    None      : SerpentSerializer
+    None      : MsgpackSerializer,
+    'msgpack' : MsgpackSerializer,
 }
 
-__all__ = [ 'JSONSerializer', 'SerpentSerializer', 'PickleSerializer', # 'DillSerializer', 
-           'serializers', 'BaseSerializer']
+class Serializers(StrEnum):
+    PICKLE = 'pickle'
+    JSON = 'json'
+    SERPENT = 'serpent'
+    MSGSPEC_MSGPACK = 'msgpack'
+
+
+__all__ = ['JSONSerializer', 'SerpentSerializer', 'PickleSerializer', 'MsgpackSerializer', 
+        'serializers', 'BaseSerializer']

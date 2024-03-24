@@ -61,10 +61,10 @@ class ObjectProxy:
         # bothers mainly about __setattr__ and _getattr__
         self._async_zmq_client = None    
         self._zmq_client = SyncZMQClient(instance_name, self.identity, client_type=PROXY, protocol=protocol, 
-                                            rpc_serializer=kwargs.get('serializer', None))
+                                            rpc_serializer=kwargs.get('serializer', None), **kwargs)
         if kwargs.get("asynch_mixin", False):
             self._async_zmq_client = AsyncZMQClient(instance_name, self.identity, client_type=PROXY, protocol=protocol, 
-                                            rpc_serializer=kwargs.get('serializer', None))
+                                            rpc_serializer=kwargs.get('serializer', None), **kwargs)
         if load_remote_object:
             self.load_remote_object()
 
@@ -358,10 +358,16 @@ class ObjectProxy:
         allowed_events = []
         for name, data in reply.items():
             if isinstance(data, dict):
-                if data["what"] == ResourceTypes.EVENT:
-                    data = ServerSentEvent(**data)
-                else:
-                    data = RPCResource(**data)
+                try:
+                    if data["what"] == ResourceTypes.EVENT:
+                        data = ServerSentEvent(**data)
+                    else:
+                        data = RPCResource(**data)
+                except Exception as ex:
+                    ex.add_note("Did you correctly configure your serializer? " + 
+                            "This part fails when serializer does not work with the instance_resources dictionary (especially recursive deserilization)."
+                            + "The error message may not be related to serialization as well. Visit https://hololinked.readthedocs.io/en/latest/howto/index.html" ) 
+                    raise ex from None
             elif not isinstance(data, (RPCResource, ServerSentEvent)):
                 raise RuntimeError("Logic error - deserialized info about server not instance of hololinked.server.data_classes.RPCResource")
             if data.what == ResourceTypes.CALLABLE:

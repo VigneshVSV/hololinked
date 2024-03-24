@@ -2,5 +2,5 @@ EventLoop
 =========
 
 .. autoclass:: hololinked.server.eventloop.EventLoop
-    :members: 
+    :members: instance_name, remote_objects, run, run_remote_object_executor, run_external_message_listener
     :show-inheritance:
