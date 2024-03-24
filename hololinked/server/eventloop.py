@@ -5,15 +5,16 @@ import traceback
 import importlib
 import typing 
 import threading
+from uuid import uuid4
 
-from .utils import uuid4_in_bytes, wrap_text
 from .constants import *
 from .webserver_utils import format_exception_as_json
 from .remote_parameters import TypedDict
+from .decorators import remote_method
 from .exceptions import *
-from .http_methods import post, get
 from .remote_object import *
-from .zmq_message_brokers import AsyncPollingZMQServer, ServerTypes 
+from .remote_object import RemoteObjectMeta
+from .zmq_message_brokers import ServerTypes 
 from .remote_parameter import RemoteParameter
 from .remote_parameters import ClassSelector, TypedList, List
 
@@ -71,47 +72,40 @@ class EventLoop(RemoteObject):
                     # self._message_broker_pool.register_server(consumer.message_broker)
                 elif isinstance(consumer, Consumer):
                     instance = consumer.consumer(*consumer.args, **consumer.kwargs, 
-                                            eventloop_name = self.instance_name)
+                                            eventloop_name=self.instance_name)
                     # self._message_broker_pool.register_server(instance.message_broker)                            
                     remote_objects.append(instance) 
         self.remote_objects = remote_objects # re-assign the instantiated objects as well
-        self.uninstantiated_remote_objects = {}
+        self.uninstantiated_remote_objects = dict()
       
     def __post_init__(self):
         super().__post_init__()
         self.logger.info("Event loop with name '{}' can be started using EventLoop.run().".format(self.instance_name))   
         return 
 
-    @property 
-    def message_broker_pool(self):
-        # raise NotImplementedError("message broker pool currently not created and unavailable for access.")
-        return self._message_broker_pool 
-     
     # example of overloading
-    @post('/exit')
+    @remote_method()
     def exit(self):
+        """
+        Stops the event loop and all its remote objects. Generally, this leads
+        to exiting the program unless some code follows the ``run()`` method.  
+        """
         raise BreakAllLoops
     
 
-    @get('/remote-objects')
-    def servers(self):
-        return {
-            instance.__class__.__name__ : instance.instance_name for instance in self.remote_objects 
-        }
-    
-
-    @post('/remote-objects')
-    def import_remote_object(self, file_name : str, object_name : str):
-        consumer = self._import_remote_object_module(file_name, object_name) 
-        id = uuid4_in_bytes()
-        self.uninstantiated_remote_objects[id] = consumer
-        return dict(
-            id = id, 
-            db_params = consumer.parameters.remote_objects_webgui_info(consumer.parameters.load_at_init_objects())
-        )
-   
     @classmethod
-    def _import_remote_object_module(cls, file_name : str, object_name : str):
+    def _import_remote_object(cls, file_name : str, object_name : str):
+        """
+        import a remote object specified by ``object_name`` from its 
+        script or module. 
+
+        Parameters
+        ----------
+        file_name : str
+            file or module path 
+        object_name : str
+            name of ``RemoteObject`` class to be imported
+        """
         module_name = file_name.split(os.sep)[-1]
         spec = importlib.util.spec_from_file_location(module_name, file_name)
         if spec is not None:
@@ -119,30 +113,44 @@ class EventLoop(RemoteObject):
             spec.loader.exec_module(module)
         else:     
             module = importlib.import_module(module_name, file_name.split(os.sep)[0])
-
         consumer = getattr(module, object_name) 
         if issubclass(consumer, RemoteObject):
             return consumer 
         else:
-            raise ValueError(wrap_text(f"""object name {object_name} in {file_name} not a subclass of RemoteObject. 
-                            Only subclasses are accepted (not even instances). Given object : {consumer}"""))
-
-    @post('/remote-objects/instantiate')
-    def instantiate(self, file_name : str, object_name : str, kwargs : typing.Dict = {}):
-        # consumer = self.import_remote_object(file_name, object_name)
-        # instance = consumer(**kwargs, eventloop_name=self.instance_name)
-        # self.register_new_consumer(instance)
-        raise NotImplementedError("Instantiation is not yet possible")
+            raise ValueError(f"object name {object_name} in {file_name} not a subclass of RemoteObject.", 
+                            f" Only subclasses are accepted (not even instances). Given object : {consumer}")
         
-    def register_new_consumer(self, instance : RemoteObject):
-        zmq_server = AsyncPollingZMQServer(instance_name=instance.instance_name, server_type=ServerTypes.USER_REMOTE_OBJECT,
-                    context=self.message_broker_pool.context, json_serializer=self.json_serializer, 
-                    proxy_serializer=self.proxy_serializer)
-        self.message_broker_pool.register_server(zmq_server)
-        instance.message_broker = zmq_server
+
+    @remote_method(URL_path='/remote-objects', http_method=HTTP_METHODS.POST)
+    def import_remote_object(self, file_name : str, object_name : str):
+        """
+        import remote object from the specified path and return the default 
+        parameters to be supplied to instantiate the object. 
+        """
+        consumer = self._import_remote_object(file_name, object_name) # type: RemoteObjectMeta
+        id = uuid4()
+        self.uninstantiated_remote_objects[id] = consumer
+        return dict(
+            id=id, 
+            db_params=consumer.parameters.webgui_info(consumer.parameters.db_init_objects)
+        )
+   
+
+    @remote_method(URL_path='/remote-objects/instantiate', 
+                http_method=HTTP_METHODS.POST) # remember to pass schema with mandatory instance name
+    def instantiate(self, id : str, kwargs : typing.Dict = {}):      
+        """
+        Instantiate the remote object that was imported with given arguments 
+        and add to the event loop
+        """
+        consumer = self.uninstantiated_remote_objects[id]
+        instance = consumer(**kwargs, eventloop_name=self.instance_name) # type: RemoteObject
         self.remote_objects.append(instance)
-        async_loop = asyncio.get_event_loop()
-        async_loop.call_soon(lambda : asyncio.create_task(self.run_single_target(instance)))
+        rpc_server = instance._rpc_server
+        self.request_listener_loop.call_soon(asyncio.create_task(lambda : rpc_server.poll()))
+        self.request_listener_loop.call_soon(asyncio.create_task(lambda : rpc_server.tunnel_message_to_remote_objects()))
+        self.remote_object_executor_loop.call_soon(asyncio.create_task(lambda : self.run_single_target(instance)))
+     
 
     def run(self):
         """
@@ -152,50 +160,55 @@ class EventLoop(RemoteObject):
         self._remote_object_executor.start()
         self.run_external_message_listener()
         self._remote_object_executor.join()
-      
+
+
+    @classmethod
+    def get_async_loop(cls):
+        """
+        get or create an asnyc loop
+        """
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop
+        
+
     def run_external_message_listener(self):
         """
         Runs ZMQ's sockets which are visible to clients.
         This method is automatically called by ``run()`` method. 
         Please dont call this method when the async loop is already running. 
         """
-        if threading.current_thread() != threading.main_thread():
-            try:
-                async_loop = asyncio.get_event_loop()
-            except RuntimeError:
-                async_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(async_loop)
-        else:
-            async_loop = asyncio.get_event_loop()
+        self.request_listener_loop = self.get_async_loop()
         rpc_servers = [remote_object._rpc_server for remote_object in self.remote_objects]
         methods = [] #type: typing.List[asyncio.Future]
         for rpc_server in rpc_servers:
             methods.append(rpc_server.poll())
             methods.append(rpc_server.tunnel_message_to_remote_objects())
         self.logger.info("starting external message listener thread")
-        async_loop.run_until_complete(asyncio.gather(*methods))
+        self.request_listener_loop.run_until_complete(asyncio.gather(*methods))
         self.logger.info("exiting external listener event loop {}".format(self.instance_name))
-        async_loop.close()
+        self.request_listener_loop.close()
     
+
     def run_remote_object_executor(self):
         """
         Run ZMQ sockets which provide queued instructions to ``RemoteObject``.
         This method is automatically called by ``run()`` method. 
         Please dont call this method when the async loop is already running. 
         """
-        if threading.current_thread() != threading.main_thread():
-            async_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(async_loop)
-        else:
-            async_loop = asyncio.get_event_loop()
+        self.remote_object_executor_loop = self.get_async_loop()
         self.logger.info("starting remote object executor thread")
-        async_loop.run_until_complete(
+        self.remote_object_executor_loop.run_until_complete(
             asyncio.gather(
                 *[self.run_single_target(instance) 
                     for instance in self.remote_objects] 
         ))
         self.logger.info("exiting event loop {}".format(self.instance_name))
-        async_loop.close()
+        self.remote_object_executor_loop.close()
+
 
     @classmethod
     async def run_single_target(cls, instance : RemoteObject) -> None: 
