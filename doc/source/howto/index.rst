@@ -13,6 +13,7 @@
     Expose Python Classes <self>
     parameters/index
     methods/index
+    eventloop
 
     
 Expose Python Classes

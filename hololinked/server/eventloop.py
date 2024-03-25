@@ -16,7 +16,7 @@ from .remote_object import *
 from .remote_object import RemoteObjectMeta
 from .zmq_message_brokers import ServerTypes 
 from .remote_parameter import RemoteParameter
-from .remote_parameters import ClassSelector, TypedList, List
+from .remote_parameters import ClassSelector, TypedList, List, Boolean 
 
 
 
@@ -46,6 +46,9 @@ class EventLoop(RemoteObject):
 
     remote_objects = TypedList(item_type=(RemoteObject, Consumer), bounds=(0,100), allow_None=True, default=None,
                         doc="list of RemoteObjects which are being executed", remote=False) #type: typing.List[RemoteObject]
+    
+    threaded = Boolean(default=False, remote=False, 
+                        doc="set True to run each remote object in its own thread")
   
     # Remote Parameters
     uninstantiated_remote_objects = TypedDict(default=None, allow_None=True, key_type=str,
