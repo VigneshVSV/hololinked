@@ -27,3 +27,9 @@ Setting threaded to True calls each RemoteObject in its own thread.
     :language: python 
     :linenos: 
     :lines: 20-
+
+Use proxies to import a new object from somewhere else:  
+
+.. literalinclude:: code/eventloop/import.py 
+    :language: python 
+    :linenos: 

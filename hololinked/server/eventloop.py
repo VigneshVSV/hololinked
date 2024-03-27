@@ -27,10 +27,7 @@ class Consumer:
     kwargs = TypedDict(default=None, allow_None=True, key_type=str, remote=False)
    
     def __init__(self, consumer : typing.Type[RemoteObject], args : typing.Tuple = tuple(), **kwargs) -> None:
-        if consumer is not None:
-            self.consumer = consumer
-        else:
-            raise ValueError("consumer cannot be None, please assign a subclass of RemoteObject")
+        self.consumer = consumer
         self.args = args 
         self.kwargs = kwargs
 
@@ -50,10 +47,6 @@ class EventLoop(RemoteObject):
     threaded = Boolean(default=False, remote=False, 
                         doc="set True to run each remote object in its own thread")
   
-    # Remote Parameters
-    uninstantiated_remote_objects = TypedDict(default=None, allow_None=True, key_type=str,
-                        item_type=(Consumer, str)) #, URL_path = '/uninstantiated-remote-objects')
-
     def __new__(cls, **kwargs):
         obj = super().__new__(cls, **kwargs)
         obj._internal_fixed_attributes.append('_message_broker_pool')
@@ -96,6 +89,11 @@ class EventLoop(RemoteObject):
         raise BreakAllLoops
     
 
+    # Remote Parameters
+    uninstantiated_remote_objects = TypedDict(default=None, allow_None=True, key_type=str,
+                        item_type=(Consumer, str), URL_path='/remote-objects/uninstantiated')
+    
+    
     @classmethod
     def _import_remote_object(cls, file_name : str, object_name : str):
         """
@@ -133,11 +131,8 @@ class EventLoop(RemoteObject):
         consumer = self._import_remote_object(file_name, object_name) # type: RemoteObjectMeta
         id = uuid4()
         self.uninstantiated_remote_objects[id] = consumer
-        return dict(
-            id=id, 
-            db_params=consumer.parameters.webgui_info(consumer.parameters.db_init_objects)
-        )
-   
+        return id
+           
 
     @remote_method(URL_path='/remote-objects/instantiate', 
                 http_method=HTTP_METHODS.POST) # remember to pass schema with mandatory instance name
@@ -152,15 +147,23 @@ class EventLoop(RemoteObject):
         rpc_server = instance._rpc_server
         self.request_listener_loop.call_soon(asyncio.create_task(lambda : rpc_server.poll()))
         self.request_listener_loop.call_soon(asyncio.create_task(lambda : rpc_server.tunnel_message_to_remote_objects()))
-        self.remote_object_executor_loop.call_soon(asyncio.create_task(lambda : self.run_single_target(instance)))
-     
+        if not self.threaded:
+            self.remote_object_executor_loop.call_soon(asyncio.create_task(lambda : self.run_single_target(instance)))
+        else: 
+            _remote_object_executor = threading.Thread(target=self.run_remote_object_executor, args=([instance],))
+            _remote_object_executor.start()
 
     def run(self):
         """
         start the eventloop
         """
-        self._remote_object_executor = threading.Thread(target=self.run_remote_object_executor)
-        self._remote_object_executor.start()
+        if not self.threaded:
+            _remote_object_executor = threading.Thread(target=self.run_remote_object_executor, args=(self.remote_objects,))
+            _remote_object_executor.start()
+        else: 
+            for remote_object in self.remote_objects:
+                _remote_object_executor = threading.Thread(target=self.run_remote_object_executor, args=([remote_object],))
+                _remote_object_executor.start()
         self.run_external_message_listener()
         self._remote_object_executor.join()
 
@@ -196,21 +199,24 @@ class EventLoop(RemoteObject):
         self.request_listener_loop.close()
     
 
-    def run_remote_object_executor(self):
+    def run_remote_object_executor(self, remote_objects):
         """
         Run ZMQ sockets which provide queued instructions to ``RemoteObject``.
         This method is automatically called by ``run()`` method. 
         Please dont call this method when the async loop is already running. 
         """
-        self.remote_object_executor_loop = self.get_async_loop()
-        self.logger.info("starting remote object executor thread")
-        self.remote_object_executor_loop.run_until_complete(
+        remote_object_executor_loop = self.get_async_loop()
+        if not self.threaded:
+            self.remote_object_executor_loop = remote_object_executor_loop
+        self.logger.info(f"starting remote object executor loop in thread {threading.get_ident()} for {
+                                                                    [obj.instance_name for obj in remote_objects]}")
+        remote_object_executor_loop.run_until_complete(
             asyncio.gather(
                 *[self.run_single_target(instance) 
-                    for instance in self.remote_objects] 
+                    for instance in remote_objects] 
         ))
-        self.logger.info("exiting event loop {}".format(self.instance_name))
-        self.remote_object_executor_loop.close()
+        self.logger.info(f"exiting event loop in thread {threading.get_ident()}")
+        remote_object_executor_loop.close()
 
 
     @classmethod
