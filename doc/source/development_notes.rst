@@ -11,7 +11,7 @@ Development Notes
 =================
 
 In the interest of information to software engineers and web developers, the main difference of |module-highlighted| to a conventional 
-RPC or REST(-like) paradigm in HTTP is that, |module-highlighted| attempts to be a hybrid of both. For instrument control
+RPC or REST(-like) paradigm with HTTP is that, |module-highlighted| attempts to be a hybrid of both. For instrument control
 & data-acquisition, it is difficult to move away completely from RPC to REST. Besides, most instrument drivers/hardware 
 allow only a single persistent connection with a single process instead of multiple clients or processes. Further, when 
 such a process talks to an instrument, only one instruction can be sent at a time, which needs to be completed before 
@@ -20,11 +20,13 @@ does not care how many simultaneous operations are run. To reconcile both, the f
 
 * |module-highlighted| gives the freedom to choose the HTTP request method & end-point URL desirable for each method, parameter and event
 * All HTTP requests will be queued and executed serially unless threaded or made async manually by the programmer
-* parameters can be used to model settings of instrumentation (both hardware and software-only), general class/instance attributes, hold captured & computed data, query said data, for example; basically all operations data and settings oriented.
+* parameters can be used to model settings of instrumentation (both hardware and software-only), general class/instance attributes, 
+  hold captured & computed data.
 * events can be used to push measured data, create alerts/alarms, inform availability of certain type of data etc.
 * methods can be used to issue commands to instruments like start and stop acquisition, connect/disconnect etc.
-* Verb like URLs may be used for methods & noun-like URLs are suggested to be used for parameters and events. Using a state machine or similar, it may be possible to cast all resources to REST-like. 
-* Modify web request handler to change headers, authentication etc. while leaving the remote object execution details to the package
+* Verb like URLs may be used for methods & noun-like URLs are suggested to be used for parameters and events.
+* Finally, freedom is given to modify web request handler to change headers, authentication etc. or add additional endpoints 
+which may cast all resources to REST(-like) while leaving the remote object execution details to the package.
 
 HTTP request methods may be mapped as follows:
 
