@@ -1,4 +1,3 @@
-import functools
 import threading 
 import warnings
 import typing 
@@ -6,7 +5,8 @@ import logging
 import uuid
 
 from ..server.data_classes import RPCResource, ServerSentEvent
-from ..server.zmq_message_brokers import AsyncZMQClient, SyncZMQClient, EventConsumer, PROXY
+from ..server.zmq_message_brokers import AsyncZMQClient, SyncZMQClient, PROXY
+from ..server.events import EventConsumer
 from ..server.utils import current_datetime_ms_str
 from ..server.constants import (JSON, CommonInstructions, 
                             ServerMessage, ServerMessageData, ResourceTypes)
