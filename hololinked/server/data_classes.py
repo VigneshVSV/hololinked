@@ -7,6 +7,8 @@ import platform
 from enum import Enum
 from dataclasses import dataclass, asdict, field, fields
 
+from hololinked.server.utils import get_signature
+
 from ..param.parameters import String, Boolean, Tuple, TupleSelector, TypedDict
 from .constants import (JSON, USE_OBJECT_NAME, HTTP_METHODS, REGEX, http_methods)
 from .path_converter import compile_path
@@ -44,7 +46,7 @@ class RemoteResourceInfoValidator:
         True for a method or function or callable
     isparameter : bool, default False
         True for a parameter
-    http_request_as_argument : bool, default False
+    request_as_argument : bool, default False
         if True, http request object will be passed as a argument to a callable. The user is warned to not use this
         generally. 
     """
@@ -123,7 +125,7 @@ class RemoteResource:
         for field in fields(self):
             if field.name != 'obj' and field.name != 'bound_obj':
                 json_dict[field.name] = getattr(self, field.name)
-        # object.__setattr__(self, '_json', json_dict) # because object is frozen 
+        # object.__setattr__(self, '_json', json_dict) # because object is frozen - used to work, but not now 
         return json_dict                 
     
 
@@ -370,8 +372,60 @@ class GUIResources:
     documentation : typing.Optional[typing.Dict[str, typing.Any]] = field(default=None) 
     GUI : typing.Optional[typing.Dict] = field(default=None)
 
+    def __init__(self):
+        super().__init__()
+
     def json(self): 
         return asdict(self)
     
     def build(self, instance):
-        pass 
+        self.instance_name = instance.instance_name,
+        self.events = instance.events, 
+        self.classdoc = instance.__class__.__doc__.splitlines() if instance.__class__.__doc__ is not None else None, 
+        self.inheritance = [class_.__name__ for class_ in instance.__class__.mro()],
+        self.GUI = instance.GUI,
+    
+        
+        for instruction, remote_info in instance.instance_resources.items(): 
+            if remote_info.iscallable:
+                self.methods[instruction] = instance.rpc_resources[instruction].json() 
+                self.methods[instruction]["remote_info"] = instance.httpserver_resources[instruction].json() 
+                self.methods[instruction]["remote_info"]["http_method"] = list(instance.httpserver_resources[instruction].json()["instructions"].supported_methods())[0]
+                # to check - apparently the recursive json() calling does not reach inner depths of a dict, 
+                # therefore we call json ourselves
+                self.methods[instruction]["owner"] = instance.rpc_resources[instruction].qualname.split('.')[0]
+                self.methods[instruction]["owner_instance_name"] = remote_info.bound_obj.instance_name
+                self.methods[instruction]["type"] = 'classmethod' if isinstance(remote_info.obj, classmethod) else ''
+                self.methods[instruction]["signature"] = get_signature(remote_info.obj)[0]
+            elif remote_info.isparameter:
+                path_without_RW = instruction.rsplit('/', 1)[0]
+                if path_without_RW not in self.parameters:
+                    self.parameters[path_without_RW] = self.__class__.parameters.webgui_info(remote_info.obj)[remote_info.obj.name]
+                    self.parameters[path_without_RW]["remote_info"] = self.parameters[path_without_RW]["remote_info"].json()
+                    self.parameters[path_without_RW]["instruction"] = path_without_RW
+                    self.parameters[path_without_RW]["remote_info"]["http_method"] = list(self.httpserver_resources[path_without_RW].json()["instructions"].supported_methods())
+                    """
+                    The instruction part has to be cleaned up to be called as fullpath. Setting the full path back into 
+                    remote_info is not correct because the unbound method is used by multiple instances. 
+                    """
+                    self.parameters[path_without_RW]["owner_instance_name"] = remote_info.bound_obj.instance_name
+                    # if isinstance(remote_info.obj, PlotlyFigure):
+                    #     gui_resources.parameters[path_without_RW]['default'] = None
+                    #     gui_resources.parameters[path_without_RW]['visualization'] = {
+                    #             'type' : 'plotly',
+                    #             'plot' : remote_info.obj.__get__(self, type(self)),
+                    #             'sources' : remote_info.obj.data_sources,
+                    #             'actions' : {
+                    #                 remote_info.obj._action_stub.id : remote_info.obj._action_stub
+                    #             },
+                    #     }
+                    # elif isinstance(remote_info.obj, Image):
+                    #     gui_resources.parameters[path_without_RW]['default'] = None
+                    #     gui_resources.parameters[path_without_RW]['visualization'] = {
+                    #         'type' : 'sse-video',
+                    #         'sources' : remote_info.obj.data_sources,
+                    #         'actions' : {
+                    #                 remote_info.obj._action_stub.id : remote_info.obj._action_stub
+                    #             },
+                    #     }
+        return self

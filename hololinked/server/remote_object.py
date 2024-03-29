@@ -20,13 +20,13 @@ from .decorators import remote_method
 from .http_methods import get, post
 from .data_classes import (GUIResources, RemoteResource, HTTPResource, RPCResource, RemoteResourceInfoValidator,
                         ServerSentEvent)
-from .api_platform_utils import postman_item, postman_itemgroup
 from .utils import create_default_logger, get_signature, wrap_text
 from .api_platform_utils import *
 from .remote_parameter import ReactApp, RemoteParameter, RemoteClassParameters
-from .remote_parameters import (Integer, String, ClassSelector, TupleSelector, TypedDict, Boolean, 
+from .remote_parameters import (Integer, String, ClassSelector, TypedDict, Boolean, 
                                 Selector, TypedKeyMappingsConstrainedDict )
-from .zmq_message_brokers import RPCServer, ServerTypes, EventPublisher, AsyncPollingZMQServer, Event
+from .zmq_message_brokers import RPCServer, ServerTypes, AsyncPollingZMQServer
+from .events import EventPublisher, Event
 
 
 
@@ -267,9 +267,13 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
     rpc_resources = RemoteParameter(readonly=True, URL_path='/resources/object-proxy', 
                         doc="object's resources exposed to RPC client, similar to HTTP resources but differs in details.", 
                         fget=lambda self: self._rpc_resources) # type: typing.Dict[str, typing.Any]
-    gui_resources : typing.Dict = RemoteParameter(readonly=True, URL_path='/resources/gui', 
+    gui_resources = RemoteParameter(readonly=True, URL_path='/resources/gui', 
                         doc="""object's data read by hololinked-portal GUI client, similar to http_resources but differs 
-                        in details.""") # type: typing.Dict[str, typing.Any]
+                        in details.""",
+                        fget=lambda self: GUIResources().build(self)) # type: typing.Dict[str, typing.Any]
+    thing_description = RemoteParameter(readonly=True, URL_path='/resources/wot', 
+                            doc="thing description schema of W3 Web of Things https://www.w3.org/TR/wot-thing-description11/",
+                        )
     events = RemoteParameter(readonly=True, URL_path='/events', 
                         doc="returns a dictionary with two fields containing event name and event information") # type: typing.Dict[str, typing.Any]
     object_info = RemoteParameter(doc="contains information about this object like the class name, script location etc.",
@@ -374,7 +378,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
                                     "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")
             # above assertion is only a typing convenience
             resource._owner = self
-            resource._unique_event_name = bytes(f"{self._full_URL_path_prefix}{resource.URL_path}", encoding='utf-8')
+            resource._unique_identifier = bytes(f"{self._full_URL_path_prefix}{resource.URL_path}", encoding='utf-8')
             resource.publisher = self._event_publisher                
             httpserver_resources['{}{}'.format(
                         self._full_URL_path_prefix, resource.URL_path)] = ServerSentEvent(
@@ -468,69 +472,26 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
     @events.getter
     def _get_events(self) -> typing.Dict[str, typing.Any]:
         return {
-            event._unique_event_name.decode() : dict(
+            event._unique_identifier.decode() : dict(
                 name = event.name,
-                instruction = event._unique_event_name.decode(),
+                instruction = event._unique_identifier.decode(),
                 owner = event.owner.__class__.__name__,
                 owner_instance_name =  event.owner.instance_name,
                 address = self.event_publisher.socket_address
             ) for event in self.event_publisher.events
         }
     
-    @gui_resources.getter
-    def _get_gui_resources(self):
-        gui_resources = GUIResources(
-            instance_name=self.instance_name,
-            events = self.events, 
-            classdoc = self.__class__.__doc__.splitlines() if self.__class__.__doc__ is not None else None, 
-            inheritance = [class_.__name__ for class_ in self.__class__.mro()],
-            GUI = self.GUI,
-        )
-        for instruction, remote_info in self.instance_resources.items(): 
-            if remote_info.iscallable:
-                gui_resources.methods[instruction] = self.rpc_resources[instruction].json() 
-                gui_resources.methods[instruction]["remote_info"] = self.httpserver_resources[instruction].json() 
-                gui_resources.methods[instruction]["remote_info"]["http_method"] = list(self.httpserver_resources[instruction].json()["instructions"].supported_methods())[0]
-                # to check - apparently the recursive json() calling does not reach inner depths of a dict, 
-                # therefore we call json ourselves
-                gui_resources.methods[instruction]["owner"] = self.rpc_resources[instruction].qualname.split('.')[0]
-                gui_resources.methods[instruction]["owner_instance_name"] = remote_info.bound_obj.instance_name
-                gui_resources.methods[instruction]["type"] = 'classmethod' if isinstance(remote_info.obj, classmethod) else ''
-                gui_resources.methods[instruction]["signature"] = get_signature(remote_info.obj)[0]
-            elif remote_info.isparameter:
-                path_without_RW = instruction.rsplit('/', 1)[0]
-                if path_without_RW not in gui_resources.parameters:
-                    gui_resources.parameters[path_without_RW] = self.__class__.parameters.webgui_info(remote_info.obj)[remote_info.obj.name]
-                    gui_resources.parameters[path_without_RW]["remote_info"] = gui_resources.parameters[path_without_RW]["remote_info"].json()
-                    gui_resources.parameters[path_without_RW]["instruction"] = path_without_RW
-                    gui_resources.parameters[path_without_RW]["remote_info"]["http_method"] = list(self.httpserver_resources[path_without_RW].json()["instructions"].supported_methods())
-                    """
-                    The instruction part has to be cleaned up to be called as fullpath. Setting the full path back into 
-                    remote_info is not correct because the unbound method is used by multiple instances. 
-                    """
-                    gui_resources.parameters[path_without_RW]["owner_instance_name"] = remote_info.bound_obj.instance_name
-                    # if isinstance(remote_info.obj, PlotlyFigure):
-                    #     gui_resources.parameters[path_without_RW]['default'] = None
-                    #     gui_resources.parameters[path_without_RW]['visualization'] = {
-                    #             'type' : 'plotly',
-                    #             'plot' : remote_info.obj.__get__(self, type(self)),
-                    #             'sources' : remote_info.obj.data_sources,
-                    #             'actions' : {
-                    #                 remote_info.obj._action_stub.id : remote_info.obj._action_stub
-                    #             },
-                    #     }
-                    # elif isinstance(remote_info.obj, Image):
-                    #     gui_resources.parameters[path_without_RW]['default'] = None
-                    #     gui_resources.parameters[path_without_RW]['visualization'] = {
-                    #         'type' : 'sse-video',
-                    #         'sources' : remote_info.obj.data_sources,
-                    #         'actions' : {
-                    #                 remote_info.obj._action_stub.id : remote_info.obj._action_stub
-                    #             },
-                    #     }
-        return gui_resources
-
+    @remote_method(http_method=HTTP_METHODS.GET, URL_path='/resources/postman-collection')
+    def postman_collection(self, domain_prefix : str) -> postman_collection:
+        return postman_collection.build(instance=self, domain_prefix=domain_prefix)
+    
+    @thing_description.getter 
+    def get_thing_description(self):
+        from ..wot import ThingDescription
+        return ThingDescription().build(self)
+    
        
+
 class RemoteObject(RemoteSubobject): 
     """
     Expose your python classes for HTTP methods & RPC clients by subclassing from here. 
@@ -652,11 +613,6 @@ class RemoteObject(RemoteSubobject):
             self.state_machine._prepare(self)
             self.logger.debug("setup state machine")
 
-
-    @remote_method(http_method=HTTP_METHODS.GET, URL_path='/resources/postman-collection')
-    def postman_collection(self, domain_prefix : str) -> postman_collection:
-        return postman_collection.build(instance=self, domain_prefix=domain_prefix)
-    
     @get('/parameters')
     def _parameters(self):
         return self.parameters.descriptors.keys()

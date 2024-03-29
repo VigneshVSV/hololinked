@@ -5,7 +5,8 @@ from tornado.iostream import StreamClosedError
 
 from .constants import CommonInstructions, ServerMessageData
 from .serializers import JSONSerializer
-from .zmq_message_brokers import AsyncZMQClient, MessageMappedZMQClientPool, EventConsumer
+from .zmq_message_brokers import AsyncZMQClient, MessageMappedZMQClientPool
+from .events import EventConsumer
 from .webserver_utils import *
 from .utils import current_datetime_ms_str
 from .data_classes import HTTPResource, ServerSentEvent

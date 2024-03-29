@@ -23,10 +23,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-from collections import deque
 import json
 import pickle
-import traceback 
 import serpent
 from msgspec import json, msgpack 
 import json as pythonjson
@@ -37,9 +35,10 @@ import uuid
 import decimal
 import typing
 from enum import Enum, StrEnum
+from collections import deque
 
 from ..param.parameters import TypeConstrainedList, TypeConstrainedDict, TypedKeyMappingsConstrainedDict
-
+from .webserver_utils import format_exception_as_json
 
 dict_keys = type(dict().keys())
 
@@ -151,9 +150,6 @@ class JSONSerializer(BaseSerializer):
             return list(obj)  
         if isinstance(obj, (TypeConstrainedDict, TypeConstrainedList, TypedKeyMappingsConstrainedDict)):
             return obj._inner # copy has been implemented with same signature for both types 
-        replacer = cls._type_replacements.get(type(obj), None)
-        if replacer:
-            return replacer(obj)
         if isinstance(obj, uuid.UUID):
             return str(obj)
         if isinstance(obj, (datetime.datetime, datetime.date)):
@@ -161,21 +157,18 @@ class JSONSerializer(BaseSerializer):
         if isinstance(obj, decimal.Decimal):
             return str(obj)
         if isinstance(obj, Exception):
-            return {
-                "message" : str(obj),
-                "type"    : repr(obj).split('(', 1)[0],
-                "traceback" : traceback.format_exc().splitlines(),
-                "notes"   : obj.__notes__ if hasattr(obj, "__notes__") else None
-            }, 
+            return format_exception_as_json(obj)
         if isinstance(obj, array.array):
             if obj.typecode == 'c':
                 return obj.tostring()
             if obj.typecode == 'u':
                 return obj.tounicode()
             return obj.tolist()
+        replacer = cls._type_replacements.get(type(obj), None)
+        if replacer:
+            return replacer(obj)
         raise TypeError("Given type cannot be converted to JSON : {}".format(type(obj)))
-        # return self.class_to_dict(obj)
-
+      
     @classmethod
     def register_type_replacement(cls, object_type, replacement_function):
         if object_type is type or not inspect.isclass(object_type):
@@ -209,8 +202,6 @@ class PythonBuiltinJSONSerializer(JSONSerializer):
 
 class PickleSerializer(BaseSerializer):
 
-    serializer_id = 2  # never change this
-
     def dumps(self, data):
         return pickle.dumps(data)
     
@@ -220,8 +211,6 @@ class PickleSerializer(BaseSerializer):
 
 class SerpentSerializer(BaseSerializer):
     """(de)serializer that wraps the serpent serialization protocol."""
-    serializer_id = 3  # never change this
-
     def dumps(self, data):
         return serpent.dumps(data, module_in_classname=True)
 

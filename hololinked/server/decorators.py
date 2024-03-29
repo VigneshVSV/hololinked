@@ -1,4 +1,3 @@
-import functools
 import typing
 from enum import Enum
 from types import FunctionType
@@ -10,42 +9,25 @@ from .utils import wrap_text
 
 
 
-WRAPPER_ASSIGNMENTS = functools.WRAPPER_ASSIGNMENTS + ('__kwdefaults__', '__defaults__', )
-
-def wrap_method(method : FunctionType):
-    """wraps a methods with useful operations before and after calling a method.
-    Old : use case not decided.
-
-    Args:
-        method (FunctionType): function or callable
-
-    Returns:
-        method : returns a wrapped callable, preserving information regarding signature 
-            as much as possible
+def is_dunder_object(obj: typing.Any) -> bool:
     """
-   
-    @functools.wraps(method, WRAPPER_ASSIGNMENTS)
-    def wrapped_method(*args, **kwargs) -> typing.Any:
-        self = args[0]
-        self.logger.debug("called {} of instance {}".format(method.__qualname__, self.instance_name))
-        return method(*args, **kwargs)
-    return wrapped_method
+    returns if the attribute name is to be considered private or not
+    
+    Parameters
+    ----------
+    obj: Any 
+        obj with a __name__ dunder available
 
-
-def is_private_attribute(attr_name: str) -> bool:
-    """returns if the attribute name is to be considered private or not
-    Args:
-        attr_name (str): name of the attribute
-
-    Returns:
-        bool: return True when attribute does not start with '_' or (dunder '__'
-            are therefore included)
+    Returns
+    -------
+    bool: 
+        return True when attribute does not start with a dunder '__'
     """
-    if attr_name.startswith('_'):
+    if obj.__name__.startswith('__'):
         return True
     return False
 
-    
+   
 def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.POST, 
             state : typing.Optional[typing.Union[str, Enum]] = None, argument_schema : typing.Optional[JSON] = None) -> typing.Callable:
     """Use this function to decorate your methods to be accessible remotely.  
@@ -70,6 +52,8 @@ def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_MET
         original = obj
         if isinstance(obj, classmethod):
             obj = obj.__func__
+        if is_dunder_object(obj):
+            raise ValueError(f"dunder objects cannot become remote : {obj.__name__}")
         if callable(obj):
             if hasattr(obj, '_remote_info') and not isinstance(obj._remote_info, RemoteResourceInfoValidator): 
                 raise NameError(
@@ -124,38 +108,18 @@ def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_MET
     return inner 
 
 
-def remote_parameter(default: typing.Any = None, *, doc : typing.Optional[str] = None, 
-        constant : bool = False, readonly : bool = False, allow_None : bool = False, 
-        URL_path : str = USE_OBJECT_NAME, remote : bool = True, 
-        http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (HTTP_METHODS.GET, HTTP_METHODS.PUT), 
-        state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-        db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
-        class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
-        fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None, 
-        deepcopy_default : bool = False, per_instance_descriptor : bool = False, 
-        precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None,
-        parameter_type : typing.Optional["RemoteParameter"] = None, **kwargs
-    ) -> "RemoteParameter":
+def rpc(state : typing.Optional[typing.Union[str, Enum]] = None, 
+        argument_schema : typing.Optional[JSON] = None) -> typing.Callable:
     """
-    use like python ``property`` without declaring a remote parameter explicity.       
+    shortcut decorator that only exposes methods to RPC clients
     """
-    if type is not None and not isinstance(type, RemoteParameter):
-        raise TypeError(f"type argument must be a RemoteParameter if supplied, given type {parameter_type(type)}")
-    else:
-        parameter_type = RemoteParameter 
-        # will raise import error when specified in argument
-
-    return parameter_type(default=default, constant=constant, readonly=readonly,
-            allow_None=allow_None, URL_path=URL_path, remote=remote, http_method=http_method,
-            state=state, db_persist=db_persist, db_init=db_init, db_commit=db_commit,
-            class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
-            deepcopy_default=deepcopy_default, per_instance_descriptor=per_instance_descriptor,
-            precedence=precedence, metadata=metadata, **kwargs)
+    return remote_method(URL_path=None, http_method=None, state=state, argument_schema=argument_schema)
 
 
 
-from .remote_parameter import RemoteParameter
-
-__all__ = ['remote_method', 'remote_parameter']
+__all__ = [
+    remote_method.__name__,
+    rpc.__name__
+]
 
 

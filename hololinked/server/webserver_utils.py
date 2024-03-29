@@ -25,7 +25,7 @@ def format_exception_as_json(exc : Exception) -> typing.Dict[str, typing.Any]:
         "message" : str(exc),
         "type"    : repr(exc).split('(', 1)[0],
         "traceback" : traceback.format_exc().splitlines(),
-        "notes"   : E.__notes__ if hasattr(exc, "__notes__") else None # type: ignore
+        "notes"   : exc.__notes__ if hasattr(exc, "__notes__") else None 
     }
 
 

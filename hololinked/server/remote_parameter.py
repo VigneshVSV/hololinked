@@ -5,7 +5,7 @@ from enum import Enum
 from ..param.parameterized import Parameter, Parameterized, ClassParameters
 from .decorators import RemoteResourceInfoValidator
 from .constants import USE_OBJECT_NAME, HTTP_METHODS
-from .zmq_message_brokers import Event
+from .events import Event
 
 try: 
     import plotly.graph_objects as go
@@ -148,11 +148,11 @@ class RemoteParameter(Parameter):
 
     """
 
-    __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', '_remote_info']
+    __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', '_remote_info', 'observable']
 
     def __init__(self, default: typing.Any = None, *, doc : typing.Optional[str] = None, constant : bool = False, 
                 readonly : bool = False, allow_None : bool = False, 
-                URL_path : str = USE_OBJECT_NAME, remote : bool = True, 
+                URL_path : str = USE_OBJECT_NAME, remote : bool = True, observable : bool = True, 
                 http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (HTTP_METHODS.GET, HTTP_METHODS.PUT), 
                 state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
                 db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
