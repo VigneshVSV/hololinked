@@ -25,8 +25,8 @@ does not care how many simultaneous operations are run. To reconcile both, the f
 * events can be used to push measured data, create alerts/alarms, inform availability of certain type of data etc.
 * methods can be used to issue commands to instruments like start and stop acquisition, connect/disconnect etc.
 * Verb like URLs may be used for methods & noun-like URLs are suggested to be used for parameters and events.
-* Finally, freedom is given to modify web request handler to change headers, authentication etc. or add additional endpoints 
-which may cast all resources to REST(-like) while leaving the remote object execution details to the package.
+* Finally, freedom is given to modify web request handler to change headers, authentication etc. or add additional endpoints
+  which may cast all resources to REST(-like) while leaving the remote object execution details to the package.
 
 HTTP request methods may be mapped as follows:
 
