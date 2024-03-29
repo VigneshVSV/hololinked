@@ -208,8 +208,7 @@ class EventLoop(RemoteObject):
         remote_object_executor_loop = self.get_async_loop()
         if not self.threaded:
             self.remote_object_executor_loop = remote_object_executor_loop
-        self.logger.info(f"starting remote object executor loop in thread {threading.get_ident()} for {
-                                                                    [obj.instance_name for obj in remote_objects]}")
+        self.logger.info(f"starting remote object executor loop in thread {threading.get_ident()} for {[obj.instance_name for obj in remote_objects]}")
         remote_object_executor_loop.run_until_complete(
             asyncio.gather(
                 *[self.run_single_target(instance) 

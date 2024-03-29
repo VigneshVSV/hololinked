@@ -41,3 +41,12 @@ API Reference
 
     server/system_host/index
 
+
+``hololinked.wot``
+------------------
+
+.. toctree:: 
+    :maxdepth: 1 
+
+    server/wot/index
+

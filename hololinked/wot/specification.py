@@ -2,18 +2,47 @@ import typing
 from dataclasses import dataclass, asdict
 
 from ..server.remote_parameters import *
+from ..server.constants import JSONSerializable
 from .thing import Thing
 from .properties import Property
 
 
+@dataclass
+class Schema:
+    """
+    Base dataclass for all WoT schema; Implements a custom asdict method which replaces dataclasses' asdict 
+    utility function
+    """
 
-class PropertyDescription:
-    type : str
+    def asdict(self):
+        self_dict = dict()
+        for field, value in self.__dataclass_fields__.items():    
+            if getattr(self, field, NotImplemented) is NotImplemented:
+                continue
+            self_dict[field] = getattr(self, field)
+        return self_dict
+    
+
+@dataclass
+class InteractionAffordance(Schema):
     title : str 
-    unit : str 
+    titles : typing.Optional[typing.Dict[str, str]]
+    description : str
+    descriptions : typing.Optional[typing.Dict[str, str]] 
+  
+    def __init__(self):
+        super().__init__()
+
+
+@dataclass
+class PropertyAffordance(InteractionAffordance):
+    type : str
     readOnly : bool
-    writeOnly : bool 
-    observable : bool
+    writeOnly : bool
+    constant : bool
+    default : typing.Optional[typing.Any] 
+    observable : typing.Optional[bool]
+    unit : typing.Optional[str]
 
     property_type = {
         String : 'string',
@@ -33,6 +62,9 @@ class PropertyDescription:
         TypedDict : 'object'
     }
 
+    def __init__(self):
+        super().__init__()
+
     def build(self, property : Property) -> typing.Dict[str, typing.Any]:
         self.type = self.property_type[property.__class__]
         self.title = property.name
@@ -40,17 +72,37 @@ class PropertyDescription:
         self.writeOnly = False
         self.description = property.doc 
         self.constant = property.constant
-        self.default = property.default
+        if property.overloads["fget"] is None:
+            self.default = property.default
+        if property.metadata and property.metadata.get("unit", None) is not None:
+            self.unit = property.metadata["unit"]
         
         if self.type == 'string':
-            assert isinstance(property, String)
-            self.pattern = property.regex
+            if isinstance(property, String):
+                self.pattern = property.regex
+            # elif isinstance(property, Image)
+            #     self.contentEncoding = ''
+            #     self.contentMediaType = ''
+
+        elif self.type == 'number':
+            assert isinstance(property, (Number, Integer))
+            if isinstance(property.bounds[0], (int, float)):
+                self.minimum = property.bounds[0]
+            if isinstance(property.bounds[1], (int, float)):
+                self.maximum = property.bounds[1]
+            self.exclusiveMinimum = not property.inclusive_bounds[0]
+            self.exclusiveMaximum = not property.inclusive_bounds[1]
+            if property.step:
+                self.multipleOf = property.step
         
-        return asdict(self)
+        elif self.type == 'boolean':
+            pass 
+        
+        return self.asdict()
+    
 
-
-
-class ActionDescription:
+@dataclass
+class ActionAffordance(InteractionAffordance):
     forms : typing.List[typing.Dict[str, str]]
     input : object 
     output : object 
@@ -58,22 +110,35 @@ class ActionDescription:
     idempotent : bool 
     synchronous : bool 
 
+    def __init__(self):
+        super().__init__()
+
     def build(self, action : typing.Callable) -> typing.Dict[str, typing.Any]:
+        if not hasattr(action, '_remote_info'):
+            raise RuntimeError("This object is not an action")
+        if action._remote_info.argument_schema: 
+            self.input = action._remote_info.argument_schema 
+        if action._remote_info.return_value_schema: 
+            self.output = action._remote_info.return_value_schema 
+        self.title = action.__qualname__
+        self.description = action.__doc__
         self.safe = True 
         self.idempotent = False 
         self.synchronous = True 
-        # self.input = action._remote_info.input_schema 
-        return asdict(self)
+        return self.asdict()
+    
 
 
-class EventDescription:
+@dataclass
+class EventAffordance:
     subscription : str
+    data : typing.Dict[str, JSONSerializable]
 
     def build(self, event):
         return asdict(self)
 
 
-
+@dataclass
 class VersionInfo:
     """
     https://www.w3.org/TR/wot-thing-description11/#versioninfo
@@ -112,9 +177,9 @@ class ThingDescription:
     modified : str
     support : str 
     base : str 
-    properties : typing.List[PropertyDescription]
-    actions : typing.List[ActionDescription]
-    events : typing.List[EventDescription]
+    properties : typing.List[PropertyAffordance]
+    actions : typing.List[ActionAffordance]
+    events : typing.List[EventAffordance]
     links : typing.Optional[typing.List[Link]] 
     forms : typing.Optional[typing.List[Form]]
     security : typing.Union[str, typing.List[str]]
@@ -125,14 +190,17 @@ class ThingDescription:
         self.id = instance.instance_name
         self.title = instance.__class__.__name__
         self.description = instance.__doc__
+        self.properties = dict()
+        self.actions = dict()
+        self.events = dict()
 
         for resource in instance.instance_resources.values():
             if resource.isparameter:
                 if resource.obj_name not in self.properties:
-                    self.properties[resource.obj_name] = PropertyDescription.build(resource.obj) 
+                    self.properties[resource.obj_name] = PropertyDescription().build(resource.obj) 
             elif resource.iscallable:
                 if resource.obj_name not in self.actions:
-                    self.actions[resource.obj_name] = ActionDescription.build(resource.obj)
+                    self.actions[resource.obj_name] = ActionDescription().build(resource.obj)
     
         for event in instance.events:
             self.events[event["name"]] = EventDescription.build(event)

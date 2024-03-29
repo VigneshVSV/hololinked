@@ -57,6 +57,7 @@ class RemoteResourceInfoValidator:
     isparameter = Boolean(default=False)
     request_as_argument = Boolean(default=False)
     argument_schema = TypedDict(default=None, allow_None=True, key_type=str)
+    return_value_schema = TypedDict(default=None, allow_None=True, key_type=str)
  
     def __init__(self, **kwargs) -> None:
         """   

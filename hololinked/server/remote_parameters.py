@@ -511,7 +511,7 @@ class Integer(Number):
             deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
             precedence=precedence,
 			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+			db_init=db_init, db_commit=db_commit, remote=remote, step=step)
         self.dtype = (int,)
 
     def _validate_step(self, step : int):

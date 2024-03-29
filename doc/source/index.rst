@@ -53,12 +53,9 @@ Please follow the documentation for examples & tutorials, how-to's and API refer
    development_notes
 
 
-Indices and tables
-==================
-
 * :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+.. * :ref:`modindex`
+.. * :ref:`search`
 
 
 last build : |today| UTC
