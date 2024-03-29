@@ -14,17 +14,25 @@ class Schema:
     utility function
     """
 
+    skip_keys = []
+
     def asdict(self):
         self_dict = dict()
         for field, value in self.__dataclass_fields__.items():    
-            if getattr(self, field, NotImplemented) is NotImplemented:
+            if getattr(self, field, NotImplemented) is NotImplemented or field in self.skip_keys:
                 continue
-            self_dict[field] = getattr(self, field)
+            if field == "context":
+                self_dict["@context"] = getattr(self, field)
+            else: 
+                self_dict[field] = getattr(self, field)
         return self_dict
     
 
 @dataclass
 class InteractionAffordance(Schema):
+    """
+    Implements schema common to all interaction affordances. 
+    """
     title : str 
     titles : typing.Optional[typing.Dict[str, str]]
     description : str
@@ -35,15 +43,46 @@ class InteractionAffordance(Schema):
 
 
 @dataclass
-class PropertyAffordance(InteractionAffordance):
-    type : str
-    readOnly : bool
-    writeOnly : bool
+class DataSchema(Schema):
+    """
+    implementes DataSchema 
+    """
+    title : str 
+    titles : typing.Optional[typing.Dict[str, str]]
+    description : str
+    descriptions : typing.Optional[typing.Dict[str, str]] 
     constant : bool
     default : typing.Optional[typing.Any] 
-    observable : typing.Optional[bool]
+    readOnly : bool
+    writeOnly : bool
+    format : typing.Optional[str]
     unit : typing.Optional[str]
+    type : str
+    oneOf : typing.Optional[typing.List[Schema]]
+    enum : typing.Optional[typing.List[typing.Any]]
 
+    def __init__(self):
+        super().__init__()
+
+
+class Link:
+    pass 
+
+class Form:
+    pass
+
+
+@dataclass
+class PropertyAffordance(InteractionAffordance, DataSchema):
+    """
+    Creates property affordance schema from ``property`` descriptor object 
+    """
+    observable : typing.Optional[bool]
+
+    skip_parameters = ['expose', 'httpserver_resources', 'rpc_resources', 'gui_resources',
+                    'events', 'debug_logs', 'warn_logs', 'info_logs', 'error_logs', 'critical_logs',  
+                    'thing_description', 'maxlen', 'execution_logs' ]
+    
     property_type = {
         String : 'string',
         IPAddress : 'string',
@@ -59,11 +98,13 @@ class PropertyAffordance(InteractionAffordance):
         Foldername : 'string',
         Path : 'string',
         TypedList : 'array',
-        TypedDict : 'object'
+        TypedDict : 'object',
+        RemoteParameter : 'null' # i.e. NullShema - nothing to add
     }
 
     def __init__(self):
-        super().__init__()
+        InteractionAffordance.__init__(self)
+        DataSchema.__init__(self)
 
     def build(self, property : Property) -> typing.Dict[str, typing.Any]:
         self.type = self.property_type[property.__class__]
@@ -77,12 +118,9 @@ class PropertyAffordance(InteractionAffordance):
         if property.metadata and property.metadata.get("unit", None) is not None:
             self.unit = property.metadata["unit"]
         
-        if self.type == 'string':
-            if isinstance(property, String):
+        if self.type == 'string' and isinstance(property, String):
+            if property.regex is not None:
                 self.pattern = property.regex
-            # elif isinstance(property, Image)
-            #     self.contentEncoding = ''
-            #     self.contentMediaType = ''
 
         elif self.type == 'number':
             assert isinstance(property, (Number, Integer))
@@ -103,12 +141,18 @@ class PropertyAffordance(InteractionAffordance):
 
 @dataclass
 class ActionAffordance(InteractionAffordance):
+    """
+    Creates action affordance schema from actions
+    """
     forms : typing.List[typing.Dict[str, str]]
     input : object 
     output : object 
     safe : bool
     idempotent : bool 
     synchronous : bool 
+
+    skip_actions = ['_parameter_values', '_parameters', 'push_events', 'stop_events', 
+                    'postman_collection']
 
     def __init__(self):
         super().__init__()
@@ -128,9 +172,11 @@ class ActionAffordance(InteractionAffordance):
         return self.asdict()
     
 
-
 @dataclass
 class EventAffordance:
+    """
+    creates event affordance schema from events.
+    """
     subscription : str
     data : typing.Dict[str, JSONSerializable]
 
@@ -147,11 +193,6 @@ class VersionInfo:
     model : str
 
 
-class Link:
-    pass 
-
-class Form:
-    pass
 
 class SecurityScheme:
     pass 
@@ -159,9 +200,9 @@ class SecurityScheme:
 
 
 @dataclass
-class ThingDescription:
+class ThingDescription(Schema):
     """
-    This class can generate Thing Description of W3 Web of Things standard. 
+    generate Thing Description schema of W3 Web of Things standard. 
     Refer standard - https://www.w3.org/TR/wot-thing-description11
     Refer schema - https://www.w3.org/TR/wot-thing-description11/#thing
     """
@@ -173,10 +214,10 @@ class ThingDescription:
     description : str 
     descriptions : typing.Optional[typing.Dict[str, str]]
     version : typing.Optional[VersionInfo]
-    created : str 
-    modified : str
-    support : str 
-    base : str 
+    created : typing.Optional[str] 
+    modified : typing.Optional[str]
+    support : typing.Optional[str] 
+    base : typing.Optional[str] 
     properties : typing.List[PropertyAffordance]
     actions : typing.List[ActionAffordance]
     events : typing.List[EventAffordance]
@@ -184,6 +225,9 @@ class ThingDescription:
     forms : typing.Optional[typing.List[Form]]
     security : typing.Union[str, typing.List[str]]
     securityDefinitions : SecurityScheme
+
+    def __init__(self):
+        super().__init__()
     
     def build(self, instance : Thing) -> typing.Dict[str, typing.Any]: 
         self.context = "https://www.w3.org/2022/wot/td/v1.1"
@@ -195,15 +239,18 @@ class ThingDescription:
         self.events = dict()
 
         for resource in instance.instance_resources.values():
-            if resource.isparameter:
-                if resource.obj_name not in self.properties:
-                    self.properties[resource.obj_name] = PropertyDescription().build(resource.obj) 
-            elif resource.iscallable:
-                if resource.obj_name not in self.actions:
-                    self.actions[resource.obj_name] = ActionDescription().build(resource.obj)
+            if resource.isparameter and resource.obj_name not in self.properties and resource.obj_name not in PropertyAffordance.skip_parameters: 
+                    self.properties[resource.obj_name] = PropertyAffordance().build(resource.obj) 
+            elif resource.iscallable and resource.obj_name not in self.actions and resource.obj_name not in ActionAffordance.skip_actions:
+                    self.actions[resource.obj_name] = ActionAffordance().build(resource.obj)
     
-        for event in instance.events:
-            self.events[event["name"]] = EventDescription.build(event)
+        # for event in instance.events:
+        #     self.events[event["name"]] = EventAffordance().build(event)
+                    
+        return self.asdict()
     
         
         
+__all__ = [
+    ThingDescription.__name__
+]
