@@ -17,6 +17,9 @@ UNSPECIFIED : str = "UNSPECIFIED"
 # types
 
 class ResourceTypes(StrEnum):
+    """
+    Exposed resource types
+    """
     FUNC  = "FUNC"
     ATTRIBUTE = "ATTRIBUTE"
     PARAMETER = "PARAMETER"
@@ -25,19 +28,44 @@ class ResourceTypes(StrEnum):
     FILE = "FILE"
     EVENT = "EVENT"
 
+
 class ResourceOperations(StrEnum):
+    """
+    Some common eventloop side operations
+    """
     PARAMETER_READ = "read"
     PARAMETER_WRITE = "write"
     PARAMETER_DELETE = "delete"
 
 
-# regex logic
+class CommonRPC(StrEnum):
+    """
+    Some common RPC instructions
+    """
+    RPC_RESOURCES = '/resources/object-proxy/read'
+    HTTP_RESOURCES = '/resources/http-server/read'
+
+    @classmethod
+    def rpc_resource_read(cls, instance_name : str) -> str:
+        return f"/{instance_name}{cls.RPC_RESOURCES}"
+
+    @classmethod
+    def http_resource_read(cls, instance_name : str) -> str:
+        return f"/{instance_name}{cls.HTTP_RESOURCES}"
+
+
 class REGEX(StrEnum):
+    """
+    regexes 
+    """
     states = '[A-Za-z_]+[A-Za-z_ 0-9]*'
     url = r'[\-a-zA-Z0-9@:%._\/\+~#=]{1,256}' 
 
-# HTTP request methods
+
 class HTTP_METHODS(StrEnum):
+    """
+    HTTP request methods
+    """
     GET = 'GET'
     POST = 'POST'
     PUT = 'PUT'
@@ -68,23 +96,10 @@ class ZMQ_PROTOCOLS(StrEnum):
     IPC = "IPC"
     INPROC = "INPROC"
 
-# Some common instructions
-class CommonInstructions(StrEnum):
-    RPC_RESOURCES = '/resources/object-proxy/read'
-    HTTP_RESOURCES = '/resources/http-server/read'
-
-    @classmethod
-    def rpc_resource_read(cls, instance_name : str) -> str:
-        return f"/{instance_name}{cls.RPC_RESOURCES}"
-
-    @classmethod
-    def http_resource_read(cls, instance_name : str) -> str:
-        return f"/{instance_name}{cls.HTTP_RESOURCES}"
-
 
 class ClientMessage(IntEnum):
     """
-    client sent message index for accessing message indices with names 
+    client sent message indexing for accessing message indices with names 
     instead of numbers
     """
     ADDRESS = 0
@@ -96,9 +111,10 @@ class ClientMessage(IntEnum):
     ARGUMENTS = 7
     EXECUTION_CONTEXT = 8
 
+
 class ServerMessage(IntEnum):
     """
-    server sent message index for accessing message indices with names 
+    server sent message indexing for accessing message indices with names 
     instead of numbers
     """
     ADDRESS = 0
@@ -107,24 +123,34 @@ class ServerMessage(IntEnum):
     MESSAGE_ID = 4
     DATA = 5
 
+
 class ServerMessageData(StrEnum):
     RETURN_VALUE = "returnValue"
 
+
 class ServerTypes(Enum):
     """
-    type of ZMQ server
+    type of ZMQ servers
     """
     UNKNOWN_TYPE = b'UNKNOWN_TYPE'
     EVENTLOOP = b'EVENTLOOP'
     REMOTE_OBJECT = b'REMOTE_OBJECT'
     POOL = b'POOL'
        
+       
+class ClientTypes(Enum):
+    """
+    Type of ZMQ clients
+    """
+    HTTP_SERVER = b'HTTP_SERVER'
+    PROXY = b'PROXY'
+    TUNNELER = b'TUNNELER' # message passer from inproc client to inrproc server within RPC
+
 
 class HTTPServerTypes(StrEnum):
     """
     types of HTTP server
     """
-
     SYSTEM_HOST = 'SYSTEM_HOST'
     REMOTE_OBJECT_SERVER = 'REMOTE_OBJECT_SERVER'
 

@@ -27,11 +27,27 @@ class Schema:
                 self_dict[field] = getattr(self, field)
         return self_dict
     
+    @classmethod
+    def format_doc(cls, doc : str):
+        """
+        strip tabs, newlines, whitespaces etc. 
+        """
+        doc_as_list = doc.split('\n')
+        final_doc = []
+        for line in doc_as_list:
+            line = line.lstrip('\n').rstrip('\n')
+            line = line.lstrip('\t').rstrip('\t')
+            line = line.lstrip('\n').rstrip('\n')
+            line = line.lstrip().rstrip()              
+            final_doc.append(line)
+        return ''.join(final_doc)
+
 
 @dataclass
 class InteractionAffordance(Schema):
     """
-    Implements schema common to all interaction affordances. 
+    implements schema common to all interaction affordances. 
+    concepts - https://www.w3.org/TR/wot-thing-description11/#interactionaffordance
     """
     title : str 
     titles : typing.Optional[typing.Dict[str, str]]
@@ -45,7 +61,8 @@ class InteractionAffordance(Schema):
 @dataclass
 class DataSchema(Schema):
     """
-    implementes DataSchema 
+    implementes Dataschema attributes.
+    concepts - https://www.w3.org/TR/wot-thing-description11/#sec-data-schema-vocabulary-definition
     """
     title : str 
     titles : typing.Optional[typing.Dict[str, str]]
@@ -68,21 +85,63 @@ class DataSchema(Schema):
 class Link:
     pass 
 
-class Form:
-    pass
+
+@dataclass
+class ExpectedResponse(Schema):
+    """
+    Form property. 
+    schema - https://www.w3.org/TR/wot-thing-description11/#expectedresponse
+    """
+    contentType : str
+
+    def __init__(self):
+        super().__init__()
+
+@dataclass
+class AdditionalExpectedResponse(Schema):
+    """
+    Form property.
+    schema - https://www.w3.org/TR/wot-thing-description11/#additionalexpectedresponse
+    """
+    success : bool 
+    contentType : str 
+    schema : typing.Optional[typing.Dict[str, typing.Any]]
+
+    def __init__(self):
+        super().__init__()
+
+
+@dataclass
+class Form(Schema):
+    """
+    Form hypermedia.
+    schema - https://www.w3.org/TR/wot-thing-description11/#form
+    """
+    href : str 
+    contentType : typing.Optional[str]
+    contentEncoding : typing.Optional[str]
+    security : typing.Optional[str]
+    scopes : typing.Optional[str]
+    response : typing.Optional[ExpectedResponse]
+    additionalResponses : typing.Optional[typing.List[AdditionalExpectedResponse]]
+    subprotocol : typing.Optional[str]
+    op : str 
+
+    def __init__(self):
+        super().__init__()
+
+    def build(self, object):
+        return self.asdict()
 
 
 @dataclass
 class PropertyAffordance(InteractionAffordance, DataSchema):
     """
-    Creates property affordance schema from ``property`` descriptor object 
+    creates property affordance schema from ``property`` descriptor object (or parameter)
+    schema - https://www.w3.org/TR/wot-thing-description11/#propertyaffordance
     """
     observable : typing.Optional[bool]
 
-    skip_parameters = ['expose', 'httpserver_resources', 'rpc_resources', 'gui_resources',
-                    'events', 'debug_logs', 'warn_logs', 'info_logs', 'error_logs', 'critical_logs',  
-                    'thing_description', 'maxlen', 'execution_logs' ]
-    
     property_type = {
         String : 'string',
         IPAddress : 'string',
@@ -111,8 +170,9 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
         self.title = property.name
         self.readOnly = property.readonly
         self.writeOnly = False
-        self.description = property.doc 
         self.constant = property.constant
+        if property.doc:
+            self.description = self.format_doc(property.doc)
         if property.overloads["fget"] is None:
             self.default = property.default
         if property.metadata and property.metadata.get("unit", None) is not None:
@@ -142,7 +202,8 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
 @dataclass
 class ActionAffordance(InteractionAffordance):
     """
-    Creates action affordance schema from actions
+    creates action affordance schema from actions (or methods).
+    schema - https://www.w3.org/TR/wot-thing-description11/#actionaffordance
     """
     forms : typing.List[typing.Dict[str, str]]
     input : object 
@@ -151,11 +212,9 @@ class ActionAffordance(InteractionAffordance):
     idempotent : bool 
     synchronous : bool 
 
-    skip_actions = ['_parameter_values', '_parameters', 'push_events', 'stop_events', 
-                    'postman_collection']
-
     def __init__(self):
-        super().__init__()
+        InteractionAffordance.__init__(self)
+        DataSchema.__init__(self)
 
     def build(self, action : typing.Callable) -> typing.Dict[str, typing.Any]:
         if not hasattr(action, '_remote_info'):
@@ -165,7 +224,8 @@ class ActionAffordance(InteractionAffordance):
         if action._remote_info.return_value_schema: 
             self.output = action._remote_info.return_value_schema 
         self.title = action.__qualname__
-        self.description = action.__doc__
+        if action.__doc__:
+            self.description = self.format_doc(action.__doc__)
         self.safe = True 
         self.idempotent = False 
         self.synchronous = True 
@@ -176,6 +236,7 @@ class ActionAffordance(InteractionAffordance):
 class EventAffordance:
     """
     creates event affordance schema from events.
+    schema - https://www.w3.org/TR/wot-thing-description11/#eventaffordance
     """
     subscription : str
     data : typing.Dict[str, JSONSerializable]
@@ -187,15 +248,31 @@ class EventAffordance:
 @dataclass
 class VersionInfo:
     """
-    https://www.w3.org/TR/wot-thing-description11/#versioninfo
+    create version info.
+    schema - https://www.w3.org/TR/wot-thing-description11/#versioninfo
     """
     instance : str 
     model : str
 
 
+@dataclass
+class SecurityScheme(Schema):
+    """
+    create security scheme. 
+    schema - https://www.w3.org/TR/wot-thing-description11/#sec-security-vocabulary-definition
+    """
+    scheme: str 
+    description : str 
+    descriptions : typing.Optional[typing.Dict[str, str]]
+    proxy : typing.Optional[str]
 
-class SecurityScheme:
-    pass 
+    def __init__(self):
+        super().__init__()
+
+    def build(self, name : str, instance):
+        self.scheme = 'nosec'
+        self.description = 'currently no security scheme supported - use cookie auth directly on hololinked.server.HTTPServer object'
+        return { name : self.asdict() }
 
 
 
@@ -226,27 +303,39 @@ class ThingDescription(Schema):
     security : typing.Union[str, typing.List[str]]
     securityDefinitions : SecurityScheme
 
+    skip_parameters = ['expose', 'httpserver_resources', 'rpc_resources', 'gui_resources',
+                    'events', 'debug_logs', 'warn_logs', 'info_logs', 'error_logs', 'critical_logs',  
+                    'thing_description', 'maxlen', 'execution_logs' ]
+
+    skip_actions = ['_parameter_values', '_parameters', 'push_events', 'stop_events', 
+                    'postman_collection']
+
     def __init__(self):
         super().__init__()
     
     def build(self, instance : Thing) -> typing.Dict[str, typing.Any]: 
         self.context = "https://www.w3.org/2022/wot/td/v1.1"
         self.id = instance.instance_name
-        self.title = instance.__class__.__name__
-        self.description = instance.__doc__
+        self.title = instance.__class__.__name__ 
+        if instance.__doc__:
+            self.description = self.format_doc(instance.__doc__)
         self.properties = dict()
         self.actions = dict()
         self.events = dict()
 
         for resource in instance.instance_resources.values():
-            if resource.isparameter and resource.obj_name not in self.properties and resource.obj_name not in PropertyAffordance.skip_parameters: 
+            if resource.isparameter and resource.obj_name not in self.properties and resource.obj_name not in self.skip_parameters: 
                     self.properties[resource.obj_name] = PropertyAffordance().build(resource.obj) 
-            elif resource.iscallable and resource.obj_name not in self.actions and resource.obj_name not in ActionAffordance.skip_actions:
+            elif resource.iscallable and resource.obj_name not in self.actions and resource.obj_name not in self.skip_actions:
                     self.actions[resource.obj_name] = ActionAffordance().build(resource.obj)
-    
+
+        # events still need to standardized so not including for now - they only work, but not neatly
         # for event in instance.events:
         #     self.events[event["name"]] = EventAffordance().build(event)
-                    
+
+        self.security = 'unimplemented'
+        self.securityDefinitions = SecurityScheme().build('unimplemented', instance)
+
         return self.asdict()
     
         

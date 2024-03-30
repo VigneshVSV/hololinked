@@ -3,7 +3,7 @@ import logging
 from tornado.web import RequestHandler, StaticFileHandler, Application
 from tornado.iostream import StreamClosedError
 
-from .constants import CommonInstructions, ServerMessageData
+from .constants import CommonRPC, ServerMessageData
 from .serializers import JSONSerializer
 from .zmq_message_brokers import AsyncZMQClient, MessageMappedZMQClientPool
 from .events import EventConsumer
@@ -239,7 +239,7 @@ class RemoteObjectsHandler(BaseHandler):
         for client in clients:
             await client.handshake_complete()
             _, _, _, _, _, reply = await client.async_execute(
-                        CommonInstructions.http_resource_read(client.server_instance_name), 
+                        CommonRPC.http_resource_read(client.server_instance_name), 
                         raise_client_side_exception=True)
             resources.update(reply[ServerMessageData.RETURN_VALUE])
             # _, _, _, _, _, reply = await client.read_attribute('/'+client.server_instance_name + '/object-info', raise_client_side_exception = True)

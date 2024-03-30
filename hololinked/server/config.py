@@ -23,26 +23,30 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-import sys
-import asyncio
 import tempfile
 import os 
 import platform
 from . import __version__
 
 
-if sys.platform.startswith('win'):
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-
 
 class Configuration:
 
     __slots__ = [
-        "TEMP_DIR", "TCP_SOCKET_SEARCH_START_PORT", "TCP_SOCKET_SEARCH_END_PORT",
+        # folders
+        "TEMP_DIR",
+        # TCP socket 
+        "TCP_SOCKET_SEARCH_START_PORT", "TCP_SOCKET_SEARCH_END_PORT",
+        # system view
         "PRIMARY_HOST", "LOCALHOST_PORT", 
-        "DB_CONFIG_FILE", "COOKIE_SECRET",
-        "PWD_HASHER_TIME_COST", "PWD_HASHER_MEMORY_COST"
+        # database
+        "DB_CONFIG_FILE", 
+        # HTTP server
+        "COOKIE_SECRET",
+        # credentials
+        "PWD_HASHER_TIME_COST", "PWD_HASHER_MEMORY_COST",
+        # Eventloop
+        "USE_UVLOOP"
     ]
 
     def __init__(self):
@@ -59,6 +63,7 @@ class Configuration:
         self.TCP_SOCKET_SEARCH_START_PORT = 60000
         self.TCP_SOCKET_SEARCH_END_PORT = 65535
         self.PWD_HASHER_TIME_COST = 15
+        self.USE_UVLOOP = False
 
         # qualname is not defined
         if use_environment:

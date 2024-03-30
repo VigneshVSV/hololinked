@@ -1,13 +1,15 @@
+import sys 
 import os
+import warnings
 import subprocess
 import asyncio
-import traceback
 import importlib
 import typing 
 import threading
 from uuid import uuid4
 
 from .constants import *
+from .config import *
 from .webserver_utils import format_exception_as_json
 from .remote_parameters import TypedDict
 from .decorators import remote_method
@@ -19,8 +21,22 @@ from .remote_parameter import RemoteParameter
 from .remote_parameters import ClassSelector, TypedList, List, Boolean 
 
 
+if sys.platform.lower().startswith('win'):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+if global_config.USE_UVLOOP:
+    if sys.platform.lower() in ['linux', 'darwin', 'linux2']:
+        import uvloop
+        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    else:
+        warnings.warn("uvloop not supported for windows, using default windows selector loop.", RuntimeWarning)
+
 
 class Consumer:
+    """
+    Container class for RemoteObject to pass to eventloop for multiprocessing applications in case 
+    of rare needs. 
+    """
     consumer = ClassSelector(default=None, allow_None=True, class_=RemoteObject, isinstance=False,
                             remote=False)
     args = List(default=None, allow_None=True, accept_tuple=True, remote=False)
@@ -56,20 +72,15 @@ class EventLoop(RemoteObject):
                 remote_objects : typing.Union[RemoteObject, Consumer, typing.List[typing.Union[RemoteObject, Consumer]]] = list(), # type: ignore - requires covariant types
                 log_level : int = logging.INFO, **kwargs) -> None:
         super().__init__(instance_name=instance_name, remote_objects=remote_objects, log_level=log_level, **kwargs)
-        # self._message_broker_pool : ZMQServerPool = ZMQServerPool(instance_names=None, 
-        #             # create empty pool as message brokers are already created
-        #             proxy_serializer=self.proxy_serializer, json_serializer=self.json_serializer) 
         remote_objects : typing.List[RemoteObject] = [self]
         if self.remote_objects is not None:
             for consumer in self.remote_objects:
                 if isinstance(consumer, RemoteObject):
                     remote_objects.append(consumer)
                     consumer.object_info.eventloop_name = self.instance_name
-                    # self._message_broker_pool.register_server(consumer.message_broker)
                 elif isinstance(consumer, Consumer):
                     instance = consumer.consumer(*consumer.args, **consumer.kwargs, 
                                             eventloop_name=self.instance_name)
-                    # self._message_broker_pool.register_server(instance.message_broker)                            
                     remote_objects.append(instance) 
         self.remote_objects = remote_objects # re-assign the instantiated objects as well
         self.uninstantiated_remote_objects = dict()

@@ -14,7 +14,7 @@ In the interest of information to software engineers and web developers, the mai
 RPC or REST(-like) paradigm with HTTP is that, |module-highlighted| attempts to be a hybrid of both. For instrument control
 & data-acquisition, it is difficult to move away completely from RPC to REST. Besides, most instrument drivers/hardware 
 allow only a single persistent connection with a single process instead of multiple clients or processes. Further, when 
-such a process talks to an instrument, only one instruction can be sent at a time, which needs to be completed before 
+such a process talks to an instrument, only one instruction can be sent at a time (in general), which needs to be completed before 
 the next instruction. On the other hand, HTTP Servers are multi-threaded or asyncio oriented by design and REST(-like) API 
 does not care how many simultaneous operations are run. To reconcile both, the following is proposed:
 

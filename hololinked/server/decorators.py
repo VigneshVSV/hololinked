@@ -5,32 +5,14 @@ from inspect import iscoroutinefunction, getfullargspec
 
 from .data_classes import RemoteResourceInfoValidator
 from .constants import (USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, JSON)
-from .utils import wrap_text
 
-
-
-def is_dunder_object(obj: typing.Any) -> bool:
-    """
-    returns if the attribute name is to be considered private or not
-    
-    Parameters
-    ----------
-    obj: Any 
-        obj with a __name__ dunder available
-
-    Returns
-    -------
-    bool: 
-        return True when attribute does not start with a dunder '__'
-    """
-    if obj.__name__.startswith('__'):
-        return True
-    return False
 
    
 def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.POST, 
-            state : typing.Optional[typing.Union[str, Enum]] = None, argument_schema : typing.Optional[JSON] = None) -> typing.Callable:
-    """Use this function to decorate your methods to be accessible remotely.  
+            state : typing.Optional[typing.Union[str, Enum]] = None, argument_schema : typing.Optional[JSON] = None,
+            return_value_schema : typing.Optional[JSON] = None) -> typing.Callable:
+    """
+    Use this function to decorate your methods to be accessible remotely.  
     
     Parameters
     ----------
@@ -41,7 +23,11 @@ def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_MET
     state: str | Tuple[str], optional 
         state under which the object can executed or written. When not provided,
         its accessible or can be executed under any state.
-
+    argument_schema: JSON 
+        schema for arguments to validate them.
+    return_value_schema : JSON 
+        schema for return value, currently only used to inform clients. 
+        
     Returns
     -------
     callable: Callable
@@ -52,17 +38,13 @@ def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_MET
         original = obj
         if isinstance(obj, classmethod):
             obj = obj.__func__
-        if is_dunder_object(obj):
+        if obj.__name__.startswith('__'):
             raise ValueError(f"dunder objects cannot become remote : {obj.__name__}")
         if callable(obj):
             if hasattr(obj, '_remote_info') and not isinstance(obj._remote_info, RemoteResourceInfoValidator): 
                 raise NameError(
-                    wrap_text(
-                    """
-                    variable name '_remote_info' reserved for scadapy library. 
-                    Please do not assign this variable to any other object except scadapy.server.data_classes.RemoteResourceInfoValidator.
-                    """
-                    )
+                    "variable name '_remote_info' reserved for hololinked package. ",  
+                    "Please do not assign this variable to any other object except hololinked.server.data_classes.RemoteResourceInfoValidator."
                 )             
             else:
                 obj._remote_info = RemoteResourceInfoValidator() 
@@ -94,14 +76,15 @@ def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_MET
                 else:
                     obj._remote_info.state = state     
             if 'request' in getfullargspec(obj).kwonlyargs:
-                obj._remote_info.http_request_as_argument = True
+                obj._remote_info.request_as_argument = True
             obj._remote_info.iscallable = True
             obj._remote_info.iscoroutine = iscoroutinefunction(obj)
             obj._remote_info.argument_schema = argument_schema
+            obj._remote_info.return_value_schema = return_value_schema
             return original
         else:
             raise TypeError(
-                "target for get()/post()/remote_method() or http method decorator is not a function/method.",
+                "target for get()/post()/remote_method() or http method decorator is not a function/method. ",
                 f"Given type {type(obj)}"
             )
             

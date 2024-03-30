@@ -20,7 +20,7 @@ from .decorators import remote_method
 from .http_methods import get, post
 from .data_classes import (GUIResources, RemoteResource, HTTPResource, RPCResource, RemoteResourceInfoValidator,
                         ServerSentEvent)
-from .utils import create_default_logger, get_signature, wrap_text
+from .utils import create_default_logger, wrap_text
 from .api_platform_utils import *
 from .remote_parameter import ReactApp, RemoteParameter, RemoteClassParameters
 from .remote_parameters import (Integer, String, ClassSelector, TypedDict, Boolean, 

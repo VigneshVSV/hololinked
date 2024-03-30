@@ -38,4 +38,4 @@ def patch(URL_path : str = USE_OBJECT_NAME):
     return remote_method(URL_path=URL_path, http_method=HTTP_METHODS.PATCH)
 
 
-__all__ = ['get', 'put', 'post', 'delete', 'patch']
+__all__ = ['get', 'put', 'post', 'delete', 'patch', 'HTTP_METHODS']

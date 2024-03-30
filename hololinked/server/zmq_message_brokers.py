@@ -14,9 +14,7 @@ from enum import Enum
 from .utils import create_default_logger, run_method_somehow, wrap_text
 from .config import global_config
 from .constants import JSON, ZMQ_PROTOCOLS, ServerTypes
-from .serializers import (JSONSerializer, BaseSerializer, serializers, MsgpackSerializer)
-                        # DillSerializer, 
-from ..param.parameterized import Parameterized
+from .serializers import BaseSerializer, JSONSerializer, MsgpackSerializer, serializers
 
 
 
@@ -35,8 +33,6 @@ SUCCESS     = b'SUCCESS'
 # empty data
 EMPTY_BYTE  = b''
 EMPTY_DICT  = {}
-
-FAILURE     = b'FAILURE'
 
 # client types
 HTTP_SERVER = b'HTTP_SERVER'
@@ -1175,7 +1171,9 @@ class BaseZMQClient(BaseZMQ):
                 message[SM_INDEX_DATA] = self.json_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
             elif self.client_type == PROXY:
                 message[SM_INDEX_DATA] = self.rpc_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
-            if message[SM_INDEX_DATA].get('exception', None) is not None and raise_client_side_exception:
+            if not raise_client_side_exception:
+                return message
+            if message[SM_INDEX_DATA].get('exception', None) is not None:
                 self.raise_local_exception(message[SM_INDEX_DATA]['exception'])
             else:
                 raise NotImplementedError("message type {} received. No exception field found, exception field mandatory.".format(
@@ -1838,7 +1836,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                         invokation_timeout : typing.Optional[float] = 5, execution_timeout : typing.Optional[float] = None, 
                         raise_client_side_exception = False) -> typing.Dict[str, typing.Any]:
         """
-        execute a specified instruction in all instance_names
+        execute a specified instruction in all remote object including eventloops
         """
         if not instance_names:
             instance_names = self.pool.keys()
@@ -1856,6 +1854,9 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                         context : typing.Dict[str, typing.Any] = EMPTY_DICT, 
                         invokation_timeout : typing.Optional[float] = 5, execution_timeout : typing.Optional[float] = None, 
                         raise_client_side_exception = False) -> typing.Dict[str, typing.Any]:
+        """
+        execute the same instruction in all remote objects, eventloops are excluded. 
+        """
         return await self.async_execute_in_all(instruction=instruction, 
                         instance_names=[instance_name for instance_name, client in self.pool.items() if client.server_type == ServerTypes.REMOTE_OBJECT],
                         arguments=arguments, context=context, invokation_timeout=invokation_timeout, 
@@ -1865,6 +1866,9 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                         context : typing.Dict[str, typing.Any] = EMPTY_DICT, 
                         invokation_timeout : typing.Optional[float] = 5, execution_timeout : typing.Optional[float] = None, 
                         raise_client_side_exception = False) -> typing.Dict[str, typing.Any]:
+        """
+        execute the same instruction in all eventloops.
+        """
         return await self.async_execute_in_all(instruction=instruction, 
                         instance_names=[instance_name for instance_name, client in self.pool.items() if client.server_type == ServerTypes.EVENTLOOP],
                         arguments=arguments, context=context, invokation_timeout=invokation_timeout, 
@@ -1872,7 +1876,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
 
     async def ping_all_servers(self):
         """
-        ping all servers connected to the client pool
+        ping all servers connected to the client pool, calls ping() on RemoteObject
         """
         return await self.async_execute_in_all(instruction='/ping')
         
