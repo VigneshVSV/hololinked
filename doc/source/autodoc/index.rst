@@ -20,7 +20,10 @@ API Reference
     server/eventloop
     server/database/index
     server/zmq_message_brokers/index
+    server/serializers
+    server/configuration
     server/dataclasses
+    server/enumerations
     
 
     

@@ -1,56 +1,58 @@
 """
 The following is a list of all dataclasses used to store information on the exposed 
-resources on the network
+resources on the network. These classese are generally not for consumption by the package-end-user. 
 """
 import typing
 import platform
 from enum import Enum
 from dataclasses import dataclass, asdict, field, fields
 
-from hololinked.server.utils import get_signature
-
 from ..param.parameters import String, Boolean, Tuple, TupleSelector, TypedDict
 from .constants import (JSON, USE_OBJECT_NAME, HTTP_METHODS, REGEX, http_methods)
-from .path_converter import compile_path
+from .utils import get_signature
 
 
 
 class RemoteResourceInfoValidator:
     """
     A validator class for saving remote access related information on a resource. Currently callables (functions, 
-    methods and those with__call__ ) and class/instance parameter store this information as their own attribute under 
-    the variable ``remote_info``. This class is generally not for consumption by the package-end-user. 
-    The information (and the variable) may be deleted later (currently not done) from these objects under ``_prepare_instance()`` 
-    in RemoteObject class. 
-
+    methods and those with__call__) and class/instance parameter store this information as their own attribute under 
+    the variable ``_remote_info``. This is later split into information suitable for HTTP server, RPC client & ``EventLoop``. 
+    
     Attributes
     ----------
 
-    URL_path : str, default extracted object name 
+    URL_path : str, default - extracted object name 
         the path in the URL under which the object is accesible.
         Must follow url-regex ('[\-a-zA-Z0-9@:%._\/\+~#=]{1,256}') requirement. 
         If not specified, the name of object will be used. Underscores will be converted to dashes 
-        for PEP 8 names and capitial letter converted to small letters with a leading dash(-) for camel case names. 
+        for PEP 8 names. 
     http_method : str, default POST
-        HTTP method under which the object is accessible. Normally GET, POST, PUT, DELETE or PATCH. 
+        HTTP request method under which the object is accessible. GET, POST, PUT, DELETE or PATCH are supported. 
     state : str, default None
         State machine state at which a callable will be executed or attribute/parameter can be 
         written. Does not apply to read-only attributes/parameters. 
-    obj_name : str, default extracted object name
+    obj_name : str, default - extracted object name
         the name of the object which will be supplied to the ``ObjectProxy`` class to populate
-        its own namespace. For HTTP clients, HTTP method and URL is important and for object proxies clients, the 
-        the obj_name is important. 
+        its own namespace. For HTTP clients, HTTP method and URL path is important and for 
+        object proxies clients, the obj_name is important. 
     iscoroutine : bool, default False 
-        whether the callable should be executed as an async
+        whether the callable should be awaited
     iscallable : bool, default False 
         True for a method or function or callable
     isparameter : bool, default False
         True for a parameter
     request_as_argument : bool, default False
-        if True, http request object will be passed as a argument to a callable. The user is warned to not use this
-        generally. 
+        if True, http request object will be passed as an argument to the callable. 
+        The user is warned to not use this generally. 
+    argument_schema: JSON, default None
+        JSON schema validations for arguments of a callable. Assumption is therefore arguments will be
+        JSON complaint. 
+    return_value_schema: JSON, default None 
+        schema for return value of a callable
     """
-    URL_path = String(default=USE_OBJECT_NAME) #, regex=url_regex)
+
+    URL_path = String(default=USE_OBJECT_NAME)
     http_method = TupleSelector(default=HTTP_METHODS.POST, objects=http_methods, accept_list=True)
     state = Tuple(default=None, item_type=(Enum, str), allow_None=True, accept_list=True, accept_item=True)
     obj_name = String(default=USE_OBJECT_NAME)
@@ -76,7 +78,11 @@ class RemoteResourceInfoValidator:
         
         Parameters
         ----------
-        obj : parameter or method
+        obj : Union[RemoteParameter | Callable]  
+            parameter or method
+
+        bound_obj : owner instance
+            ``RemoteObject`` instance
        
         Returns
         -------
@@ -86,24 +92,60 @@ class RemoteResourceInfoValidator:
         return RemoteResource(
                     state=tuple(self.state) if self.state is not None else None, 
                     obj_name=self.obj_name, iscallable=self.iscallable, iscoroutine=self.iscoroutine,
-                    isparameter=self.isparameter, obj=obj, bound_obj=bound_obj) 
+                    isparameter=self.isparameter, obj=obj, bound_obj=bound_obj
+                ) 
         # http method is manually always stored as a tuple
 
 
+class SerializableDataclass:
+    """
+    Presents uniform serialization for serializers using getstate and setstate and json 
+    serialization.
+    """
+
+    def json(self):
+        return asdict(self)
+
+    def __getstate__(self):
+        return self.json()
+    
+    def __setstate__(self, values : typing.Dict):
+        for key, value in values.items():
+            setattr(self, key, value)
+
+
+
 __dataclass_kwargs = dict(frozen=True)
-if float('.'.join(platform.python_version().split('.')[0:2])) > 3.10:
+if float('.'.join(platform.python_version().split('.')[0:2])) >= 3.11:
     __dataclass_kwargs["slots"] = True
 
-
 @dataclass(**__dataclass_kwargs)
-class RemoteResource:
+class RemoteResource(SerializableDataclass):
     """
-    This container class is a mirror of ``RemoteResourceInfoValidator``. It is created by the RemoteObject instance and 
-    used by the EventLoop methods (for example ``execute_once()``) to access resource metadata instead of directly using 
-    ``RemoteResourceInfoValidator`` parameters/attributes. This is because descriptors (used by ``RemoteResourceInfoValidator``) 
-    are generally slower. Instances of this dataclass is stored under ``RemoteObject.instance_resources`` dictionary 
-    for each parameter & method. Events use similar dataclass with metadata but with much less information. 
-    This class is generally not for consumption by the package-end-user. 
+    This container class is used by the ``EventLoop`` methods (for example ``execute_once()``) to access resource 
+    metadata instead of directly using ``RemoteResourceInfoValidator``. Instances of this dataclass is stored under 
+    ``RemoteObject.instance_resources`` dictionary for each parameter & method. Events use similar dataclass with 
+    metadata but with much less information. 
+
+    Attributes
+    ----------
+    state : str
+        State machine state at which a callable will be executed or attribute/parameter can be 
+        written. Does not apply to read-only attributes/parameters. 
+    obj_name : str, default - extracted object name
+        the name of the object which will be supplied to the ``ObjectProxy`` class to populate
+        its own namespace. For HTTP clients, HTTP method and URL path is important and for 
+        object proxies clients, the obj_name is important. 
+    iscoroutine : bool
+        whether the callable should be awaited
+    iscallable : bool
+        True for a method or function or callable
+    isparameter : bool
+        True for a parameter
+    obj : Union[RemoteParameter | Callable]  
+            parameter or method
+    bound_obj : owner instance
+        ``RemoteObject`` instance
     """
     state : typing.Optional[typing.Union[typing.Tuple, str]] 
     obj_name : str 
@@ -115,8 +157,7 @@ class RemoteResource:
   
     def json(self):
         """
-        Set use_json_method=True in ``serializers.JSONSerializer`` instance and pass the object to the 
-        serializer directly to get the JSON.  
+        return this object as a JSON serializable dictionary
         """
         # try:
         #     return self._json # accessing dynamic attr from frozen object
@@ -130,7 +171,11 @@ class RemoteResource:
     
 
 @dataclass
-class HTTPMethodInstructions:
+class HTTPMethodInstructions(SerializableDataclass):
+    """
+    contains a map of unique strings that identifies the resource operation for each HTTP method, thus acting as 
+    instructions to be passed to the RPC server. The unique strings are generally made using the URL_path. 
+    """
     GET :  typing.Optional[str] = field(default=None)
     POST :  typing.Optional[str] = field(default=None)
     PUT :  typing.Optional[str] = field(default=None)
@@ -140,9 +185,6 @@ class HTTPMethodInstructions:
     def __post_init__(self):
         self.supported_methods()
 
-    def json(self):
-        return asdict(self)
-    
     def supported_methods(self):
         try: 
             return self._supported_methods
@@ -156,12 +198,12 @@ class HTTPMethodInstructions:
     def __contains__(self, value):
         return value in self._supported_methods
 
+
 @dataclass
-class HTTPResource:
+class HTTPResource(SerializableDataclass):
     """
-    Representation of the resource used by HTTP server for routing and passing information on
-    what to do with which resource - read, write, execute etc. This class is generally not for 
-    consumption by the package-end-user. 
+    Representation of the resource used by HTTP server for routing and passing information to RPC server on
+    "what to do with which resource belonging to which remote object? - read, write, execute?". 
     
     Attributes
     ----------
@@ -170,11 +212,16 @@ class HTTPResource:
         is it a parameter, method or event?
     instance_name : str
         The ``instance_name`` of the remote object which owns the resource. Used by HTTP server to inform 
-        the message brokers to send the message to the correct recipient remote object.
-    instruction : str
-        unique string that identifies the resource, generally made using the URL_path or identical to the URL_path (
-        qualified URL path {instance name}/{URL path}).  
-        
+        the message brokers to send the instruction to the correct recipient remote object.
+    fullpath : str
+        URL full path used for routing
+    instructions : HTTPMethodInstructions
+        unique string that identifies the resource operation for each HTTP method, generally made using the URL_path 
+        (qualified URL path {instance name}/{URL path}).  
+    argument_schema : JSON
+        argument schema of the method for validation before passing over the instruction to the RPC server. 
+    request_as_argument: bool
+        pass the request as a argument to the callable. For HTTP server ``tornado.web.HTTPServerRequest`` will be passed. 
     """
     what : str 
     instance_name : str 
@@ -182,11 +229,7 @@ class HTTPResource:
     instructions : HTTPMethodInstructions
     argument_schema : typing.Optional[JSON]
     request_as_argument : bool = field(default=False)
-   
-    # 'what' can be an 'ATTRIBUTE' or 'CALLABLE' (based on isparameter or iscallable) and 'instruction' 
-    # stores the instructions to be sent to the eventloop. 'instance_name' maps the instruction to a particular 
-    # instance of RemoteObject
-                                
+                                  
     def __init__(self, *, what : str, instance_name : str, fullpath : str, request_as_argument : bool = False,
                 argument_schema : typing.Optional[JSON] = None, **instructions) -> None:
         self.what = what 
@@ -198,34 +241,13 @@ class HTTPResource:
             self.instructions = HTTPMethodInstructions(**instructions.get('instructions', None))
         else: 
             self.instructions = HTTPMethodInstructions(**instructions)
-
-    def __getstate__(self):
-        return self.json()
-    
-    def __setstate__(self, values : typing.Dict):
-        for key, value in values.items():
-            setattr(self, key, value)
-    
-    def json(self):
-        """
-        Set use_json_method=True in ``serializers.JSONSerializer`` instance and pass the 
-        object to the serializer directly to get the JSON.  
-        """
-        return  {
-            "what" : self.what, 
-            "instance_name" : self.instance_name,
-            'fullpath' : self.fullpath,
-            "instructions" : self.instructions,
-            "request_as_argument" : self.request_as_argument
-        }
     
 
-    
 @dataclass
-class RPCResource: 
+class RPCResource(SerializableDataclass): 
     """
     Representation of resource used by RPC clients for mapping client method calls, parameter read/writes & events
-    to a server resource. This class is generally not for consumption by the package-end-user. 
+    to a server resource.
 
     Attributes
     ----------
@@ -244,6 +266,8 @@ class RPCResource:
         the qualified name of the resource (__qualname__) 
     doc : str
         the docstring of the resource
+    argument_schema : JSON
+        argument schema of the method for validation before passing over the instruction to the RPC server. 
     """
     what : str 
     instance_name : str 
@@ -265,85 +289,35 @@ class RPCResource:
         self.top_owner = top_owner
         self.argument_schema = argument_schema
 
-    def json(self):
-        """
-        Set use_json_method=True in ``serializers.JSONSerializer`` instance and pass the object to the 
-        serializer directly to get the JSON.  
-        """
-        return asdict(self) 
-
     def get_dunder_attr(self, __dunder_name : str):
         return getattr(self, __dunder_name.strip('_'))
 
-    def __getstate__(self):
-        return self.json()
-    
-    def __setstate__(self, values : typing.Dict):
-        for key, value in values.items():
-            setattr(self, key, value)
-
 
 @dataclass
-class ServerSentEvent:
+class ServerSentEvent(SerializableDataclass):
     """
     event name and socket address of events to be consumed by clients. 
-    This class is generally not for consumption by the package-end-user. 
-    
+  
     Attributes
     ----------
-    event_name : str
+    name : str
         name of the event, must be unique
     socket_address : str
         address of the socket
-
+    unique_identifier: str
+        unique ZMQ identifier used in PUB-SUB model
     """
     name : str 
     unique_identifier : str
     socket_address : str 
     what : str = field(default="EVENT")
 
-    def json(self):
-        return asdict(self)
-
-    def __getstate__(self):
-        return self.json()
-    
-    def __setstate__(self, values : typing.Dict):
-        for key, value in values.items():
-            setattr(self, key, value)
-
 
 @dataclass
-class FileServerData: 
-    what : str 
-    directory : str   
-    fullpath : str
-    path_format : typing.Optional[str] = field( default=None ) 
-    path_regex : typing.Optional[typing.Pattern] = field( default = None )
-    param_convertors : typing.Optional[typing.Dict] = field( default = None )
-
-    def json(self):
-        return asdict(self)
-    
-    def compile_path(self):
-        path_regex, self.path_format, param_convertors = compile_path(self.fullpath)
-        if self.path_format == self.fullpath and len(param_convertors) == 0:
-            self.path_regex = None 
-            self.param_convertors = None
-        elif self.path_format != self.fullpath and len(param_convertors) == 0:
-            raise RuntimeError(f"Unknown path format found '{self.path_format}' for path '{self.fullpath}', no path converters were created.")
-        else:
-            self.path_regex = path_regex
-            self.param_convertors = param_convertors
-    
-
-
-@dataclass
-class GUIResources:
+class GUIResources(SerializableDataclass):
     """
     Encapsulation of all information required to populate hololinked-portal GUI for a remote object.
-    This class is generally not for consumption by the package-end-user. 
-
+   
     Attributes
     ----------
     instance_name : str
@@ -353,13 +327,13 @@ class GUIResources:
     classdoc : str
         class docstring
     parameters : nested JSON (dictionary)
-        list of defined remote paramters and their metadata
+        defined remote parameters and their metadata
     methods : nested JSON (dictionary)
-        list of defined remote methods
+        defined remote methods
     events : nested JSON (dictionary)
-        list of defined events
+        defined events
     documentation : Dict[str, str]
-        documentation files, name and path
+        documentation files, name as key and path as value
     GUI : nested JSON (dictionary)
         generated from ``hololinked.webdashboard.ReactApp``, a GUI can be shown under 'default GUI' tab in the portal
     """
@@ -373,19 +347,21 @@ class GUIResources:
     GUI : typing.Optional[typing.Dict] = field(default=None)
 
     def __init__(self):
-        super().__init__()
+        """
+        initialize first, then call build method.  
+        """
+        super(SerializableDataclass, self).__init__()
 
-    def json(self): 
-        return asdict(self)
-    
     def build(self, instance):
-        self.instance_name = instance.instance_name,
-        self.events = instance.events, 
-        self.classdoc = instance.__class__.__doc__.splitlines() if instance.__class__.__doc__ is not None else None, 
-        self.inheritance = [class_.__name__ for class_ in instance.__class__.mro()],
-        self.GUI = instance.GUI,
+        from .remote_object import RemoteSubobject
+        assert isinstance(instance, RemoteSubobject), f"got invalid type {type(instance)}"
+
+        self.instance_name = instance.instance_name
+        self.inheritance = [class_.__name__ for class_ in instance.__class__.mro()]
+        self.classdoc = instance.__class__.__doc__.splitlines() if instance.__class__.__doc__ is not None else None
+        self.GUI = instance.GUI
+        self.events = instance.events
     
-        
         for instruction, remote_info in instance.instance_resources.items(): 
             if remote_info.iscallable:
                 self.methods[instruction] = instance.rpc_resources[instruction].json() 
@@ -409,23 +385,4 @@ class GUIResources:
                     remote_info is not correct because the unbound method is used by multiple instances. 
                     """
                     self.parameters[path_without_RW]["owner_instance_name"] = remote_info.bound_obj.instance_name
-                    # if isinstance(remote_info.obj, PlotlyFigure):
-                    #     gui_resources.parameters[path_without_RW]['default'] = None
-                    #     gui_resources.parameters[path_without_RW]['visualization'] = {
-                    #             'type' : 'plotly',
-                    #             'plot' : remote_info.obj.__get__(self, type(self)),
-                    #             'sources' : remote_info.obj.data_sources,
-                    #             'actions' : {
-                    #                 remote_info.obj._action_stub.id : remote_info.obj._action_stub
-                    #             },
-                    #     }
-                    # elif isinstance(remote_info.obj, Image):
-                    #     gui_resources.parameters[path_without_RW]['default'] = None
-                    #     gui_resources.parameters[path_without_RW]['visualization'] = {
-                    #         'type' : 'sse-video',
-                    #         'sources' : remote_info.obj.data_sources,
-                    #         'actions' : {
-                    #                 remote_info.obj._action_stub.id : remote_info.obj._action_stub
-                    #             },
-                    #     }
         return self

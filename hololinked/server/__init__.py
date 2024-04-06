@@ -1,8 +1,8 @@
 __version__ = "0.1"
 
 # Order of import is reflected in this file to avoid circular imports
-from .config import *
 from .serializers import *
+from .config import *
 from .zmq_message_brokers import *
 from .events import *
 from .decorators import *

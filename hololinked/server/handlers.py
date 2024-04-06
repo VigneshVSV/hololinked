@@ -238,7 +238,7 @@ class RemoteObjectsHandler(BaseHandler):
         resources = dict()
         for client in clients:
             await client.handshake_complete()
-            _, _, _, _, _, reply = await client.async_execute(
+            _, _, _, _, _, reply, _ = await client.async_execute(
                         CommonRPC.http_resource_read(client.server_instance_name), 
                         raise_client_side_exception=True)
             resources.update(reply[ServerMessageData.RETURN_VALUE])

@@ -24,13 +24,52 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import tempfile
-import os 
-import platform
-from . import __version__
+import os
+import typing 
+import warnings
 
+from . import __version__
+from .serializers import JSONSerializer
 
 
 class Configuration:
+    """
+    Allows to auto apply common settings used throughout the package,
+    instead of passing these settings as arguments. 
+
+    Supports loading configuration from a JSON file whose path is specified 
+    under environment variable HOLOLINKED_CONFIG. 
+
+    Values are mutable in runtime and not type checked. Keys of JSON file 
+    must correspond to supported value name. Supported values are - 
+
+    TEMP_DIR - system temporary directory to store temporary files like IPC sockets. 
+    default - tempfile.gettempdir().
+    
+    TCP_SOCKET_SEARCH_START_PORT - starting port number for automatic port searching 
+    for TCP socket binding, used for event addresses. default 60000.
+    
+    TCP_SOCKET_SEARCH_END_PORT - ending port number for automatic port searching 
+    for TCP socket binding, used for event addresses. default 65535.
+
+    DB_CONFIG_FILE - file path for database configuration. default None. 
+
+    SYSTEM_HOST - system view server qualified IP or name. default None.
+    
+    PWD_HASHER_TIME_COST - system view server password authentication time cost, 
+    default 15. Refer argon2-cffi docs. 
+
+    PWD_HASHER_MEMORY_COST - system view server password authentication memory cost. 
+    Refer argon2-cffi docs.
+
+    USE_UVLOOP - signicantly faster event loop for Linux systems. default False. 
+
+    Parameters
+    ----------
+    use_environment: bool
+        load files from JSON file specified under environment
+
+    """
 
     __slots__ = [
         # folders
@@ -49,15 +88,14 @@ class Configuration:
         "USE_UVLOOP"
     ]
 
-    def __init__(self):
-        self.reset_variables()
+    def __init__(self, use_environment : bool = False):
+        self.load_variables(use_environment)
         self.reset_actions()
 
-
-    def reset_variables(self, use_environment : bool = False):
+    def load_variables(self, use_environment : bool = False):
         """
-        Reset to default config items.
-        If use_environment is False, won't read environment variables settings (useful if you can't trust your env).
+        set default values & use the values from environment file. 
+        Set use_environment to False to not use environment file. 
         """
         self.TEMP_DIR = f"{tempfile.gettempdir()}{os.sep}hololinked"
         self.TCP_SOCKET_SEARCH_START_PORT = 60000
@@ -65,63 +103,37 @@ class Configuration:
         self.PWD_HASHER_TIME_COST = 15
         self.USE_UVLOOP = False
 
-        # qualname is not defined
-        if use_environment:
-            # environment variables overwrite config items
-            prefix = 'hololinked'
-            for item, envvalue in (e for e in os.environ.items() if e[0].lower().startswith(prefix)):
-                item = item[len(prefix):]
-                if item not in self.__slots__:
-                    raise ValueError(f"invalid environment config variable: {prefix}{item}")
-                value = getattr(self, item)
-                valuetype = type(value)
-                if valuetype is set:
-                    envvalue = {v.strip() for v in envvalue.split(",")}
-                elif valuetype is list:
-                    envvalue = [v.strip() for v in envvalue.split(",")]
-                elif valuetype is bool:
-                    envvalue = envvalue.lower()
-                    if envvalue in ("0", "off", "no", "false"):
-                        envvalue = False
-                    elif envvalue in ("1", "yes", "on", "true"):
-                        envvalue = True
-                    else:
-                        raise ValueError(f"invalid boolean value: {prefix}{item}={envvalue}")
-                else:
-                    try:
-                        envvalue = valuetype(envvalue)
-                    except ValueError:
-                        raise ValueError(f"invalid environment config value: {prefix}{item}={envvalue}") from None
-                setattr(self, item, envvalue)
+        if not use_environment:
+            return 
+        # environment variables overwrite config items
+        file = os.environ.get("HOLOLINKED_CONFIG", None)
+        if not file:
+            warnings.warn("no environment file found although asked to load from one", UserWarning)
+            return
+        with open(file, "r") as file:
+            config = JSONSerializer.load(file) # type: typing.Dict
+        for item, value in config.items():
+            setattr(self, item, value)
 
     def reset_actions(self):
+        "actions to be done to reset configurations (not actions to be called)"
         try:
             os.mkdir(self.TEMP_DIR)
         except FileExistsError:
             pass
 
     def copy(self):
-        """returns a copy of this config"""
+        "returns a copy of this config as another object"
         other = object.__new__(Configuration)
         for item in self.__slots__:
             setattr(other, item, getattr(self, item))
         return other
 
     def asdict(self):
-        """returns this config as a regular dictionary"""
+        "returns this config as a regular dictionary"
         return {item: getattr(self, item) for item in self.__slots__}
-        
-    def dump(self):
-        """Easy config diagnostics"""
-        return {
-            "version" : __version__,
-            "path" : os.path.dirname(__file__),
-            "python" : f"{platform.python_implementation()} {platform.python_version()} ({platform.system()}, {os.name})" ,
-            "configuration" : self.asdict()
-        }
-            
-  
-  
+
+
 global_config = Configuration()
 
 

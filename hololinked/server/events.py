@@ -6,7 +6,7 @@ from uuid import uuid4
 from ..param import Parameterized
 from .zmq_message_brokers import BaseZMQServer, BaseZMQClient
 from .constants import ServerTypes
-from .utils import create_default_logger
+from .utils import get_default_logger
 
 
 class Event:
@@ -103,7 +103,7 @@ class EventPublisher(BaseZMQServer):
         
     def exit(self):
         if not hasattr(self, 'logger'):
-            self.logger = create_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
+            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
         try:
             self.socket.close(0)
             self.logger.info("terminated event publishing socket with address '{}'".format(self.socket_address))
@@ -141,7 +141,7 @@ class EventConsumer(BaseZMQClient):
     
     def exit(self):
         if not hasattr(self, 'logger'):
-            self.logger = create_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
+            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
         try:
             self.socket.close(0)
             self.logger.info("terminated event consuming socket with address '{}'".format(self.socket_address))

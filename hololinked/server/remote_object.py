@@ -20,7 +20,7 @@ from .decorators import remote_method
 from .http_methods import get, post
 from .data_classes import (GUIResources, RemoteResource, HTTPResource, RPCResource, RemoteResourceInfoValidator,
                         ServerSentEvent)
-from .utils import create_default_logger, wrap_text
+from .utils import get_default_logger
 from .api_platform_utils import *
 from .remote_parameter import ReactApp, RemoteParameter, RemoteClassParameters
 from .remote_parameters import (Integer, String, ClassSelector, TypedDict, Boolean, 
@@ -117,8 +117,8 @@ class StateMachine:
                         else: 
                             resource._remote_info.state = resource._remote_info.state + (self._machine_compliant_state(state), ) # type: ignore
                     else: 
-                        raise AttributeError(wrap_text(f"""Object {resource} not made remotely accessible. 
-                                    Use state machine with remote parameters and remote methods only"""))
+                        raise AttributeError(f"Object {resource} not made remotely accessible,",
+                                    " Use state machine with remote parameters and remote methods only")
             else:
                 raise AttributeError("Given state {} not in states Enum {}".format(state, self.states.__members__))
             
@@ -185,10 +185,8 @@ class StateMachine:
                 for func in self.on_enter[value]: # type: ignore
                     func(self.owner)
         else:   
-            raise ValueError(wrap_text("""given state '{}' not in set of allowed states : {}.
-                    """.format(value, self.states)
-            ))
-    
+            raise ValueError("given state '{}' not in set of allowed states : {}.".format(value, self.states))
+                
     current_state = property(get_state, set_state, None, 
         doc = """read and write current state of the state machine""")
 
@@ -542,7 +540,7 @@ class RemoteObject(RemoteSubobject):
 
     def _prepare_logger(self, log_level : int, log_file : str, remote_access : bool = True):
         if self.logger is None:
-            self.logger = create_default_logger(self.instance_name, 
+            self.logger = get_default_logger(self.instance_name, 
                             logging.INFO if not log_level else log_level, 
                             None if not log_file else log_file)
         if remote_access:

@@ -1,48 +1,43 @@
+.. _apiref:
+
+.. |br| raw:: html
+
+    <br />
+
+
 data classes
 ============
 
-.. toctree::
-    :maxdepth: 1
+The following is a list of all dataclasses used to store information on the exposed 
+resources on the network. These classese are generally not for consumption by the package-end-user. 
 
 
-.. collapse:: RemoteResourceInfoValidator
-
-    .. autoclass:: hololinked.server.data_classes.RemoteResourceInfoValidator
-        :members: 
-        :show-inheritance:
+.. autoclass:: hololinked.server.data_classes.RemoteResourceInfoValidator
+    :members: 
+    :show-inheritance:
 
 
-.. collapse:: RemoteResource
-
-    .. autoclass:: hololinked.server.data_classes.RemoteResource
-        :members: 
-        :show-inheritance:
+.. autoclass:: hololinked.server.data_classes.RemoteResource
+    :members: 
+    :show-inheritance:
 
 
-.. collapse:: HTTPResource
-
-    .. autoclass:: hololinked.server.data_classes.HTTPResource
-        :members: 
-        :show-inheritance:
+.. autoclass:: hololinked.server.data_classes.HTTPResource
+    :members: 
+    :show-inheritance:
 
 
-.. collapse:: RPCResource
-
-    .. autoclass:: hololinked.server.data_classes.RPCResource
-        :members: 
-        :show-inheritance:
+.. autoclass:: hololinked.server.data_classes.RPCResource
+    :members: 
+    :show-inheritance:
 
 
-.. collapse:: ServerSentEvent
-
-    .. autoclass:: hololinked.server.data_classes.ServerSentEvent
-        :members: 
-        :show-inheritance:
+.. autoclass:: hololinked.server.data_classes.ServerSentEvent
+    :members: 
+    :show-inheritance:
 
 
-.. collapse:: GUIResources
-
-    .. autoclass:: hololinked.server.data_classes.GUIResources
-        :members: 
-        :show-inheritance:
+.. autoclass:: hololinked.server.data_classes.GUIResources
+    :members: 
+    :show-inheritance:
 

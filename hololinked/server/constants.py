@@ -3,6 +3,7 @@ import typing
 from types import FunctionType, MethodType
 from enum import StrEnum, IntEnum, Enum
 
+
 # types
 JSONSerializable = typing.Union[typing.Dict[str, typing.Any], list, str, int, float, None]
 JSON = typing.Dict[str, JSONSerializable]
@@ -16,10 +17,10 @@ ANY_STATE   : str = "ANY_STATE"
 UNSPECIFIED : str = "UNSPECIFIED"
 # types
 
+
 class ResourceTypes(StrEnum):
-    """
-    Exposed resource types
-    """
+    "Exposed resource types"
+
     FUNC  = "FUNC"
     ATTRIBUTE = "ATTRIBUTE"
     PARAMETER = "PARAMETER"
@@ -30,18 +31,16 @@ class ResourceTypes(StrEnum):
 
 
 class ResourceOperations(StrEnum):
-    """
-    Some common eventloop side operations
-    """
+    "some common eventloop side operations"
+
     PARAMETER_READ = "read"
     PARAMETER_WRITE = "write"
     PARAMETER_DELETE = "delete"
 
 
 class CommonRPC(StrEnum):
-    """
-    Some common RPC instructions
-    """
+    "some common RPC instructions"
+
     RPC_RESOURCES = '/resources/object-proxy/read'
     HTTP_RESOURCES = '/resources/http-server/read'
 
@@ -55,17 +54,15 @@ class CommonRPC(StrEnum):
 
 
 class REGEX(StrEnum):
-    """
-    regexes 
-    """
+    "common regexes"
+
     states = '[A-Za-z_]+[A-Za-z_ 0-9]*'
     url = r'[\-a-zA-Z0-9@:%._\/\+~#=]{1,256}' 
 
 
 class HTTP_METHODS(StrEnum):
-    """
-    HTTP request methods
-    """
+    "currently supported HTTP request methods"
+    
     GET = 'GET'
     POST = 'POST'
     PUT = 'PUT'
@@ -77,9 +74,8 @@ http_methods = [member for member in HTTP_METHODS._member_map_]
 
 # Logging 
 class LOGLEVEL(IntEnum):
-    """
-    ``logging.Logger`` log levels
-    """
+    "``logging.Logger`` log levels"
+
     DEBUG    = logging.DEBUG
     INFO     = logging.INFO
     CRITICAL = logging.CRITICAL
@@ -89,9 +85,8 @@ class LOGLEVEL(IntEnum):
 
 # ZMQ
 class ZMQ_PROTOCOLS(StrEnum):
-    """
-    protocols of ZMQ supported by this package
-    """
+    "supported ZMQ protocols"
+
     TCP = "TCP"
     IPC = "IPC"
     INPROC = "INPROC"
@@ -99,7 +94,7 @@ class ZMQ_PROTOCOLS(StrEnum):
 
 class ClientMessage(IntEnum):
     """
-    client sent message indexing for accessing message indices with names 
+    ZNQ client sent message indexing for accessing message indices with names 
     instead of numbers
     """
     ADDRESS = 0
@@ -114,7 +109,7 @@ class ClientMessage(IntEnum):
 
 class ServerMessage(IntEnum):
     """
-    server sent message indexing for accessing message indices with names 
+    ZMQ server sent message indexing for accessing message indices with names 
     instead of numbers
     """
     ADDRESS = 0
@@ -129,29 +124,41 @@ class ServerMessageData(StrEnum):
 
 
 class ServerTypes(Enum):
-    """
-    type of ZMQ servers
-    """
-    UNKNOWN_TYPE = b'UNKNOWN_TYPE'
-    EVENTLOOP = b'EVENTLOOP'
+    "type of ZMQ servers"
+
+    UNKNOWN_TYPE = b'UNKNOWN' 
+    EVENTLOOP = b'EVENTLOOP'  
     REMOTE_OBJECT = b'REMOTE_OBJECT'
     POOL = b'POOL'
        
        
 class ClientTypes(Enum):
-    """
-    Type of ZMQ clients
-    """
+    "type of ZMQ clients"
+
     HTTP_SERVER = b'HTTP_SERVER'
     PROXY = b'PROXY'
     TUNNELER = b'TUNNELER' # message passer from inproc client to inrproc server within RPC
 
 
 class HTTPServerTypes(StrEnum):
-    """
-    types of HTTP server
-    """
+    "types of HTTP server"
+
     SYSTEM_HOST = 'SYSTEM_HOST'
     REMOTE_OBJECT_SERVER = 'REMOTE_OBJECT_SERVER'
+
+
+class Serializers(StrEnum):
+    """
+    allowed serializers
+
+    - PICKLE : pickle
+    - JSON : msgspec.json
+    - SERPENT : serpent
+    - MSGPACK : msgspec.msgpack
+    """
+    PICKLE = 'pickle'
+    JSON = 'json'
+    SERPENT = 'serpent'
+    MSGPACK = 'msgpack'
 
 

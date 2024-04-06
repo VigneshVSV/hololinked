@@ -22,7 +22,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-
 import json
 import pickle
 import serpent
@@ -38,108 +37,55 @@ from enum import Enum, StrEnum
 from collections import deque
 
 from ..param.parameters import TypeConstrainedList, TypeConstrainedDict, TypedKeyMappingsConstrainedDict
+from .constants import JSONSerializable, Serializers
 from .webserver_utils import format_exception_as_json
-
-dict_keys = type(dict().keys())
-
 
 
 class BaseSerializer(object):
-    """Base class for (de)serializer implementations (which must be thread safe)"""
+    """
+    Base class for (de)serializer implementations. All serializers must inherit this class 
+    and overloads dumps() and loads() to be usable by the ZMQ message brokers. Any serializer 
+    that returns bytes when serialized and a python object on deserialization will be accepted. 
+    Serialization and deserialization errors will be passed as invalid message type 
+    (see ZMQ messaging contract) from server side and a exception will be raised on the client.  
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.type = None
     
-    def loads(self, data):
+    def loads(self, data) -> typing.Any:
+        "method called by ZMQ message brokers to deserialize data"
         raise NotImplementedError("implement in subclass")
 
-    def dumps(self, data):
+    def dumps(self, data) -> bytes:
+        "method called by ZMQ message brokers to serialize data"
         raise NotImplementedError("implement in subclass")
     
-    @classmethod
-    def convert_to_bytes(self, data):
-        if type(data) is bytearray:
-            return bytes(data)
-        if type(data) is memoryview:
-            return data.tobytes()
-        return data
 
-    @classmethod
-    def register_class_to_dict(cls, clazz, converter, serpent_too=True):
-        """Registers a custom function that returns a dict representation of objects of the given class.
-        The function is called with a single parameter; the object to be converted to a dict."""
-        raise NotImplementedError("Function register_class_to_dict has to be implemented")
-
-    @classmethod
-    def unregister_class_to_dict(cls, clazz):
-        """Removes the to-dict conversion function registered for the given class. Objects of the class
-        will be serialized by the default mechanism again."""
-        raise NotImplementedError("Function unregister_class_to_dict has to be implemented")
-
-    @classmethod
-    def register_dict_to_class(cls, classname, converter):
-        """
-        Registers a custom converter function that creates objects from a dict with the given classname tag in it.
-        The function is called with two parameters: the classname and the dictionary to convert to an instance of the class.
-        """
-        raise NotImplementedError("Function register_dict_to_class has to be implemented")
-
-    @classmethod
-    def unregister_dict_to_class(cls, classname):
-        """
-        Removes the converter registered for the given classname. Dicts with that classname tag
-        will be deserialized by the default mechanism again.
-        """
-        raise NotImplementedError("Function unregister_dict_to_class has to be implemented")
-
-    @classmethod
-    def class_to_dict(cls, obj):
-        """
-        Convert a non-serializable object to a dict. Partly borrowed from serpent.
-        """
-        raise NotImplementedError("Function class_to_dict has to be implemented")
-
-    @classmethod
-    def dict_to_class(cls, data):
-        """
-        Recreate an object out of a dict containing the class name and the attributes.
-        Only a fixed set of classes are recognized.
-        """
-        raise NotImplementedError("Function dict_to_class has to be implemented")
-
-    def recreate_classes(self, literal):
-        raise NotImplementedError("Function class_to_dict has to be implemented")
-
-
+dict_keys = type(dict().keys())
 
 class JSONSerializer(BaseSerializer):
-    """(de)serializer that wraps the json serialization protocol."""
+    "(de)serializer that wraps the msgspec json serialization protocol, default serializer for HTTP clients."
+
     _type_replacements = {}
 
     def __init__(self) -> None:
         super().__init__()
+        self.type = json
 
+    def loads(self, data : typing.Union[bytearray, memoryview, bytes]) -> JSONSerializable:
+        "method called by ZMQ message brokers to deserialize data"
+        return json.decode(data)
+    
     def dumps(self, data) -> bytes:
+        "method called by ZMQ message brokers to serialize data"
         return json.encode(data, enc_hook=self.default)
-
-    def dump(self, data : typing.Dict[str, typing.Any], file_desc) -> None:
-        raise NotImplementedError("dump is not implemented")
-        # return json.dump(data, file_desc, ensure_ascii=False, allow_nan=True, default=self.default)
-
-    def loads(self, data : typing.Union[bytearray, memoryview, bytes]) -> typing.Any:
-        data : str = self.convert_to_bytes(data).decode("utf-8") 
-        try:
-            return json.decode(data)
-        except Exception as ex:
-            if len(data) == 0:
-                raise ex from None 
-            elif data[0].isalpha():
-                return data 
-            else:
-                raise ex from None
-
-    def load(cls, file_desc) -> typing.Dict[str, typing.Any]:
-        raise NotImplementedError("load is not implemented")
-
+      
     @classmethod
-    def default(cls, obj):
+    def default(cls, obj) -> JSONSerializable:
+        "method called if no serialization option was found."
+
         if hasattr(obj, 'json'):
             # alternative to type replacement
             return obj.json()
@@ -170,55 +116,72 @@ class JSONSerializer(BaseSerializer):
         raise TypeError("Given type cannot be converted to JSON : {}".format(type(obj)))
       
     @classmethod
-    def register_type_replacement(cls, object_type, replacement_function):
+    def register_type_replacement(cls, object_type, replacement_function) -> None:
+        "register custom serialization function for a particular type"
         if object_type is type or not inspect.isclass(object_type):
             raise ValueError("refusing to register replacement for a non-type or the type 'type' itself")
         cls._type_replacements[object_type] = replacement_function
 
 
-
 class PythonBuiltinJSONSerializer(JSONSerializer):
+    "(de)serializer that wraps the python builtin json serialization protocol."
+
+    def __init__(self) -> None:
+        super().__init__() 
+        self.type = pythonjson 
+       
+    def loads(self, data : typing.Union[bytearray, memoryview, bytes]) -> typing.Any:
+        "method called by ZMQ message brokers to deserialize data"
+        return pythonjson.loads(data)
 
     def dumps(self, data) -> bytes:
+        "method called by ZMQ message brokers to serialize data"
         data = pythonjson.dumps(data, ensure_ascii=False, allow_nan=True, default=self.default)
         return data.encode("utf-8")
        
     def dump(self, data : typing.Dict[str, typing.Any], file_desc) -> None:
+        "write JSON to file"
         pythonjson.dump(data, file_desc, ensure_ascii=False, allow_nan=True, default=self.default)
 
-    def loads(self, data : typing.Union[bytearray, memoryview, bytes]) -> typing.Any:
-        data : str = self.convert_to_bytes(data).decode("utf-8") 
-        try:
-            return pythonjson.loads(data)
-        except Exception as ex:
-            if len(data) == 0:
-                raise ex from None 
-            elif data[0].isalpha():
-                return data 
-            else:
-                raise ex from None
-
+    def load(cls, file_desc) -> JSONSerializable:
+        "load JSON from file"
+        return pythonjson.load(file_desc)
 
 
 class PickleSerializer(BaseSerializer):
+    "(de)serializer that wraps the pickle serialization protocol, use with encryption for safety."
 
-    def dumps(self, data):
+    def __init__(self) -> None:
+        super().__init__() 
+        self.type = pickle 
+
+    def dumps(self, data) -> bytes:
+        "method called by ZMQ message brokers to serialize data"
         return pickle.dumps(data)
     
-    def loads(self, data):
+    def loads(self, data) -> typing.Any:
+        "method called by ZMQ message brokers to deserialize data"
         return pickle.loads(data)
     
 
 class SerpentSerializer(BaseSerializer):
     """(de)serializer that wraps the serpent serialization protocol."""
-    def dumps(self, data):
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.type = serpent
+
+    def dumps(self, data) -> bytes:
+        "method called by ZMQ message brokers to serialize data"
         return serpent.dumps(data, module_in_classname=True)
 
-    def loads(self, data):
+    def loads(self, data) -> typing.Any:
+        "method called by ZMQ message brokers to deserialize data"
         return serpent.loads(data)
 
     @classmethod
-    def register_type_replacement(cls, object_type, replacement_function):
+    def register_type_replacement(cls, object_type, replacement_function) -> None:
+        "register custom serialization function for a particular type"
         def custom_serializer(obj, serpent_serializer, outputstream, indentlevel):
             replaced = replacement_function(obj)
             if replaced is obj:
@@ -231,11 +194,12 @@ class SerpentSerializer(BaseSerializer):
         serpent.register_class(object_type, custom_serializer)
 
 
-
 class MsgpackSerializer(BaseSerializer):
+    "(de)serializer that wraps the msgspec MessagePack serialization protocol, default serializer for RPC clients."
 
     def __init__(self) -> None:
         super().__init__()
+        self.type = msgpack
 
     def dumps(self, value) -> bytes:
         return msgpack.encode(value)
@@ -253,11 +217,7 @@ serializers = {
     'msgpack' : MsgpackSerializer,
 }
 
-class Serializers(StrEnum):
-    PICKLE = 'pickle'
-    JSON = 'json'
-    SERPENT = 'serpent'
-    MSGSPEC_MSGPACK = 'msgpack'
+
 
 
 __all__ = ['JSONSerializer', 'SerpentSerializer', 'PickleSerializer', 'MsgpackSerializer', 

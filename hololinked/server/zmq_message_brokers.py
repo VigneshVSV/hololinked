@@ -1,5 +1,7 @@
 import builtins
 import os
+import pickle
+import warnings
 import zmq
 import zmq.asyncio
 import asyncio
@@ -11,10 +13,10 @@ from collections import deque
 from enum import Enum
 
 
-from .utils import create_default_logger, run_method_somehow, wrap_text
+from .utils import *
 from .config import global_config
 from .constants import JSON, ZMQ_PROTOCOLS, ServerTypes
-from .serializers import BaseSerializer, JSONSerializer, MsgpackSerializer, serializers
+from .serializers import BaseSerializer, JSONSerializer, MsgpackSerializer, PickleSerializer, serializers
 
 
 
@@ -147,7 +149,7 @@ class BaseZMQ:
             if bind:
                 if not socket_address:
                     for i in range(global_config.TCP_SOCKET_SEARCH_START_PORT, global_config.TCP_SOCKET_SEARCH_END_PORT):
-                        socket_address = "tcp://*:{}".format(i)
+                        socket_address = "tcp://0.0.0.0:{}".format(i)
                         try:
                             self.socket.bind(socket_address)
                             break 
@@ -178,7 +180,7 @@ class BaseZMQ:
         creates a logger with name {class name} | {socket type} | {protocol} | {identity},
         default logging level is ``logging.INFO`` 
         """
-        return create_default_logger('{}|{}|{}|{}'.format(cls.__name__, socket_type, protocol, identity) , level)
+        return get_default_logger('{}|{}|{}|{}'.format(cls.__name__, socket_type, protocol, identity) , level)
     
     def __del__(self) -> None:
         self.exit()
@@ -234,8 +236,8 @@ class BaseZMQServer(BaseZMQ):
         
     server's message to client: 
     ::
-        [address, bytes(), server_type, message_type, message id, data]
-        [   0   ,   1    ,    2       ,      3      ,      4    ,  5  ]
+        [address, bytes(), server_type, message_type, message id, data, encoded_data]
+        [   0   ,   1    ,    2       ,      3      ,      4    ,  5  ,       6     ]
 
     The messaging contract does not depend on sync or async implementation.  
 
@@ -255,6 +257,8 @@ class BaseZMQServer(BaseZMQ):
         else:
             raise ValueError("invalid JSON serializer option for {}. Given option : {}".format(self.__class__, json_serializer))
         if isinstance(rpc_serializer, BaseSerializer):
+            if isinstance(rpc_serializer, PickleSerializer) or rpc_serializer.type == pickle:
+                warnings.warn("using pickle serializer which is unsafe", UserWarning)
             self.rpc_serializer = rpc_serializer 
         elif isinstance(rpc_serializer, str) or rpc_serializer is None: 
             self.rpc_serializer = serializers.get(rpc_serializer, MsgpackSerializer)()
@@ -314,7 +318,8 @@ class BaseZMQServer(BaseZMQ):
 
 
     def craft_reply_from_arguments(self, address : bytes, client_type: bytes, message_type : bytes, 
-                            message_id : bytes = b'', data : typing.Any = None) -> typing.List[bytes]:
+                            message_id : bytes = b'', data : typing.Any = None, 
+                            pre_encoded_data : typing.Optional[bytes] = EMPTY_BYTE) -> typing.List[bytes]:
         """
         call this method to craft an arbitrary reply or message to the client using the method arguments. 
 
@@ -350,12 +355,13 @@ class BaseZMQServer(BaseZMQ):
             self.server_type,
             message_type,
             message_id,
-            data
+            data,
+            pre_encoded_data
         ] 
            
 
-    def craft_reply_from_client_message(self, original_client_message : typing.List[bytes], 
-                                                            data : typing.Any = None) -> typing.List[bytes]:
+    def craft_reply_from_client_message(self, original_client_message : typing.List[bytes], data : typing.Any = None,
+                                            pre_encoded_data : bytes = EMPTY_BYTE) -> typing.List[bytes]:
         """
         craft a reply with certain data automatically from an originating client message. The client's address, type required
         for serialization requirements, message id etc. are automatically created from the original message.         
@@ -391,7 +397,8 @@ class BaseZMQServer(BaseZMQ):
             self.server_type,
             REPLY,
             original_client_message[CM_INDEX_MESSAGE_ID],
-            data
+            data,
+            pre_encoded_data
         ]
     
 
@@ -409,12 +416,11 @@ class BaseZMQServer(BaseZMQ):
         -------
         None 
         """
-        run_method_somehow(self._handshake(original_client_message))
+        run_callable_somehow(self._handshake(original_client_message))
 
     def _handshake(self, original_client_message : typing.List[bytes]) -> None:
-        raise NotImplementedError(
-            wrap_text("handshake cannot be handled - implement _handshake in {} to handshake.".format(
-                self.__class__)))
+        raise NotImplementedError("handshake cannot be handled - implement _handshake in {} to handshake.".format(
+                self.__class__))
 
 
     def handle_invalid_message(self, original_client_message : typing.List[bytes], exception : Exception) -> None:
@@ -433,12 +439,12 @@ class BaseZMQServer(BaseZMQ):
         -------
         None
         """
-        run_method_somehow(self._handle_invalid_message(original_client_message, exception))
+        run_callable_somehow(self._handle_invalid_message(original_client_message, exception))
 
     def _handle_invalid_message(self, message : typing.List[bytes], exception : Exception) -> None:
-        raise NotImplementedError(
-            wrap_text("invalid message cannot be handled - implement _handle_invalid_message in {} to handle invalid messages.".format(
-                self.__class__)))
+        raise NotImplementedError("invalid message cannot be handled", 
+                " - implement _handle_invalid_message in {} to handle invalid messages.".format(
+                self.__class__))
             
 
     def handle_timeout(self, original_client_message : typing.List[bytes]) -> None:
@@ -455,12 +461,12 @@ class BaseZMQServer(BaseZMQ):
         -------
         None
         """
-        run_method_somehow(self._handle_timeout(original_client_message))
+        run_callable_somehow(self._handle_timeout(original_client_message))
 
     def _handle_timeout(self, original_client_message : typing.List[bytes]) -> None:
-        raise NotImplementedError(
-            wrap_text("timeouts cannot be handled - implement _handle_timeout in {} to handle timeout.".format(
-                self.__class__)))
+        raise NotImplementedError("timeouts cannot be handled ",
+                "- implement _handle_timeout in {} to handle timeout.".format(
+                self.__class__))
 
 
 
@@ -529,8 +535,7 @@ class AsyncZMQServer(BaseAsyncZMQServer, BaseAsyncZMQ):
         while True:
             instruction = self.parse_client_message(await self.socket.recv_multipart())
             if instruction:
-                self.logger.debug("received instruction from client '{}' with msg-ID '{}'".format(
-                                        instruction[CM_INDEX_ADDRESS], instruction[CM_INDEX_MESSAGE_ID]))
+                self.logger.debug(f"received instruction from client {instruction[CM_INDEX_ADDRESS]} with msg-ID {instruction[CM_INDEX_MESSAGE_ID]}")
                 return instruction
         
 
@@ -605,7 +610,7 @@ class AsyncZMQServer(BaseAsyncZMQServer, BaseAsyncZMQ):
         closes socket and context, warns if any error occurs. 
         """
         if not hasattr(self, 'logger'):
-            self.logger = create_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
+            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
         try:
             self.socket.close(0)
             self.logger.info("terminated socket of server '{}' of type '{}'".format(self.identity, self.__class__))
@@ -713,7 +718,7 @@ class AsyncPollingZMQServer(AsyncZMQServer):
         unregister socket from poller and terminate socket and context.
         """
         if not hasattr(self, 'logger'):
-            self.logger = create_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
+            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
         try:
             self.poller.unregister(self.socket)
         except Exception as ex:
@@ -827,7 +832,7 @@ class ZMQServerPool(BaseZMQServer):
     
     def exit(self) -> None:
         if not hasattr(self, 'logger'):
-            self.logger = create_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
+            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
         for server in self.pool.values():
             self.poller.unregister(server.socket)
             server.exit()
@@ -1042,7 +1047,7 @@ class RPCServer(BaseZMQServer):
 
     def exit(self):
         if not hasattr(self, 'logger'):
-            self.logger = create_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
+            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
         self.stop_poll = True
         sockets = list(self.poller._map.keys())
         for i in range(len(sockets)): # iterating over keys will cause dictionary size change during iteration
@@ -1398,7 +1403,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
  
     def exit(self) -> None:
         if not hasattr(self, 'logger'):
-            self.logger = create_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
+            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
         try:
             self.socket.close(0)
             self.logger.info("terminated socket of server '{}' of type '{}'".format(self.identity, self.__class__))
@@ -1438,7 +1443,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         automatically called when handshake argument at init is True. When not automatically called, it is necessary
         to call this method before awaiting ``handshake_complete()``.
         """
-        run_method_somehow(self._handshake())
+        run_callable_somehow(self._handshake())
 
     async def _handshake(self) -> None:
         """
@@ -1559,7 +1564,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
     
     def exit(self) -> None:
         if not hasattr(self, 'logger'):
-            self.logger = create_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
+            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
         try:
             self.socket.close(0)
             self.logger.info("terminated socket of server '{}' of type '{}'".format(self.identity, self.__class__))
@@ -1658,7 +1663,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                         break
                     else:
                         if reply:
-                            address, _, server_type, message_type, message_id, data = reply
+                            address, _, server_type, message_type, message_id, data, encoded_data = reply
                             self.logger.debug("received reply from server '{}' with message ID {}".format(address, message_id))
                             if message_id in self.cancelled_messages:
                                 self.cancelled_messages.remove(message_id)
@@ -1667,10 +1672,16 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                             try:
                                 event = self.events_map[message_id] 
                             except KeyError:
-                                invalid_event_task = asyncio.create_task(self._resolve_reply(message_id, data))
+                                if len(encoded_data) > 0:
+                                    invalid_event_task = asyncio.create_task(self._resolve_reply(message_id, encoded_data))
+                                else:
+                                    invalid_event_task = asyncio.create_task(self._resolve_reply(message_id, data))
                                 event_loop.call_soon(lambda: invalid_event_task)
                             else:    
-                                self.message_map[message_id] = data
+                                if len(encoded_data) > 0:
+                                    self.message_map[message_id] = encoded_data
+                                else:
+                                    self.message_map[message_id] = data
                                 event.set()
 
 
@@ -1891,7 +1902,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
     
     def exit(self) -> None:
         if not hasattr(self, 'logger'):
-            self.logger = create_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
+            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
         for client in self.pool.values():
             self.poller.unregister(client.socket)
             client.exit()

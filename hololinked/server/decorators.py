@@ -30,8 +30,8 @@ def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_MET
         
     Returns
     -------
-    callable: Callable
-        returns the callable object as it is or wrapped within loggers
+    Callable
+        returns the callable object as it is
     """
     
     def inner(obj):

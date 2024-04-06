@@ -17,7 +17,7 @@ from ..param import Parameterized
 from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector, 
                     TypedList, String)
 from ..server.webserver_utils import get_IP_from_interface
-from .utils import create_default_logger, run_coro_sync
+from .utils import get_default_logger, run_coro_sync
 from .serializers import JSONSerializer
 from .zmq_message_brokers import MessageMappedZMQClientPool
 from .handlers import RPCHandler, BaseHandler, EventHandler, RemoteObjectsHandler
@@ -93,7 +93,7 @@ class HTTPServer(Parameterized):
     def all_ok(self) -> bool:
         self._IP = f"{self.address}:{self.port}"
         if self.logger is None:
-            self.logger = create_default_logger('{}|{}'.format(self.__class__.__name__, 
+            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, 
                                             f"{self.address}:{self.port}"), 
                                             self.log_level)
             
