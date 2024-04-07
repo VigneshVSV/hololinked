@@ -40,6 +40,8 @@ class ObjectProxy:
             use a custom serializer, must be same as the serializer supplied to the server. 
         allow_foreign_attributes: bool, default False
             allows local attributes for proxy apart from parameters fetched from the server.
+        log_level: int
+            log level corresponding to logging.Logger, applied to all loggers
     """
 
     _own_attrs = frozenset([
@@ -55,7 +57,7 @@ class ObjectProxy:
         self.invokation_timeout = invokation_timeout
         self.execution_timeout = kwargs.get("execution_timeout", None)
         self.identity = f"{instance_name}|{uuid.uuid4()}"
-        self.logger = logging.Logger(self.identity)
+        self.logger = logging.Logger(self.identity, level=kwargs.get('log_level', 0))
         # compose ZMQ client in Proxy client so that all sending and receiving is
         # done by the ZMQ client and not by the Proxy client directly. Proxy client only 
         # bothers mainly about __setattr__ and _getattr__

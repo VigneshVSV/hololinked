@@ -134,7 +134,7 @@ class HTTPServer(Parameterized):
                 res = await client.fetch(HTTPRequest(
                         url=f"{self.host}/subscribers",
                         method='POST',
-                        body=JSONSerializer.generic_dumps(dict(
+                        body=JSONSerializer.dumps(dict(
                                 hostname=socket.gethostname(),
                                 IPAddress=get_IP_from_interface(self.network_interface), 
                                 port=self.port, 
@@ -153,7 +153,7 @@ class HTTPServer(Parameterized):
                     self.logger.info(f"subsribed successfully to host {self.host}")
                     break
                 elif i >= 299:
-                    raise RuntimeError(f"could not subsribe to host {self.host}. response {JSONSerializer.generic_loads(res.body)}")
+                    raise RuntimeError(f"could not subsribe to host {self.host}. response {JSONSerializer.loads(res.body)}")
             await asyncio.sleep(1)
         # we lose the client anyway so we close it. if we decide to reuse the client, changes needed
         client.close() 

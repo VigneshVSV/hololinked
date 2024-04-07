@@ -16,26 +16,31 @@ resources on the network. These classese are generally not for consumption by th
     :members: 
     :show-inheritance:
 
+|br|
 
 .. autoclass:: hololinked.server.data_classes.RemoteResource
     :members: 
     :show-inheritance:
 
+|br|
 
 .. autoclass:: hololinked.server.data_classes.HTTPResource
     :members: 
     :show-inheritance:
 
+|br|
 
 .. autoclass:: hololinked.server.data_classes.RPCResource
     :members: 
     :show-inheritance:
 
+|br|
 
 .. autoclass:: hololinked.server.data_classes.ServerSentEvent
     :members: 
     :show-inheritance:
 
+|br|
 
 .. autoclass:: hololinked.server.data_classes.GUIResources
     :members: 

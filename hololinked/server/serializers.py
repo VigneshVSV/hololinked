@@ -62,6 +62,15 @@ class BaseSerializer(object):
         "method called by ZMQ message brokers to serialize data"
         raise NotImplementedError("implement in subclass")
     
+    def convert_to_bytes(self, data) -> bytes:
+        if isinstance(data, bytes):
+            return data
+        if isinstance(data, bytearray):
+            return bytes(data)
+        if isinstance(data, memoryview):
+            return data.tobytes()
+        raise TypeError("serializer convert_to_bytes accepts only bytes, bytearray or memoryview")
+    
 
 dict_keys = type(dict().keys())
 
@@ -76,7 +85,7 @@ class JSONSerializer(BaseSerializer):
 
     def loads(self, data : typing.Union[bytearray, memoryview, bytes]) -> JSONSerializable:
         "method called by ZMQ message brokers to deserialize data"
-        return json.decode(data)
+        return json.decode(self.convert_to_bytes(data))
     
     def dumps(self, data) -> bytes:
         "method called by ZMQ message brokers to serialize data"
@@ -132,7 +141,7 @@ class PythonBuiltinJSONSerializer(JSONSerializer):
        
     def loads(self, data : typing.Union[bytearray, memoryview, bytes]) -> typing.Any:
         "method called by ZMQ message brokers to deserialize data"
-        return pythonjson.loads(data)
+        return pythonjson.loads(self.convert_to_bytes(data))
 
     def dumps(self, data) -> bytes:
         "method called by ZMQ message brokers to serialize data"
@@ -161,7 +170,7 @@ class PickleSerializer(BaseSerializer):
     
     def loads(self, data) -> typing.Any:
         "method called by ZMQ message brokers to deserialize data"
-        return pickle.loads(data)
+        return pickle.loads(self.convert_to_bytes(data))
     
 
 class SerpentSerializer(BaseSerializer):
@@ -177,7 +186,7 @@ class SerpentSerializer(BaseSerializer):
 
     def loads(self, data) -> typing.Any:
         "method called by ZMQ message brokers to deserialize data"
-        return serpent.loads(data)
+        return serpent.loads(self.convert_to_bytes(data))
 
     @classmethod
     def register_type_replacement(cls, object_type, replacement_function) -> None:
@@ -205,7 +214,7 @@ class MsgpackSerializer(BaseSerializer):
         return msgpack.encode(value)
 
     def loads(self, value) -> typing.Any:
-        return msgpack.decode(value)
+        return msgpack.decode(self.convert_to_bytes(value))
     
 
 

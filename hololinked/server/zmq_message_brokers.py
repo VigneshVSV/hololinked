@@ -71,6 +71,7 @@ SM_INDEX_DATA = 5
 
 # Server types - currently useless metadata
 
+byte_types = (bytes, bytearray, memoryview)
 
 
 class BaseZMQ: 
@@ -171,7 +172,8 @@ class BaseZMQ:
                 self.socket.connect(socket_address)
         else:
             raise NotImplementedError("protocols other than IPC, TCP & INPROC are not implemented now for {}".format(self.__class__))
-        self.logger = self.get_logger(self.identity, socket_type.name, protocol.name if isinstance(protocol, Enum) else protocol) 
+        self.logger = self.get_logger(self.identity, socket_type.name, protocol.name if isinstance(protocol, Enum) else protocol,
+                                        kwargs.get('log_level', logging.INFO)) 
         self.logger.info("created socket with address {} and {}".format(socket_address, "bound" if bind else "connected"))
 
     @classmethod
@@ -1204,13 +1206,14 @@ class BaseZMQClient(BaseZMQ):
             # TODO - following can be improved
             if arguments == b'':
                 arguments : bytes = self.json_serializer.dumps({}) 
-            elif not isinstance(arguments, bytes):
+            elif not isinstance(arguments, byte_types):
                 arguments : bytes = self.json_serializer.dumps(arguments) 
             context : bytes = self.json_serializer.dumps(context)
         elif self.client_type == PROXY:
             timeout : bytes = self.rpc_serializer.dumps(timeout)
             instruction : bytes = self.rpc_serializer.dumps(instruction)
-            arguments : bytes = self.rpc_serializer.dumps(arguments) 
+            if not isinstance(arguments, byte_types):
+                arguments : bytes = self.rpc_serializer.dumps(arguments) 
             context : bytes = self.rpc_serializer.dumps(context)
               
         return [
