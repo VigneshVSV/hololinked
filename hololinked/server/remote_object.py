@@ -533,7 +533,7 @@ class RemoteObject(RemoteSubobject):
         self._owner = None
         if self.expose:
             self._prepare_resources()
-        self._write_parameters_from_DB()
+        self.write_parameters_from_DB()
         self.logger.info("initialialised RemoteObject class {} with instance name {}".format(
             self.__class__.__name__, self.instance_name))  
         
@@ -596,7 +596,13 @@ class RemoteObject(RemoteSubobject):
                 "start fresh.")
 
 
-    def _write_parameters_from_DB(self):
+    def _prepare_state_machine(self):
+        if hasattr(self, 'state_machine'):
+            self.state_machine._prepare(self)
+            self.logger.debug("setup state machine")
+
+
+    def write_parameters_from_DB(self):
         if not hasattr(self, 'db_engine'):
             return
         self.db_engine.create_missing_db_parameters(self.__class__.parameters.db_init_objects)
@@ -608,20 +614,10 @@ class RemoteObject(RemoteSubobject):
                 self.logger.error(f"could not set attribute {db_param.name} due to error {E}")
 
 
-    def _prepare_state_machine(self):
-        if hasattr(self, 'state_machine'):
-            self.state_machine._prepare(self)
-            self.logger.debug("setup state machine")
-
-    @get('/parameters')
-    def _parameters(self):
-        return self.parameters.descriptors.keys()
-
-    @get('/parameters/values')
-    def _parameter_values(self, **kwargs) -> typing.Dict[str, typing.Any]:
-        """
-        returns requested parameter values in a dict
-        """
+    @remote_method(URL_path='/parameters', http_method=HTTP_METHODS.GET)
+    def _parameters(self, **kwargs) -> typing.Dict[str, typing.Any]:
+        if len(kwargs) == 0:
+            return self.parameters.descriptors.keys()
         data = {}
         if 'filter_by' in kwargs:
             names = kwargs['filter_by']
@@ -652,28 +648,6 @@ class RemoteObject(RemoteSubobject):
         raise BreakInnerLoop
 
  
-    @remote_method(URL_path='/test/speed', http_method=HTTP_METHODS.GET)    
-    def test_speed(self, value : typing.Any) -> typing.Any:
-        """
-        This method returns whatever is provided allowing speed test of different data types. 
-        The message sent is first serialized by the client, deserialized by the server and in return direction
-        again serialized by server and deserialized by the client. oneway speed is twice the measured value.  
-        """
-        return value
-             
-    # example of remote_method decorator
-    @remote_method(URL_path='/log', http_method=HTTP_METHODS.POST)
-    def log_to_console(self, data : typing.Any = None, level : str = 'DEBUG') -> None:
-        """
-        Log something to the console with specified log level
-        """
-        if level not in LOGLEVEL._member_map_.keys():
-            self.logger.error("log level {} invalid. logging with level INFO.".format(level))
-        if data is None:
-            self.logger.log(LOGLEVEL.__members__[level], "{} is alive.".format(self.instance_name))
-        else:
-            self.logger.log(LOGLEVEL.__members__[level], "{}".format(data))
-       
     def query(self, info : typing.Union[str, typing.List[str]]) -> typing.Any:
         raise NotImplementedError("arbitrary quering of {} currently not possible".format(self.__class__.__name__))
 

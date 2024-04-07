@@ -353,7 +353,7 @@ class ObjectProxy:
         """
         Get exposed resources from server (methods, parameters, events) and remember them as attributes of the proxy.
         """
-        fetch = _RemoteMethod(self._zmq_client, f'/{self.instance_name}{CommonInstructions.RPC_RESOURCES}', 
+        fetch = _RemoteMethod(self._zmq_client, f'/{self.instance_name}{CommonRPC.RPC_RESOURCES}', 
                                     self._invokation_timeout) # type: _RemoteMethod
         reply = fetch() # type: typing.Dict[str, typing.Dict[str, typing.Any]]
 

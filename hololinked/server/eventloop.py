@@ -6,9 +6,10 @@ import asyncio
 import importlib
 import typing 
 import threading
+import logging
 from uuid import uuid4
 
-from .constants import *
+from .constants import ResourceOperations, HTTP_METHODS
 from .config import *
 from .webserver_utils import format_exception_as_json
 from .remote_parameters import TypedDict
@@ -218,8 +219,6 @@ class EventLoop(RemoteObject):
         Please dont call this method when the async loop is already running. 
         """
         remote_object_executor_loop = self.get_async_loop()
-        if not self.threaded:
-            self.remote_object_executor_loop = remote_object_executor_loop
         self.logger.info(f"starting remote object executor loop in thread {threading.get_ident()} for {[obj.instance_name for obj in remote_objects]}")
         remote_object_executor_loop.run_until_complete(
             asyncio.gather(
