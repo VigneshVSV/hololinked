@@ -563,15 +563,17 @@ class RemoteObject(RemoteSubobject):
                                 context=context,
                                 protocol=ZMQ_PROTOCOLS.INPROC, 
                                 json_serializer=self.json_serializer,
-                                rpc_serializer=self.rpc_serializer
+                                rpc_serializer=self.rpc_serializer,
+                                log_level=self.logger.level
                             )
         self.json_serializer = self.message_broker.json_serializer
         self.rpc_serializer = self.message_broker.rpc_serializer
         self._rpc_server = RPCServer(instance_name=self.instance_name, server_type=self.__server_type__.value, 
                                     context=context, protocols=protocols, json_serializer=self.json_serializer, 
-                                    rpc_serializer=self.rpc_serializer, socket_address=tcp_socket_address) 
+                                    rpc_serializer=self.rpc_serializer, socket_address=tcp_socket_address,
+                                    log_level=self.logger.level) 
         self.event_publisher = EventPublisher(identity=self.instance_name, rpc_serializer=self.rpc_serializer,
-                                              json_serializer=self.json_serializer)
+                                              json_serializer=self.json_serializer, log_level=self.logger.level)
      
 
     def _prepare_DB(self, config_file : str = None):
