@@ -481,6 +481,7 @@ class BaseAsyncZMQServer(BaseZMQServer):
         """
         Inner method that handles handshake. scheduled by ``handshake()`` method, signature same as ``handshake()``.
         """
+        self.logger.info("sending handshake to client '{}'".format(original_client_message[CM_INDEX_ADDRESS]))
         await self.socket.send_multipart(self.craft_reply_from_arguments(original_client_message[CM_INDEX_ADDRESS], 
                 original_client_message[CM_INDEX_CLIENT_TYPE], HANDSHAKE, original_client_message[CM_INDEX_MESSAGE_ID],
                 EMPTY_BYTE))
@@ -1042,10 +1043,13 @@ class RPCServer(BaseZMQServer):
     
     async def _handshake(self, original_client_message: builtins.list[builtins.bytes],
                                     originating_socket : zmq.Socket) -> None:
+        self.logger.info("sending handshake to client '{}'".format(original_client_message[CM_INDEX_ADDRESS]))
         await originating_socket.send_multipart(self.craft_reply_from_arguments(
                 original_client_message[CM_INDEX_ADDRESS], 
                 original_client_message[CM_INDEX_CLIENT_TYPE], HANDSHAKE, original_client_message[CM_INDEX_MESSAGE_ID],
                 EMPTY_DICT))
+        self.logger.info("sent handshake to client '{}'".format(original_client_message[CM_INDEX_ADDRESS]))
+
 
     def exit(self):
         if not hasattr(self, 'logger'):

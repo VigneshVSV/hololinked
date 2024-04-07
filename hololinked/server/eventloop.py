@@ -176,7 +176,8 @@ class EventLoop(RemoteObject):
                 _remote_object_executor = threading.Thread(target=self.run_remote_object_executor, args=([remote_object],))
                 _remote_object_executor.start()
         self.run_external_message_listener()
-        self._remote_object_executor.join()
+        if not self.threaded:
+            _remote_object_executor.join()
 
 
     @classmethod

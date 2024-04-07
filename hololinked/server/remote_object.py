@@ -573,7 +573,7 @@ class RemoteObject(RemoteSubobject):
                                     rpc_serializer=self.rpc_serializer, socket_address=tcp_socket_address,
                                     log_level=self.logger.level) 
         self.event_publisher = EventPublisher(identity=self.instance_name, rpc_serializer=self.rpc_serializer,
-                                              json_serializer=self.json_serializer, log_level=self.logger.level)
+                                              json_serializer=self.json_serializer)
      
 
     def _prepare_DB(self, config_file : str = None):
