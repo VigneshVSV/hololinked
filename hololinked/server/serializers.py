@@ -94,7 +94,6 @@ class JSONSerializer(BaseSerializer):
     @classmethod
     def default(cls, obj) -> JSONSerializable:
         "method called if no serialization option was found."
-
         if hasattr(obj, 'json'):
             # alternative to type replacement
             return obj.json()

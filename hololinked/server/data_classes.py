@@ -363,12 +363,14 @@ class GUIResources(SerializableDataclass):
         self.classdoc = instance.__class__.__doc__.splitlines() if instance.__class__.__doc__ is not None else None
         self.GUI = instance.GUI
         self.events = instance.events
+        self.methods = dict()
+        self.parameters = dict()
     
         for instruction, remote_info in instance.instance_resources.items(): 
             if remote_info.iscallable:
                 self.methods[instruction] = instance.rpc_resources[instruction].json() 
                 self.methods[instruction]["remote_info"] = instance.httpserver_resources[instruction].json() 
-                self.methods[instruction]["remote_info"]["http_method"] = list(instance.httpserver_resources[instruction].json()["instructions"].supported_methods())[0]
+                self.methods[instruction]["remote_info"]["http_method"] = instance.httpserver_resources[instruction].instructions.supported_methods()
                 # to check - apparently the recursive json() calling does not reach inner depths of a dict, 
                 # therefore we call json ourselves
                 self.methods[instruction]["owner"] = instance.rpc_resources[instruction].qualname.split('.')[0]
@@ -378,10 +380,10 @@ class GUIResources(SerializableDataclass):
             elif remote_info.isparameter:
                 path_without_RW = instruction.rsplit('/', 1)[0]
                 if path_without_RW not in self.parameters:
-                    self.parameters[path_without_RW] = self.__class__.parameters.webgui_info(remote_info.obj)[remote_info.obj.name]
+                    self.parameters[path_without_RW] = instance.__class__.parameters.webgui_info(remote_info.obj)[remote_info.obj.name]
                     self.parameters[path_without_RW]["remote_info"] = self.parameters[path_without_RW]["remote_info"].json()
                     self.parameters[path_without_RW]["instruction"] = path_without_RW
-                    self.parameters[path_without_RW]["remote_info"]["http_method"] = list(self.httpserver_resources[path_without_RW].json()["instructions"].supported_methods())
+                    self.parameters[path_without_RW]["remote_info"]["http_method"] = instance.httpserver_resources[path_without_RW].instructions.supported_methods()
                     """
                     The instruction part has to be cleaned up to be called as fullpath. Setting the full path back into 
                     remote_info is not correct because the unbound method is used by multiple instances. 

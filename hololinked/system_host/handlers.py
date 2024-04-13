@@ -224,7 +224,6 @@ class WhoAmIHandler(SystemHostHandler):
             data = session.execute(stmt)
             data = data.scalars().all()
     
-    
             user = self.get_current_user() 
             with self.mem_session() as session:
                 session : Session 

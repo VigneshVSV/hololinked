@@ -173,6 +173,7 @@ class RemoteParameter(Parameter):
                 isparameter = True
             )
         self.metadata = metadata
+        self.observable = observable
         
     def _post_slot_set(self, slot : str, old : typing.Any, value : typing.Any) -> None:
         if slot == 'owner' and self.owner is not None:

@@ -27,6 +27,7 @@ See documentation of ``RPCServer`` for details.
     zmq_server
     rpc_server
     zmq_client
+    event
 
 
 

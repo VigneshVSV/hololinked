@@ -3,13 +3,12 @@ import logging
 from tornado.web import RequestHandler, StaticFileHandler, Application
 from tornado.iostream import StreamClosedError
 
-from .constants import CommonRPC, ServerMessageData
-from .serializers import JSONSerializer
-from .zmq_message_brokers import AsyncZMQClient, MessageMappedZMQClientPool
-from .events import EventConsumer
+from .constants import CommonRPC, ServerMessageData, ResourceTypes
 from .webserver_utils import *
 from .utils import current_datetime_ms_str
 from .data_classes import HTTPResource, ServerSentEvent
+from .serializers import JSONSerializer
+from .zmq_message_brokers import AsyncZMQClient, MessageMappedZMQClientPool, EventConsumer
 
 
 
@@ -24,6 +23,11 @@ class BaseHandler(RequestHandler):
     def initialize(self, resource : typing.Union[HTTPResource, ServerSentEvent], CORS : typing.List[str] = []) -> None:
         self.resource = resource
         self.CORS = CORS
+        self.zmq_client_pool : MessageMappedZMQClientPool
+        self.json_serializer : JSONSerializer
+        self.clients : str
+        self.logger : logging.Logger
+        self.application : Application
 
     def set_headers(self):
         raise NotImplementedError("implement set headers in child class to call it",
@@ -34,10 +38,6 @@ class BaseHandler(RequestHandler):
         merges all arguments to a single JSON body (for example, to provide it to 
         method execution as parameters)
         """
-        # try:
-        #     print(self.request.arguments)
-        #     arguments = self.json_serializer.loads(self.request.arguments)
-        # except JSONDecodeError:
         arguments = {}
         if len(self.request.query_arguments) >= 1:
             for key, value in self.request.query_arguments.items():
@@ -89,9 +89,9 @@ class RPCHandler(BaseHandler):
 
     async def options(self):
         self.set_status(204)
-        self.add_header("Access-Control-Allow-Origin", self.clients)
+        self.add_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Headers", "*")
-        self.set_header("Access-Control-Allow-Methods", ', '.join(self.resource.instructions.keys()))
+        self.set_header("Access-Control-Allow-Methods", ', '.join(self.resource.instructions.supported_methods()))
         self.finish()
     
 
@@ -103,14 +103,16 @@ class RPCHandler(BaseHandler):
                 arguments = self.prepare_arguments()
                 context = dict(fetch_execution_logs=arguments.pop('fetch_execution_logs', False))
                 timeout = arguments.pop('timeout', None)
+                if timeout is not None and timeout < 0:
+                    timeout = None
                 if self.resource.request_as_argument:
                     arguments['request'] = self.request
+                self.set_custom_default_headers()
                 reply = await self.zmq_client_pool.async_execute(self.resource.instance_name, 
                                         self.resource.instructions.__dict__[http_method], arguments,
-                                        context=context, raise_client_side_exception=True, 
+                                        context=context, raise_client_side_exception=False, 
                                         invokation_timeout=timeout, execution_timeout=None, 
                                         argument_schema=self.resource.argument_schema) # type: ignore
-                self.set_custom_default_headers()
                 # message mapped client pool currently strips the data part from return message
                 # and provides that as reply directly 
             except Exception as ex:
@@ -118,13 +120,13 @@ class RPCHandler(BaseHandler):
             if reply:
                 self.write(reply)
         else:
-            self.set_status(403, "not autheticated")    
+            self.set_status(403, "not authenticated")    
         
 
 
 class EventHandler(BaseHandler):
 
-    def initialize(self, resource : typing.Union[HTTPResource, ServerSentEvent]) -> None:
+    def initialize(self, resource : ServerSentEvent) -> None:
         self.resource = resource
 
     def set_headers(self) -> None:
@@ -146,8 +148,8 @@ class EventHandler(BaseHandler):
 
     async def handle_datastream(self) -> None:    
         try:                        
-            event_consumer = EventConsumer(self.request.path, self.resource.socket_address, 
-                            f"{self.resource.event_name}|HTTPEvent|{current_datetime_ms_str()}")
+            event_consumer = EventConsumer(self.resource.unique_identifier, self.resource.socket_address, 
+                            f"{self.resource.unique_identifier}|HTTPEvent|{current_datetime_ms_str()}")
             data_header = b'data: %s\n\n'
             while True:
                 try:
@@ -156,7 +158,7 @@ class EventHandler(BaseHandler):
                         # already JSON serialized 
                         self.write(data_header % data)
                         await self.flush()
-                        self.logger.debug(f"new data sent - {self.resource.event_name}")
+                        self.logger.debug(f"new data sent - {self.resource.name}")
                 except StreamClosedError:
                     break 
                 except Exception as ex:
@@ -247,8 +249,10 @@ class RemoteObjectsHandler(BaseHandler):
         
         handlers = []
         for route, http_resource in resources.items():
-            if http_resource["what"] != "EVENT":
+            if http_resource["what"] in [ResourceTypes.PARAMETER, ResourceTypes.CALLABLE] :
                 handlers.append((route, request_handler or self.request_handler, {'resource' : HTTPResource(**http_resource)}))
+            elif http_resource["what"] == ResourceTypes.EVENT:
+                handlers.append((route, EventHandler, { 'resource' : ServerSentEvent(**http_resource) }))
             """
             for handler based tornado rule matcher, the Rule object has following
             signature

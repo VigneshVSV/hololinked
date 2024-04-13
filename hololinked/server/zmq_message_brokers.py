@@ -1955,5 +1955,191 @@ class AsyncioEventPool:
 
 
 
+class EventPublisher(BaseZMQServer):
+
+    def __init__(self,  identity : str, context : typing.Union[zmq.Context, None] = None, **serializer) -> None:
+        super().__init__(server_type=ServerTypes.UNKNOWN_TYPE, **serializer)
+       
+        self.context = context or zmq.Context()
+        self.identity = identity
+        self.socket = self.context.socket(zmq.PUB)
+        for i in range(1000, 65535):
+            try:
+                self.socket_address = "tcp://127.0.0.1:{}".format(i)
+                self.socket.bind(self.socket_address)
+            except zmq.error.ZMQError as ex:
+                if ex.strerror.startswith('Address in use'):
+                    pass 
+                else:
+                    print("Following error while atttempting to bind to socket address : {}".format(self.socket_address))
+                    raise ex from None
+            else:
+                self.logger = self.get_logger(identity, "PUB", "TCP", logging.DEBUG)
+                self.logger.info("created event publishing socket at {}".format(self.socket_address))
+                break
+        self.events = set() # type: typing.Set[Event] 
+        self.event_ids = set() # type: typing.Set[bytes]
+
+    def register(self, event : "Event") -> None:
+        """
+        register event with a specific (unique) name
+
+        Parameters
+        ----------
+        event: ``Event``
+            ``Event`` object that needs to be registered. Events created at ``__init__()`` of RemoteObject are 
+            automatically registered. 
+        """
+        if event._unique_identifier in self.events and event not in self.events:
+            raise AttributeError(f"event {event.name} already found in list of events, please use another name.")
+        self.event_ids.add(event._unique_identifier)
+        self.events.add(event) 
+        self.logger.info("registered event '{}' serving at PUB socket with address : {}".format(event.name, self.socket_address))
+               
+    def publish(self, unique_identifier : bytes, data : typing.Any, *, rpc_clients : bool = True, 
+                        http_clients : bool = True, serialize : bool = True) -> None: 
+        """
+        publish an event with given unique name. 
+
+        Parameters
+        ----------
+        unique_identifier: bytes
+            unique identifier of the event
+        data: Any
+            payload of the event
+        serialize: bool, default True
+            serialize the payload before pushing, set to False when supplying raw bytes
+        rpc_clients: bool, default True
+            pushes event to RPC clients
+        http_clients: bool, default True
+            pushed event to HTTP clients
+        """
+        if unique_identifier in self.event_ids:
+            if serialize:
+                if isinstance(self.rpc_serializer , JSONSerializer):
+                    self.socket.send_multipart([unique_identifier, self.json_serializer.dumps(data)])
+                    return
+                if rpc_clients:
+                    self.socket.send_multipart([unique_identifier, self.rpc_serializer.dumps(data)])
+                if http_clients:
+                    self.socket.send_multipart([unique_identifier, self.json_serializer.dumps(data)])
+            else:
+                self.socket.send_multipart([unique_identifier, data])
+        else:
+            raise AttributeError("event name {} not yet registered with socket {}".format(unique_identifier, self.socket_address))
+        
+    def exit(self):
+        if not hasattr(self, 'logger'):
+            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
+        try:
+            self.socket.close(0)
+            self.logger.info("terminated event publishing socket with address '{}'".format(self.socket_address))
+        except Exception as E:
+            self.logger.warn("could not properly terminate context or attempted to terminate an already terminated context at address '{}'. Exception message : {}".format(
+                self.socket_address, str(E)))
+        try:
+            self.context.term()
+            self.logger.info("terminated context of event publishing socket with address '{}'".format(self.socket_address)) 
+        except Exception as E: 
+            self.logger.warn("could not properly terminate socket or attempted to terminate an already terminated socket of event publishing socket at address '{}'. Exception message : {}".format(
+                self.socket_address, str(E)))
+      
+
+class EventConsumer(BaseZMQClient):
+    """
+    Consumes events published at PUB sockets using SUB socket. 
+
+    Parameters
+    ----------
+    unique_identifier: str
+        identifier of the event registered at the PUB socket
+    socket_address: str
+        socket address of the event publisher (``EventPublisher``)
+    identity: str
+        unique identity for the consumer
+    client_type: bytes 
+        b'HTTP_SERVER' or b'PROXY'
+    **kwargs:
+        protocol: str 
+            TCP, IPC or INPROC
+        json_serializer: JSONSerializer
+            json serializer instance for HTTP_SERVER client type
+        rpc_serializer: BaseSerializer
+            serializer for RPC clients
+        server_instance_name: str
+            instance name of the remote object publishing the event
+    """
+
+    def __init__(self, unique_identifier : str, socket_address : str, identity : str, client_type = b'HTTP_SERVER', 
+                        **kwargs) -> None:
+        super().__init__(server_instance_name=kwargs.get('server_instance_name', None), 
+                    client_type=client_type, **kwargs)
+        self.unique_identifier = bytes(unique_identifier, encoding='utf-8')
+        self.identity = identity
+        self.socket_address = socket_address
+        self.context = kwargs.get('context', zmq.asyncio.Context())
+        self.socket = self.context.socket(zmq.SUB)
+        self.socket.connect(socket_address)
+        self.socket.setsockopt(zmq.SUBSCRIBE, self.unique_identifier)
+        self.logger = self.get_logger(identity, self.identity, "TCP", logging.DEBUG)
+        self.logger.info("connected event consuming socket to address {}".format(self.socket_address))
+        self.poller = zmq.asyncio.Poller()
+        self.poller.register(self.socket)
+    
+
+    async def receive(self, timeout : typing.Optional[float] = None, deserialize = True):
+        """
+        receive event with given timeout
+
+        Parameters
+        ----------
+        timeout: float, int, None
+            timeout in milliseconds, None for blocking
+        deserialize: bool, default True
+            deseriliaze the data, use False for HTTP server sent event to simply bypass
+        """
+        if timeout is not None:
+            if not isinstance(timeout, (float, int)) or timeout < 0.0:
+                raise ValueError("timeout must be float or int and greater than 0")
+            sockets = await self.poller.poll(timeout) 
+            for socket, _ in sockets:
+                try:
+                    _, contents = await socket.recv_multipart(zmq.NOBLOCK)
+                except zmq.Again:
+                    raise TimeoutError(f"timed out without a message for event {self.unique_identifier}") 
+        else:
+            _, contents = await self.socket.recv_multipart()
+        if not deserialize: 
+            return contents
+        if self.client_type == HTTP_SERVER:
+            return self.json_serializer.loads(contents)
+        elif self.client_type == PROXY:
+            return self.rpc_serializer.loads(contents)
+        else:
+            raise ValueError("invalid client type")
+
+        
+    def exit(self):
+        if not hasattr(self, 'logger'):
+            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
+        try:
+            self.poller.unregister(self.socket)
+            self.socket.close(0)
+            self.logger.info("terminated event consuming socket with address '{}'".format(self.socket_address))
+        except Exception as E:
+            self.logger.warn("could not properly terminate context or attempted to terminate an already terminated context at address '{}'. Exception message : {}".format(
+                self.socket_address, str(E)))
+        try:
+            self.context.term()
+            self.logger.info("terminated context of event consuming socket with address '{}'".format(self.socket_address)) 
+        except Exception as E: 
+            self.logger.warn("could not properly terminate socket or attempted to terminate an already terminated socket of event consuming socket at address '{}'. Exception message : {}".format(
+                self.socket_address, str(E)))
+            
+
+
+from .events import Event
+
+
 __all__ = ['AsyncZMQServer', 'AsyncPollingZMQServer', 'ZMQServerPool', 'RPCServer',
            'SyncZMQClient', 'AsyncZMQClient', 'MessageMappedZMQClientPool']

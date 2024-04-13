@@ -25,8 +25,8 @@ from .api_platform_utils import *
 from .remote_parameter import ReactApp, RemoteParameter, RemoteClassParameters
 from .remote_parameters import (Integer, String, ClassSelector, TypedDict, Boolean, 
                                 Selector, TypedKeyMappingsConstrainedDict )
-from .zmq_message_brokers import RPCServer, ServerTypes, AsyncPollingZMQServer
-from .events import EventPublisher, Event
+from .zmq_message_brokers import RPCServer, ServerTypes, AsyncPollingZMQServer, EventPublisher
+from .events import Event
 
 
 
@@ -377,13 +377,13 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
             # above assertion is only a typing convenience
             resource._owner = self
             resource._unique_identifier = bytes(f"{self._full_URL_path_prefix}{resource.URL_path}", encoding='utf-8')
-            resource.publisher = self._event_publisher                
+            resource.publisher = self._event_publisher
             httpserver_resources['{}{}'.format(
                         self._full_URL_path_prefix, resource.URL_path)] = ServerSentEvent(
                                                             # event URL_path has '/' prefix
                                                             what=ResourceTypes.EVENT,
                                                             name=resource.name,
-                                                            unique_identifier=resource._unique_identifier,
+                                                            unique_identifier=f"{self._full_URL_path_prefix}{resource.URL_path}",
                                                             socket_address=self._event_publisher.socket_address
                                                         )
         # Parameters
@@ -522,7 +522,8 @@ class RemoteObject(RemoteSubobject):
 
         self._prepare_logger(log_file=log_file, log_level=log_level, remote_access=logger_remote_access)
         if self.expose: 
-            self._prepare_message_brokers(protocols=server_protocols, tcp_socket_address=params.get('socket_address', None))
+            self._prepare_message_brokers(protocols=server_protocols, 
+                                tcp_socket_address=params.get('socket_address', None))
         self._prepare_DB(db_config_file)   
         self._prepare_state_machine()  
 
@@ -648,9 +649,6 @@ class RemoteObject(RemoteSubobject):
         raise BreakInnerLoop
 
  
-    def query(self, info : typing.Union[str, typing.List[str]]) -> typing.Any:
-        raise NotImplementedError("arbitrary quering of {} currently not possible".format(self.__class__.__name__))
-
     def run(self, expose_eventloop : bool = False):
         """
         quick-start ``RemoteObject`` server by creating a default eventloop. 
