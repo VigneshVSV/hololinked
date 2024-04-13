@@ -1,5 +1,4 @@
 # adapted from pyro - https://github.com/irmen/Pyro5 - see following license
-# currently not used correctly because its not integrated to the package 
 """
 MIT License
 
@@ -29,7 +28,7 @@ import typing
 import warnings
 
 from . import __version__
-from .serializers import JSONSerializer
+from .serializers import PythonBuiltinJSONSerializer
 
 
 class Configuration:
@@ -62,7 +61,8 @@ class Configuration:
     PWD_HASHER_MEMORY_COST - system view server password authentication memory cost. 
     Refer argon2-cffi docs.
 
-    USE_UVLOOP - signicantly faster event loop for Linux systems. default False. 
+    USE_UVLOOP - signicantly faster event loop for Linux systems. Reads data from network faster. 
+                default False. 
 
     Parameters
     ----------
@@ -111,7 +111,7 @@ class Configuration:
             warnings.warn("no environment file found although asked to load from one", UserWarning)
             return
         with open(file, "r") as file:
-            config = JSONSerializer.load(file) # type: typing.Dict
+            config = PythonBuiltinJSONSerializer.load(file) # type: typing.Dict
         for item, value in config.items():
             setattr(self, item, value)
 

@@ -185,7 +185,7 @@ class HTTPMethodInstructions(SerializableDataclass):
     def __post_init__(self):
         self.supported_methods()
 
-    def supported_methods(self):
+    def supported_methods(self): # can be a property
         try: 
             return self._supported_methods
         except: 
@@ -247,7 +247,7 @@ class HTTPResource(SerializableDataclass):
 class RPCResource(SerializableDataclass): 
     """
     Representation of resource used by RPC clients for mapping client method calls, parameter read/writes & events
-    to a server resource.
+    to a server resource. Used to dynamically populate the ``ObjectProxy``
 
     Attributes
     ----------
@@ -306,6 +306,8 @@ class ServerSentEvent(SerializableDataclass):
         address of the socket
     unique_identifier: str
         unique ZMQ identifier used in PUB-SUB model
+    what: str, default EVENT
+        is it a parameter, method or event?
     """
     name : str 
     unique_identifier : str

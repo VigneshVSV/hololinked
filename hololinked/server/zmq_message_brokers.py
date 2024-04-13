@@ -698,7 +698,7 @@ class AsyncPollingZMQServer(AsyncZMQServer):
             for socket, _ in sockets:
                 while True:
                     try:
-                        instruction = self.parse_client_message(await socket.recv_multipart(zmq.NOBLOCK), socket)
+                        instruction = self.parse_client_message(await socket.recv_multipart(zmq.NOBLOCK))
                     except zmq.Again:
                         break
                     else:
