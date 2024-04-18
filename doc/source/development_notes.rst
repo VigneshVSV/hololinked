@@ -10,23 +10,29 @@
 Development Notes
 =================
 
-In the interest of information to software engineers and web developers, the main difference of |module-highlighted| to a conventional 
-RPC or REST(-like) paradigm with HTTP is that, |module-highlighted| attempts to be a hybrid of both. For instrument control
-& data-acquisition, it is difficult to move away completely from RPC to REST. Besides, most instrument drivers/hardware 
-allow only a single persistent connection with a single process instead of multiple clients or processes. Further, when 
-such a process talks to an instrument, only one instruction can be sent at a time (in general), which needs to be completed before 
-the next instruction. On the other hand, HTTP Servers are multi-threaded or asyncio oriented by design and REST(-like) API 
-does not care how many simultaneous operations are run. To reconcile both, the following is proposed:
+|module-highlighted| is fundamentally a Object Oriented ZeroMQ RPC with control over which attributes, methods 
+and events are exposed on the network. Nevertheless, a non-trivial support for HTTP exists in an attempt to cast 
+atleast certain aspects of instrumentation control & data-acquisition for web development practices, without having to 
+explicitly implement a HTTP server. The following is possible with this package with significantly lesser code:  
 
-* |module-highlighted| gives the freedom to choose the HTTP request method & end-point URL desirable for each method, parameter and event
-* All HTTP requests will be queued and executed serially unless threaded or made async manually by the programmer
-* parameters can be used to model settings of instrumentation (both hardware and software-only), general class/instance attributes, 
-  hold captured & computed data.
-* events can be used to push measured data, create alerts/alarms, inform availability of certain type of data etc.
+* |module-highlighted| gives the freedom to choose the HTTP request method & end-point URL desirable for
+  each method, parameter and event
+* All HTTP requests will be queued and executed serially by the RPC server unless threaded or made async manually by 
+  the programmer
+* Verb like URLs may be used for methods (acts like HTTP-RPC although ZeroMQ mediates this) & noun-like URLs are 
+  may be used for parameters and events. 
+* web request handlers may be modified to change headers, authentication etc. or add additional 
+  endpoints which may cast all resources to REST-like while leaving the RPC details to the package.
+* Events pushed by the object will be automatically tunneled as HTTP server sent events.
+* JSON serialization-deserialization overheads while tunneling HTTP requests through the RPC server  
+  are controlloable and kept to a minimum. 
+
+One uses exposed object members as follows: 
+
+* parameters can be used to model settings of instrumentation (both hardware and software-only), 
+  general class/instance attributes, hold captured & computed data.
 * methods can be used to issue commands to instruments like start and stop acquisition, connect/disconnect etc.
-* Verb like URLs may be used for methods & noun-like URLs are suggested to be used for parameters and events.
-* Finally, freedom is given to modify web request handler to change headers, authentication etc. or add additional endpoints
-  which may cast all resources to REST(-like) while leaving the RPC/remote object execution details to the package.
+* events can be used to push measured data, create alerts/alarms, inform availability of certain type of data etc.
 
 HTTP request methods may be mapped as follows:
 
@@ -59,4 +65,5 @@ HTTP request methods may be mapped as follows:
      - not applicable
 
 Despite the above, an object proxy can also directly access the methods, parameters and events without the details of HTTP.
+
 

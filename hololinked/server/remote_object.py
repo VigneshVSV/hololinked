@@ -691,6 +691,7 @@ class RemoteAccessHandler(logging.Handler, RemoteSubobject):
         self.diff_logs = []
         self.maxlen = maxlen
         self._push_events = False
+        self._events_thread = None
     
     def get_maxlen(self):
         return self._maxlen 
@@ -708,17 +709,17 @@ class RemoteAccessHandler(logging.Handler, RemoteSubobject):
             fget=get_maxlen, fset=set_maxlen )
 
 
-    @post('/events/start/{type:str}')
-    def push_events(self, type : str, interval : float):
+    @remote_method(http_method=HTTP_METHODS.POST, URL_path='/events/start')
+    def push_events(self, type : str = 'threaded', interval : float = 1):
         self.emit_interval = interval # datetime.timedelta(seconds=interval)
         self._push_events = True 
         if type == 'asyncio':
             asyncio.get_event_loop().call_soon(lambda : asyncio.create_task(self.async_push_diff_logs()))
-        else:
+        elif self._events_thread is not None:
             self._events_thread = threading.Thread(target=self.push_diff_logs)
             self._events_thread.start()
 
-    @post('/events/stop')
+    @remote_method(http_method=HTTP_METHODS.POST, URL_path='/events/stop')
     def stop_events(self):
         self._push_events = False 
         if self._events_thread: # No need to cancel asyncio event separately 
@@ -775,36 +776,24 @@ class RemoteAccessHandler(logging.Handler, RemoteSubobject):
             self.diff_logs.clear()
             # self._last_time = datetime.datetime.now()
      
-    debug_logs = RemoteParameter(readonly=True, URL_path='/logs/debug')
-    @debug_logs.getter 
-    def get_debug_logs(self):
-        return self._debug_logs
+    debug_logs = RemoteParameter(readonly=True, URL_path='/logs/debug', fget=lambda self: self._debug_logs,
+                            doc="logs at logging.DEBUG level")
     
-    warn_logs = RemoteParameter(readonly=True, URL_path='/logs/warn')
-    @warn_logs.getter 
-    def get_warn_logs(self):
-        return self._warn_logs
+    warn_logs = RemoteParameter(readonly=True, URL_path='/logs/warn', fget=lambda self: self._warn_logs,
+                            doc="logs at logging.WARN level")
     
-    info_logs = RemoteParameter(readonly=True, URL_path='/logs/info')
-    @info_logs.getter 
-    def get_info_logs(self):
-        return self._info_logs
-    
-    error_logs = RemoteParameter(readonly=True, URL_path='/logs/error')
-    @error_logs.getter 
-    def get_error_logs(self):
-        return self._error_logs
-    
-    critical_logs = RemoteParameter(readonly=True, URL_path='/logs/critical')
-    @critical_logs.getter 
-    def get_critical_logs(self):
-        return self._critical_logs
-    
-    execution_logs = RemoteParameter(readonly=True, URL_path='/logs/execution')
-    @execution_logs.getter 
-    def get_execution_logs(self):
-        return self._execution_logs
-
+    info_logs = RemoteParameter(readonly=True, URL_path='/logs/info', fget=lambda self: self._info_logs,
+                            doc="logs at logging.INFO level")
+       
+    error_logs = RemoteParameter(readonly=True, URL_path='/logs/error', fget=lambda self: self._error_logs,
+                            doc="logs at logging.ERROR level")
+ 
+    critical_logs = RemoteParameter(readonly=True, URL_path='/logs/critical', fget=lambda self: self._critical_logs,
+                            doc="logs at logging.CRITICAL level")
+  
+    execution_logs = RemoteParameter(readonly=True, URL_path='/logs/execution', fget=lambda self: self._execution_logs,
+                            doc="logs at all levels accumulated in order of collection/execution")
+  
 
 
 __all__ = ['RemoteObject', 'StateMachine', 'ListHandler', 'RemoteAccessHandler']

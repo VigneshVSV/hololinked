@@ -43,7 +43,9 @@ Please follow the documentation for examples & tutorials, how-to's and API refer
 
 .. toctree::
    :maxdepth: 1
+   :hidden:
    :caption: Contents:
+   
 
    installation
    examples/index

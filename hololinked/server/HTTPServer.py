@@ -7,9 +7,6 @@ from tornado import ioloop
 from tornado.web import Application
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest 
-from tornado.httputil import HTTPServerRequest
-
-from hololinked.server.constants import HTTPServerTypes
 # from tornado_http2.server import Server as TornadoHTTP2Server 
 
 
@@ -18,10 +15,11 @@ from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector,
                     TypedList, String)
 from ..server.webserver_utils import get_IP_from_interface
 from .utils import get_default_logger, run_coro_sync
+from .constants import ResourceTypes, CommonRPC, ServerMessageData, HTTPServerTypes
+from .data_classes import HTTPResource, ServerSentEvent
 from .serializers import JSONSerializer
-from .zmq_message_brokers import MessageMappedZMQClientPool
+from .zmq_message_brokers import AsyncZMQClient, MessageMappedZMQClientPool
 from .handlers import RPCHandler, BaseHandler, EventHandler, RemoteObjectsHandler
-
 
 
 class HTTPServer(Parameterized):
@@ -64,13 +62,15 @@ class HTTPServer(Parameterized):
     event_handler = ClassSelector(default=EventHandler, class_=(EventHandler, BaseHandler), isinstance=False, 
                             doc="custom event handler of your choice for handling events") # type: typing.Union[BaseHandler, EventHandler]
     allowed_clients = TypedList(item_type=str,
-                            doc="short attribute for setting client in CORS, overload set_headers() to implement custom CORS")
+                            doc="serves request and sets CORS only from these clients, other clients are reject with 403")
 
     def __init__(self, remote_objects : typing.List[str], *, port : int = 8080, address : str = '0.0.0.0', 
                 host : str = None, logger : typing.Optional[logging.Logger] = None, log_level : int = logging.INFO, 
-                certfile : str = None, keyfile : str = None, serializer : JSONSerializer = None,  
+                certfile : str = None, keyfile : str = None, serializer : JSONSerializer = None,
+                allowed_clients : typing.Union[str, typing.Iterable[str]] = None,   
                 ssl_context : ssl.SSLContext = None, protocol_version : int = 1, 
-                network_interface : str = 'Ethernet', request_handler : RPCHandler = RPCHandler) -> None:
+                network_interface : str = 'Ethernet', request_handler : RPCHandler = RPCHandler, 
+                event_handler : typing.Union[BaseHandler, EventHandler] = EventHandler) -> None:
         super().__init__(
             remote_objects=remote_objects,
             port=port, 
@@ -84,7 +84,9 @@ class HTTPServer(Parameterized):
             keyfile=keyfile,
             ssl_context=ssl_context,
             network_interface=network_interface,
-            request_handler=request_handler
+            request_handler=request_handler,
+            event_handler=event_handler,
+            allowed_clients=allowed_clients
         )
         self._type = HTTPServerTypes.REMOTE_OBJECT_SERVER
         
@@ -104,15 +106,18 @@ class HTTPServer(Parameterized):
         
         self.zmq_client_pool = MessageMappedZMQClientPool(self.remote_objects, 
                                     self._IP, json_serializer=self.serializer)
-        BaseHandler.zmq_client_pool = self.zmq_client_pool
-        BaseHandler.json_serializer = self.serializer
-        BaseHandler.logger = self.logger
-        BaseHandler.clients = ', '.join(self.allowed_clients) if self.allowed_clients is not None else []
-        BaseHandler.application = self.app
+        # BaseHandler.zmq_client_pool = self.zmq_client_pool
+        # BaseHandler.json_serializer = self.serializer
+        # BaseHandler.logger = self.logger
+        # BaseHandler.clients = ', '.join(self.allowed_clients) if self.allowed_clients is not None else []
+        # BaseHandler.application = self.app
 
         event_loop = asyncio.get_event_loop()
-        event_loop.call_soon(lambda : asyncio.create_task(RemoteObjectsHandler.connect_to_remote_object(
-                    [client for client in self.zmq_client_pool], request_handler=self.request_handler)))
+        event_loop.call_soon(lambda : asyncio.create_task(update_router_with_remote_objects(
+                    application=self.app, zmq_client_pool=self.zmq_client_pool,  
+                    resources=dict(), request_handler=self.request_handler, event_handler=self.event_handler,
+                    json_serializer=self.serializer, logger=self.logger, 
+                    CORS= ', '.join(self.allowed_clients) if self.allowed_clients is not None else [] )))
         event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
         event_loop.call_soon(lambda : asyncio.create_task(self.zmq_client_pool.poll()) )
         
@@ -171,6 +176,67 @@ class HTTPServer(Parameterized):
         self.server.stop()
         run_coro_sync(self.server.close_all_connections())
         self.event_loop.close()    
+
+
+
+async def update_router_with_remote_objects(application : Application, zmq_client_pool : MessageMappedZMQClientPool, 
+                                resources : typing.Dict, request_handler : BaseHandler, event_handler : BaseHandler,
+                                json_serializer : JSONSerializer, logger : logging.Logger, CORS) -> None:
+    for client in zmq_client_pool:
+        await client.handshake_complete()
+        _, _, _, _, _, reply, _ = await client.async_execute(
+                    CommonRPC.http_resource_read(client.server_instance_name), 
+                    raise_client_side_exception=True)
+        resources.update(reply[ServerMessageData.RETURN_VALUE])
+        # _, _, _, _, _, reply = await client.read_attribute('/'+client.server_instance_name + '/object-info', raise_client_side_exception = True)
+        # remote_object_info.append(RemoteObjectDB.RemoteObjectInfo(**reply["returnValue"])) # Should raise an exception if returnValue key is not found for some reason. 
+    
+    handlers = []
+    for route, http_resource in resources.items():
+        if http_resource["what"] in [ResourceTypes.PARAMETER, ResourceTypes.CALLABLE] :
+            handlers.append((route, request_handler, {
+                                                    'resource' : HTTPResource(**http_resource), 
+                                                    'zmq_client_pool' : zmq_client_pool, 
+                                                    'json_serializer' : json_serializer,
+                                                    'logger' : logger,
+                                                    'CORS' : CORS                                                      
+                                                }))
+        elif http_resource["what"] == ResourceTypes.EVENT:
+            handlers.append((route, event_handler, { 'resource' : ServerSentEvent(**http_resource),
+                                                    'json_serializer' : json_serializer,
+                                                    'logger' : logger,
+                                                    'CORS' : CORS          
+                                                     }))
+        """
+        for handler based tornado rule matcher, the Rule object has following
+        signature
+        
+        def __init__(
+            self,
+            matcher: "Matcher",
+            target: Any,
+            target_kwargs: Optional[Dict[str, Any]] = None,
+            name: Optional[str] = None,
+        ) -> None:
+
+        matcher - based on route
+        target - handler
+        target_kwargs - given to handler's initialize
+        name - ...
+
+        len == 2 tuple is route + handler
+        len == 3 tuple is route + handler + target kwargs
+    
+        so we give (path, RPCHandler, {'resource' : HTTPResource})
+        
+        path is extracted from remote_method(URL_path='....')
+        RPCHandler is the base handler of this package for RPC purposes
+        resource goes into target kwargs as the HTTPResource generated by 
+            remote_method and RemoteParamater contains all the info given 
+            to make RPCHandler work
+        """
+    application.wildcard_router.add_rules(handlers)
+
 
 
 

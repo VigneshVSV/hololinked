@@ -2045,7 +2045,7 @@ class EventPublisher(BaseZMQServer):
                 self.socket_address, str(E)))
       
 
-class EventConsumer(BaseZMQClient):
+class AsyncEventConsumer(BaseZMQClient):
     """
     Consumes events published at PUB sockets using SUB socket. 
 
@@ -2078,13 +2078,13 @@ class EventConsumer(BaseZMQClient):
         self.identity = identity
         self.socket_address = socket_address
         self.context = kwargs.get('context', zmq.asyncio.Context())
+        self.poller = zmq.asyncio.Poller()
         self.socket = self.context.socket(zmq.SUB)
         self.socket.connect(socket_address)
         self.socket.setsockopt(zmq.SUBSCRIBE, self.unique_identifier)
+        self.poller.register(self.socket)
         self.logger = self.get_logger(identity, self.identity, "TCP", logging.DEBUG)
         self.logger.info("connected event consuming socket to address {}".format(self.socket_address))
-        self.poller = zmq.asyncio.Poller()
-        self.poller.register(self.socket)
     
 
     async def receive(self, timeout : typing.Optional[float] = None, deserialize = True):
@@ -2138,8 +2138,17 @@ class EventConsumer(BaseZMQClient):
             
 
 
+class EventConsumer():
+
+    def __init__(self, **kwargs):
+        self.context = kwargs.get('context', zmq.Context())
+        self.poller = zmq.Poller()
+        
+
+
+
 from .events import Event
 
 
-__all__ = ['AsyncZMQServer', 'AsyncPollingZMQServer', 'ZMQServerPool', 'RPCServer',
-           'SyncZMQClient', 'AsyncZMQClient', 'MessageMappedZMQClientPool']
+__all__ = ['AsyncZMQServer', 'AsyncPollingZMQServer', 'ZMQServerPool', 'RPCServer', 'SyncZMQClient', 
+        'AsyncZMQClient', 'MessageMappedZMQClientPool', 'AsyncEventConsumer', 'EventConsumer']
