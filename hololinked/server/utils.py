@@ -33,7 +33,7 @@ def pep8_to_dashed_URL(word : str) -> str:
         >>> pep8_to_dashed_URL("device_type")
         'device-type'
     """
-    return re.sub(r'_+', '-', word)
+    return re.sub(r'_+', '-', word.lstrip('_').rstrip('_'))
 
 
 def get_default_logger(name : str, log_level : int = logging.INFO, log_file = None,

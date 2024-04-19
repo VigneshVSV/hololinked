@@ -16,6 +16,11 @@ class StateMachineError(Exception):
     """
     pass 
 
+class DatabaseError(Exception):
+    """
+    raise to show database related errors
+    """
+
 
 
 __all__ = ['BreakInnerLoop', 'BreakAllLoops', 'StateMachineError']

@@ -254,8 +254,8 @@ class BaseZMQServer(BaseZMQ):
     """
     def __init__(self, server_type : Enum, json_serializer : typing.Union[None, JSONSerializer] = None, 
                 rpc_serializer : typing.Union[str, BaseSerializer, None] = None) -> None:
-        if json_serializer is None or isinstance(json_serializer, JSONSerializer):
-            self.json_serializer = json_serializer or JSONSerializer()
+        if json_serializer in [None, 'json'] or isinstance(json_serializer, JSONSerializer):
+            self.json_serializer = json_serializer if isinstance(json_serializer, JSONSerializer) else JSONSerializer()
         else:
             raise ValueError("invalid JSON serializer option for {}. Given option : {}".format(self.__class__, json_serializer))
         if isinstance(rpc_serializer, BaseSerializer):
@@ -1102,8 +1102,8 @@ class BaseZMQClient(BaseZMQ):
         self.json_serializer = None
         if client_type == HTTP_SERVER:
             json_serializer = kwargs.get("json_serializer", None)
-            if json_serializer is None or isinstance(json_serializer, JSONSerializer):
-                self.json_serializer = json_serializer or JSONSerializer()
+            if json_serializer in [None, 'json'] or isinstance(json_serializer, JSONSerializer):
+                self.json_serializer = json_serializer if isinstance(json_serializer, JSONSerializer) else JSONSerializer()
             else:
                 raise ValueError("Invalid JSON serializer option for {}. Given option {}.".format(self.__class__, 
                                                                                             json_serializer))
@@ -1288,7 +1288,6 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         self.protocol = protocol
         self._terminate_context = context == None
         if handshake:
-            print("starting handshake")
             self.handshake()
     
     def send_instruction(self, instruction : str, arguments : typing.Dict[str, typing.Any] = EMPTY_DICT, 

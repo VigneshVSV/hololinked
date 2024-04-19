@@ -14,6 +14,7 @@ from enum import EnumMeta, Enum, StrEnum
 from ..param.parameterized import Parameterized, ParameterizedMetaclass 
 from .constants import (CallableType, LOGLEVEL, ZMQ_PROTOCOLS, HTTP_METHODS, ResourceOperations, ResourceTypes)
 from .database import RemoteObjectDB, RemoteObjectInformation
+from .stubs import ReactApp
 from .serializers import *
 from .exceptions import BreakInnerLoop
 from .decorators import remote_method
@@ -22,7 +23,7 @@ from .data_classes import (GUIResources, RemoteResource, HTTPResource, RPCResour
                         ServerSentEvent)
 from .utils import get_default_logger
 from .api_platform_utils import *
-from .remote_parameter import ReactApp, RemoteParameter, RemoteClassParameters
+from .remote_parameter import RemoteParameter, RemoteClassParameters
 from .remote_parameters import (Integer, String, ClassSelector, TypedDict, Boolean, 
                                 Selector, TypedKeyMappingsConstrainedDict )
 from .zmq_message_brokers import RPCServer, ServerTypes, AsyncPollingZMQServer, EventPublisher
@@ -280,7 +281,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
                         doc="GUI specified here will become visible at GUI tab of hololinked-portal dashboard tool") # type: typing.Optional[ReactApp]
     
 
-    def __new__(cls, **kwargs):
+    def __new__(cls, *args, **kwargs):
         # defines some internal fixed attributes
         obj = super().__new__(cls)
         # objects created by us that require no validation but cannot be modified are called _internal_fixed_attributes
@@ -505,26 +506,27 @@ class RemoteObject(RemoteSubobject):
                                 allow_None=True, default='msgpack', remote=False,
                                 doc="""Serializer used for exchanging messages with RPC clients. Subclass to implement
                                     your own serialization requirements.""") # type: BaseSerializer
-    json_serializer  = ClassSelector(class_=JSONSerializer, default=None, allow_None=True, remote=False,
+    json_serializer = ClassSelector(class_=(JSONSerializer, str), default=None, allow_None=True, remote=False,
                                 doc = """Serializer used for exchanging messages with a HTTP server,
                                 subclass JSONSerializer to implement your own serialization requirements.""") # type: JSONSerializer
  
     
-    def __init__(self, instance_name : str, logger : typing.Optional[logging.Logger] = None, log_level : typing.Optional[int] = None, 
-                log_file : typing.Optional[str] = None, logger_remote_access : bool = True, 
-                rpc_serializer : typing.Optional[BaseSerializer] = 'msgpack', json_serializer : typing.Optional[JSONSerializer] = None,
+    def __init__(self, *, instance_name : str, logger : typing.Optional[logging.Logger] = None, 
+                rpc_serializer : typing.Optional[BaseSerializer] = 'json', 
+                json_serializer : typing.Optional[JSONSerializer] = 'json',
                 server_protocols : typing.Optional[typing.Union[typing.List[ZMQ_PROTOCOLS], 
                         typing.Tuple[ZMQ_PROTOCOLS], ZMQ_PROTOCOLS]] = [ZMQ_PROTOCOLS.IPC, ZMQ_PROTOCOLS.TCP, ZMQ_PROTOCOLS.INPROC], 
-                db_config_file : typing.Optional[str] = None, **params) -> None:
+                **params) -> None:
         
         super().__init__(instance_name=instance_name, logger=logger, rpc_serializer=rpc_serializer, 
                         json_serializer=json_serializer, **params)
 
-        self._prepare_logger(log_file=log_file, log_level=log_level, remote_access=logger_remote_access)
+        self._prepare_logger(log_file=params.get('log_file', None), log_level=params.get('log_level', None), 
+                            remote_access=params.get('logger_remote_access', True))
         if self.expose: 
             self._prepare_message_brokers(protocols=server_protocols, 
                                 tcp_socket_address=params.get('socket_address', None))
-        self._prepare_DB(db_config_file)   
+        self._prepare_DB(params.get('use_default_db', False), params.get('db_config_file', None))   
         self._prepare_state_machine()  
 
     
@@ -577,13 +579,13 @@ class RemoteObject(RemoteSubobject):
                                               json_serializer=self.json_serializer)
      
 
-    def _prepare_DB(self, config_file : str = None):
-        if not config_file:
+    def _prepare_DB(self, default_db : bool = False, config_file : str = None):
+        if not default_db and not config_file: 
             self._object_info = self._create_object_info()
             return 
         # 1. create engine 
-        self.db_engine : RemoteObjectDB = RemoteObjectDB(instance=self,
-                                        config_file=config_file)
+        self.db_engine = RemoteObjectDB(instance=self, config_file=None if default_db else config_file, 
+                                    serializer=self.rpc_serializer) # type: RemoteObjectDB 
         # 2. create an object metadata to be used by different types of clients
         object_info = self.db_engine.fetch_own_info()
         if object_info is None:
@@ -606,11 +608,13 @@ class RemoteObject(RemoteSubobject):
     def write_parameters_from_DB(self):
         if not hasattr(self, 'db_engine'):
             return
-        self.db_engine.create_missing_db_parameters(self.__class__.parameters.db_init_objects)
+        missing_parameters = self.db_engine.create_missing_parameters(self.__class__.parameters.db_init_objects,
+                                                                    get_missing_parameters=True)
         # 4. read db_init and db_persist objects
-        for db_param in self.db_engine.read_all_parameters():
+        for db_param in self.db_engine.get_all_parameters():
             try:
-                setattr(self, db_param.name, db_param.value) # type: ignore
+                if db_param.name not in missing_parameters:
+                    setattr(self, db_param.name, db_param.value) # type: ignore
             except Exception as E:
                 self.logger.error(f"could not set attribute {db_param.name} due to error {E}")
 

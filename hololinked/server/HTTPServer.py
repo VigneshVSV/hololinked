@@ -18,7 +18,7 @@ from .utils import get_default_logger, run_coro_sync
 from .constants import ResourceTypes, CommonRPC, ServerMessageData, HTTPServerTypes
 from .data_classes import HTTPResource, ServerSentEvent
 from .serializers import JSONSerializer
-from .zmq_message_brokers import AsyncZMQClient, MessageMappedZMQClientPool
+from .zmq_message_brokers import MessageMappedZMQClientPool
 from .handlers import RPCHandler, BaseHandler, EventHandler, RemoteObjectsHandler
 
 
@@ -99,25 +99,21 @@ class HTTPServer(Parameterized):
                                             f"{self.address}:{self.port}"), 
                                             self.log_level)
             
-        self.handlers = [
-            (r'/remote-objects', RemoteObjectsHandler, {'request_handler' : self.request_handler})
-        ]
-        self.app = Application(handlers=self.handlers)
+        self.app = Application(handlers=[
+            (r'/remote-objects', RemoteObjectsHandler, dict(request_handler=self.request_handler))
+        ])
         
         self.zmq_client_pool = MessageMappedZMQClientPool(self.remote_objects, 
                                     self._IP, json_serializer=self.serializer)
-        # BaseHandler.zmq_client_pool = self.zmq_client_pool
-        # BaseHandler.json_serializer = self.serializer
-        # BaseHandler.logger = self.logger
-        # BaseHandler.clients = ', '.join(self.allowed_clients) if self.allowed_clients is not None else []
-        # BaseHandler.application = self.app
-
+    
         event_loop = asyncio.get_event_loop()
-        event_loop.call_soon(lambda : asyncio.create_task(update_router_with_remote_objects(
+        event_loop.call_soon(lambda : asyncio.create_task(
+                            update_router_with_remote_objects(
                     application=self.app, zmq_client_pool=self.zmq_client_pool,  
-                    resources=dict(), request_handler=self.request_handler, event_handler=self.event_handler,
+                    request_handler=self.request_handler, event_handler=self.event_handler,
                     json_serializer=self.serializer, logger=self.logger, 
-                    CORS= ', '.join(self.allowed_clients) if self.allowed_clients is not None else [] )))
+                    allowed_clients= ', '.join(self.allowed_clients) if self.allowed_clients is not None else []
+                )))
         event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
         event_loop.call_soon(lambda : asyncio.create_task(self.zmq_client_pool.poll()) )
         
@@ -165,8 +161,7 @@ class HTTPServer(Parameterized):
 
 
     def listen(self) -> None:
-        assert self.all_ok, 'HTTPServer all is not ok before starting' 
-        # Will always be True or cause some other exception   
+        assert self.all_ok, 'HTTPServer all is not ok before starting' # Will always be True or cause some other exception   
         self.event_loop = ioloop.IOLoop.current()
         self.server.listen(port=self.port, address=self.address)    
         self.logger.info(f'started webserver at {self._IP}, ready to receive requests.')
@@ -180,33 +175,54 @@ class HTTPServer(Parameterized):
 
 
 async def update_router_with_remote_objects(application : Application, zmq_client_pool : MessageMappedZMQClientPool, 
-                                resources : typing.Dict, request_handler : BaseHandler, event_handler : BaseHandler,
-                                json_serializer : JSONSerializer, logger : logging.Logger, CORS) -> None:
+                                request_handler : BaseHandler, event_handler : BaseHandler, json_serializer : JSONSerializer, 
+                                logger : logging.Logger, allowed_clients : typing.List[str] = None) -> None:
+    """
+    updates HTTP router with paths from newly instantiated ``RemoteObject`` 
+    
+    Parameters
+    ----------
+    application: tornado.web.Application
+        the application/router of the HTTP server 
+    zmq_client_pool: MessageMappedZMQClientPool
+        associated client pool where the instantiated ``RemoteObject`` client exists or has been created
+    request_handler: RPCHandler
+        web request handler for method execution and parameter read-write
+    event_handler: EventHandler
+        event handler listening to ZMQ events
+    json_serializer: JSONSerializer
+        JSON serializer
+    logger: logging.Logger
+        logger
+    allowed_clients: List[str] | None
+        list of allowed clients that can access the HTTP server
+    """
+    resources = dict()
+
     for client in zmq_client_pool:
         await client.handshake_complete()
         _, _, _, _, _, reply, _ = await client.async_execute(
                     CommonRPC.http_resource_read(client.server_instance_name), 
                     raise_client_side_exception=True)
         resources.update(reply[ServerMessageData.RETURN_VALUE])
-        # _, _, _, _, _, reply = await client.read_attribute('/'+client.server_instance_name + '/object-info', raise_client_side_exception = True)
-        # remote_object_info.append(RemoteObjectDB.RemoteObjectInfo(**reply["returnValue"])) # Should raise an exception if returnValue key is not found for some reason. 
-    
+     
     handlers = []
     for route, http_resource in resources.items():
         if http_resource["what"] in [ResourceTypes.PARAMETER, ResourceTypes.CALLABLE] :
-            handlers.append((route, request_handler, {
-                                                    'resource' : HTTPResource(**http_resource), 
-                                                    'zmq_client_pool' : zmq_client_pool, 
-                                                    'json_serializer' : json_serializer,
-                                                    'logger' : logger,
-                                                    'CORS' : CORS                                                      
-                                                }))
+            handlers.append((route, request_handler, dict(
+                                                    resource=HTTPResource(**http_resource), 
+                                                    zmq_client_pool=zmq_client_pool, 
+                                                    json_serializer=json_serializer,
+                                                    logger=logger,
+                                                    allowed_clients=allowed_clients                                                     
+                                                )))
         elif http_resource["what"] == ResourceTypes.EVENT:
-            handlers.append((route, event_handler, { 'resource' : ServerSentEvent(**http_resource),
-                                                    'json_serializer' : json_serializer,
-                                                    'logger' : logger,
-                                                    'CORS' : CORS          
-                                                     }))
+            handlers.append((route, event_handler, dict(
+                                                    resource=ServerSentEvent(**http_resource),
+                                                    json_serializer=json_serializer,
+                                                    logger=logger,
+                                                    allowed_clients=allowed_clients          
+                                                )))
         """
         for handler based tornado rule matcher, the Rule object has following
         signature

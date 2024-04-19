@@ -70,8 +70,8 @@ class EventLoop(RemoteObject):
         return obj
 
     def __init__(self, *, instance_name : str, 
-                remote_objects : typing.Union[RemoteObject, Consumer, typing.List[typing.Union[RemoteObject, Consumer]]] = list(), # type: ignore - requires covariant types
-                log_level : int = logging.INFO, **kwargs) -> None:
+            remote_objects : typing.Union[RemoteObject, Consumer, typing.List[typing.Union[RemoteObject, Consumer]]] = list(), # type: ignore - requires covariant types
+            log_level : int = logging.INFO, **kwargs) -> None:
         super().__init__(instance_name=instance_name, remote_objects=remote_objects, log_level=log_level, **kwargs)
         remote_objects : typing.List[RemoteObject] = [self]
         if self.remote_objects is not None:

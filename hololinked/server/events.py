@@ -1,12 +1,8 @@
 import typing 
-import zmq 
-import logging 
-from uuid import uuid4 
+import threading 
 
 from ..param import Parameterized
-from .zmq_message_brokers import BaseZMQServer, EventPublisher
-from .constants import ServerTypes
-from .utils import get_default_logger
+from .zmq_message_brokers import EventPublisher
 
 
 class Event:
@@ -38,8 +34,7 @@ class Event:
         else:
             raise AttributeError("cannot reassign publisher attribute of event {}".format(self.name)) 
 
-    def push(self, data : typing.Any = None, *, rpc_clients : bool = True, http_clients : bool = True, 
-                serialize : bool = True) -> None:
+    def push(self, data : typing.Any = None, *, serialize : bool = True, **kwargs) -> None:
         """
         publish the event. 
 
@@ -54,20 +49,28 @@ class Event:
         http_clients: bool, default True
             pushed event to HTTP clients
         """
-        self.publisher.publish(self._unique_identifier, data, rpc_clients=rpc_clients, http_clients=http_clients,
-                                serialize=serialize)
+        self.publisher.publish(self._unique_identifier, data, rpc_clients=kwargs.get('rpc_clients', True), 
+                                    http_clients=kwargs.get('http_clients', True), serialize=serialize)
 
 
 class CriticalEvent(Event):
+    """
+    Push events to client and get acknowledgement for that
+    """
 
-    def __init__(self, name : str, message_broker : BaseZMQServer, timeout : float = 3, 
-                incoming_data_schema : typing.Any = None, URL_path : typing.Optional[str] = None) -> None:
+    def __init__(self, name : str, URL_path : typing.Optional[str] = None) -> None:
         super().__init__(name, URL_path)
-        self.message_broker = message_broker
-        self.timeout = timeout
-        self.incoming_data_schema = incoming_data_schema
+        self._synchronize_event = threading.Event()
 
-    def push(self, data : typing.Any = None):
-        super().push(data)
-        self.message_broker.receive_acknowledgement()
+    def receive_acknowledgement(self, timeout : typing.Union[float, int, None]) -> bool:
+        """
+        Receive acknowlegement for event receive. When the timeout argument is present and not None, 
+        it should be a floating point number specifying a timeout for the operation in seconds (or fractions thereof).
+        """
+        return self._synchronize_event.wait(timeout=timeout)
 
+    def _set_acknowledgement(self):
+        """
+        Method to be called by RPC server when an acknowledgement is received. Not for user to be set.
+        """
+        self._synchronize_event.set()

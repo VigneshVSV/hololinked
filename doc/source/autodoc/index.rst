@@ -14,7 +14,7 @@ API Reference
     :maxdepth: 1
 
     server/remote_object
-    server/http_server
+    server/http_server/index
     server/remote_parameter/index
     server/decorators
     server/eventloop

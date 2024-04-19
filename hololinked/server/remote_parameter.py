@@ -1,19 +1,9 @@
 import typing
 from enum import Enum
 
-from ..param.parameterized import Parameter, Parameterized, ClassParameters
+from ..param.parameterized import Parameter, ClassParameters
 from .decorators import RemoteResourceInfoValidator
 from .constants import USE_OBJECT_NAME, HTTP_METHODS
-
-
-__default_parameter_write_method__ = HTTP_METHODS.PUT 
-
-__parameter_info__ = [
-                'allow_None' , 'class_member', 'constant', 'db_init', 'db_persist', 
-                'db_commit', 'deepcopy_default', 'per_instance_descriptor', 
-                'default', 'doc', 'metadata', 'name', 'readonly'
-                # 'scada_info', 'parameter_type' # descriptor related info is also necessary
-            ]
 
 
 
@@ -167,10 +157,10 @@ class RemoteParameter(Parameter):
         self._remote_info = None
         if remote:
             self._remote_info = RemoteResourceInfoValidator(
-                http_method = http_method,
-                URL_path    = URL_path,
-                state       = state,
-                isparameter = True
+                http_method=http_method,
+                URL_path=URL_path,
+                state=state,
+                isparameter=True
             )
         self.metadata = metadata
         self.observable = observable
@@ -186,40 +176,34 @@ class RemoteParameter(Parameter):
             # 2) name and then 3) owner
         super()._post_slot_set(slot, old, value)
 
-    def _post_value_set(self, obj : Parameterized, value : typing.Any) -> None:
+    def _post_value_set(self, obj, value : typing.Any) -> None:
         if (self.db_persist or self.db_commit) and hasattr(obj, 'db_engine'):
-            obj.db_engine.edit_parameter(self, value)
+            from .remote_object import RemoteObject
+            assert isinstance(obj, RemoteObject), f"database parameter {self.name} bound to a non RemoteObject, currently not supported"
+            obj.db_engine.set_parameter(self, value)
         return super()._post_value_set(obj, value)
 
-    def query(self, info : typing.Union[str, typing.List[str]]) -> typing.Any:
-        if info == 'info':
-            state = self.__getstate__()
-            overloads = state.pop('overloads')
-            state["overloads"] = {"custom fset" : repr(overloads["fset"]) , "custom fget" : repr(overloads["fget"])}
-            owner_cls = state.pop('owner')
-            state["owner"] = repr(owner_cls)
-            return state
-        elif info in self.__slots__ or info in self.__parent_slots__:
-            if info == 'overloads':
-                overloads = getattr(self, info)
-                return {"custom fset" : repr(overloads["fset"]) , "custom fget" : repr(overloads["fget"])}
-            elif info == 'owner':
-               return repr(getattr(self, info))
-            else:
-                return getattr(self, info)
-        elif isinstance(info, list):
-            requested_info = {}
-            for info_ in info: 
-                if not isinstance(info_, str):
-                    raise AttributeError("Invalid format for information : {} found in list of requested information. Only string is allowed".format(type(info_)))
-                requested_info[info_] = getattr(self, info_)
-            return requested_info
-        else:
-            raise AttributeError("requested information {} not found in parameter {}".format(info, self.name))
+    
 
+
+__parameter_info__ = [
+                'allow_None' , 'class_member', 'db_init', 'db_persist', 
+                'db_commit', 'deepcopy_default', 'per_instance_descriptor', 
+                'default', 'doc', 'constant', 
+                'metadata', 'name', 'readonly'
+                # 'scada_info', 'parameter_type' # descriptor related info is also necessary
+            ]
 
    
 class RemoteClassParameters(ClassParameters):
+    """
+    Object that holds the namespace and implementation of Parameterized
+    methods as well as any state that is not in __slots__ or the
+    Parameters themselves.
+
+    Exists at metaclass level (instantiated by the metaclass). Contains state specific to the
+    class.
+    """
 
     @property
     def db_persisting_objects(self):
@@ -294,21 +278,5 @@ class RemoteClassParameters(ClassParameters):
         return getattr(self.owner_cls, f'_{self.owner_cls.__name__}_visualization_params')
 
 
-
-
-class batch_db_commit:
-
-    def __enter__(self):
-        pass 
-        
-    def __exit__(self):
-        pass 
-
-
   
-class ReactApp: 
-    pass 
-
-
-
 __all__ = ['RemoteParameter']
