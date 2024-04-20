@@ -13,26 +13,26 @@ Development Notes
 |module-highlighted| is fundamentally a Object Oriented ZeroMQ RPC with control over which attributes, methods 
 and events are exposed on the network. Nevertheless, a non-trivial support for HTTP exists in an attempt to cast 
 atleast certain aspects of instrumentation control & data-acquisition for web development practices, without having to 
-explicitly implement a HTTP server. The following is possible with this package with significantly lesser code:  
+explicitly implement a HTTP server. The following is possible with significantly lesser code:  
 
 * |module-highlighted| gives the freedom to choose the HTTP request method & end-point URL desirable for
-  each method, parameter and event
-* All HTTP requests will be queued and executed serially by the RPC server unless threaded or made async manually by 
-  the programmer
-* Verb like URLs may be used for methods (acts like HTTP-RPC although ZeroMQ mediates this) & noun-like URLs are 
-  may be used for parameters and events. 
-* web request handlers may be modified to change headers, authentication etc. or add additional 
-  endpoints which may cast all resources to REST-like while leaving the RPC details to the package.
-* Events pushed by the object will be automatically tunneled as HTTP server sent events.
+  each method, parameter/attribute and event
+* All HTTP requests will be automatically queued and executed serially by the RPC server unless threaded or 
+  made async by the developer
 * JSON serialization-deserialization overheads while tunneling HTTP requests through the RPC server  
-  are controlloable and kept to a minimum. 
+  are reduced to a minimum. 
+* web request handlers may be modified to change headers, authentication etc. or add additional 
+  endpoints which may cast resources to REST-like while leaving the RPC details to the package
+* Events pushed by the object will be automatically tunneled as HTTP server sent events
 
 One uses exposed object members as follows: 
 
 * parameters can be used to model settings of instrumentation (both hardware and software-only), 
-  general class/instance attributes, hold captured & computed data.
+  general class/instance attributes, hold captured & computed data
 * methods can be used to issue commands to instruments like start and stop acquisition, connect/disconnect etc.
 * events can be used to push measured data, create alerts/alarms, inform availability of certain type of data etc.
+* Verb like URLs may be used for methods (acts like HTTP-RPC although ZeroMQ mediates this) & noun-like URLs are 
+  may be used for parameters and events. 
 
 HTTP request methods may be mapped as follows:
 
@@ -44,7 +44,7 @@ HTTP request methods may be mapped as follows:
      - remote method 
      - event  
    * - GET
-     - read parameter value |br| (read a setting's value, fetch measured data - for example, measured physical quantities)
+     - read parameter value |br| (read a setting's value, fetch measured data, physical quantities)
      - run method which gives a return value with useful data |br| (which may be difficult or illogical as a ``parameter``)
      - stream measured data immediately when available instead of fetching every time 
    * - POST 
@@ -64,6 +64,33 @@ HTTP request methods may be mapped as follows:
      - change partial value of a resource which is difficult to factor into a parameter or change settings of a parameter with custom logic 
      - not applicable
 
-Despite the above, an object proxy can also directly access the methods, parameters and events without the details of HTTP.
+
+Considering an example device like a spectrometer, the table above may dictate the following:
+
+.. list-table:: 
+   :header-rows: 1
+
+   * - HTTP request verb/method
+     - remote parameter  
+     - remote method 
+     - event  
+   * - GET
+     - get integration time
+     - get accumulated dictionary of measurement settings
+     - stream measured spectrum
+   * - POST 
+     - 
+     - connect, disconnect, start and stop acquisition
+     - 
+   * - PUT 
+     - set integration time onto device
+     - 
+     - 
+
+If one wants further inspiration how to use this module, one may refer to W3C Web of Things 
+`Architecture <https://www.w3.org/TR/wot-architecture/#sec-interaction-model>`_ and
+`Thing Description <https://www.w3.org/TR/wot-thing-description11/>`_, where the ``Thing`` maps to base class ``RemoteObject``
+
+Further, plain RPC calls directly through object proxy are possible without the details of HTTP.
 
 
