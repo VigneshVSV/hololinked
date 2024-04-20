@@ -390,7 +390,6 @@ SM_INDEX_SERVER_TYPE = ServerMessage.SERVER_TYPE.value
 SM_INDEX_MESSAGE_TYPE = ServerMessage.MESSAGE_TYPE.value
 SM_INDEX_MESSAGE_ID = ServerMessage.MESSAGE_ID.value
 SM_INDEX_DATA = ServerMessage.DATA.value
-SM_DATA_RETURN_VALUE = ServerMessageData.RETURN_VALUE.value
 
 class _RemoteMethod:
     """method call abstraction"""
@@ -411,7 +410,7 @@ class _RemoteMethod:
         """
         cached return value of the last call to the method
         """
-        return self._last_return_value[SM_INDEX_DATA][SM_DATA_RETURN_VALUE]
+        return self._last_return_value[SM_INDEX_DATA]
     
     def oneway(self, *args, **kwargs) -> None:
         """
@@ -434,7 +433,7 @@ class _RemoteMethod:
         self._last_return_value = self._zmq_client.execute(self._instruction, 
                                         kwargs, self._invokation_timeout, raise_client_side_exception=True,
                                         argument_schema=self._schema)
-        return self._last_return_value[SM_INDEX_DATA][SM_DATA_RETURN_VALUE]
+        return self._last_return_value[SM_INDEX_DATA]
     
     async def async_call(self, *args, **kwargs):
         """
@@ -447,7 +446,7 @@ class _RemoteMethod:
         self._last_return_value = await self._async_zmq_client.async_execute(self._instruction, 
                                         kwargs, self._invokation_timeout, raise_client_side_exception=True,
                                         argument_schema=self._schema)
-        return self._last_return_value[SM_INDEX_DATA][SM_DATA_RETURN_VALUE]
+        return self._last_return_value[SM_INDEX_DATA]
 
     
 class _RemoteParameter:
@@ -476,7 +475,7 @@ class _RemoteParameter:
         self._last_value = self._zmq_client.execute(self._read_instruction, 
                                                 timeout=self._invokation_timeout, 
                                                 raise_client_side_exception=True)
-        return self._last_value[SM_INDEX_DATA][SM_DATA_RETURN_VALUE]
+        return self._last_value[SM_INDEX_DATA]
     
     async def async_set(self, value : typing.Any) -> None:
         self._last_value = await self._async_zmq_client.async_execute(self._write_instruction, dict(value=value),
@@ -485,7 +484,7 @@ class _RemoteParameter:
     async def async_get(self) -> typing.Any:
         self._last_value = await self._async_zmq_client.async_execute(self._read_instruction,
                                                 timeout=self._invokation_timeout, raise_client_side_exception=True)
-        return self._last_value[SM_INDEX_DATA][SM_DATA_RETURN_VALUE]
+        return self._last_value[SM_INDEX_DATA]
     
     def oneway_set(self, value : typing.Any) -> None:
         self._zmq_client.send_instruction(self._instruction, dict(value=value))

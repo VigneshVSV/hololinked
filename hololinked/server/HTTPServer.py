@@ -15,7 +15,7 @@ from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector,
                     TypedList, String)
 from ..server.webserver_utils import get_IP_from_interface
 from .utils import get_default_logger, run_coro_sync
-from .constants import ResourceTypes, CommonRPC, ServerMessageData, HTTPServerTypes
+from .constants import ResourceTypes, CommonRPC, HTTPServerTypes
 from .data_classes import HTTPResource, ServerSentEvent
 from .serializers import JSONSerializer
 from .zmq_message_brokers import MessageMappedZMQClientPool
