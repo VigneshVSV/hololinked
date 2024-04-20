@@ -1,6 +1,7 @@
 import typing 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 
+from ..server.data_classes import RemoteResourceInfoValidator
 from ..server.remote_parameters import *
 from ..server.constants import JSONSerializable
 from .thing import Thing
@@ -14,18 +15,23 @@ class Schema:
     utility function
     """
 
-    skip_keys = []
+    skip_keys = [] # override this to skip some dataclass attributes in the schema
+
+    replacement_keys = {
+        'context' : '@context',
+        'htv_methodName' : 'htv:methodName'
+    }
 
     def asdict(self):
-        self_dict = dict()
+        schema = dict()
         for field, value in self.__dataclass_fields__.items():    
             if getattr(self, field, NotImplemented) is NotImplemented or field in self.skip_keys:
                 continue
-            if field == "context":
-                self_dict["@context"] = getattr(self, field)
+            if field in self.replacement_keys: 
+                schema[self.replacement_keys[field]] = getattr(self, field)
             else: 
-                self_dict[field] = getattr(self, field)
-        return self_dict
+                schema[field] = getattr(self, field)
+        return schema
     
     @classmethod
     def format_doc(cls, doc : str):
@@ -53,6 +59,7 @@ class InteractionAffordance(Schema):
     titles : typing.Optional[typing.Dict[str, str]]
     description : str
     descriptions : typing.Optional[typing.Dict[str, str]] 
+    forms : typing.List["Form"]
   
     def __init__(self):
         super().__init__()
@@ -118,7 +125,6 @@ class Form(Schema):
     schema - https://www.w3.org/TR/wot-thing-description11/#form
     """
     href : str 
-    contentType : typing.Optional[str]
     contentEncoding : typing.Optional[str]
     security : typing.Optional[str]
     scopes : typing.Optional[str]
@@ -126,7 +132,9 @@ class Form(Schema):
     additionalResponses : typing.Optional[typing.List[AdditionalExpectedResponse]]
     subprotocol : typing.Optional[str]
     op : str 
-
+    htv_methodName : str 
+    contentType : typing.Optional[str] = field(default='application/json')
+    
     def __init__(self):
         super().__init__()
 
@@ -140,7 +148,7 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
     creates property affordance schema from ``property`` descriptor object (or parameter)
     schema - https://www.w3.org/TR/wot-thing-description11/#propertyaffordance
     """
-    observable : typing.Optional[bool]
+    observable : bool
 
     property_type = {
         String : 'string',
@@ -162,15 +170,17 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
     }
 
     def __init__(self):
-        InteractionAffordance.__init__(self)
-        DataSchema.__init__(self)
+        super(InteractionAffordance, self).__init__()
+        super(DataSchema, self).__init__()
 
-    def build(self, property : Property) -> typing.Dict[str, typing.Any]:
+    def build(self, property : Property, instance : Thing) -> typing.Dict[str, typing.Any]:
         self.type = self.property_type[property.__class__]
         self.title = property.name
         self.readOnly = property.readonly
         self.writeOnly = False
         self.constant = property.constant
+        self.observable = property.observable
+        
         if property.doc:
             self.description = self.format_doc(property.doc)
         if property.overloads["fget"] is None:
@@ -195,6 +205,17 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
         
         elif self.type == 'boolean':
             pass 
+
+        self.forms = []
+        for index, method in enumerate(property._remote_info.http_method):
+            form = Form()
+            if index == 0:
+                form.op = 'readproperty'
+            elif index == 1:
+                form.op = 'writeproperty'
+            form.href = f"http://localhost:8083{instance._full_URL_path_prefix}{property._remote_info.URL_path}"
+            form.htv_methodName = method.upper()
+            self.forms.append(form.asdict())
         
         return self.asdict()
     
@@ -205,7 +226,6 @@ class ActionAffordance(InteractionAffordance):
     creates action affordance schema from actions (or methods).
     schema - https://www.w3.org/TR/wot-thing-description11/#actionaffordance
     """
-    forms : typing.List[typing.Dict[str, str]]
     input : object 
     output : object 
     safe : bool
@@ -213,22 +233,29 @@ class ActionAffordance(InteractionAffordance):
     synchronous : bool 
 
     def __init__(self):
-        InteractionAffordance.__init__(self)
-        DataSchema.__init__(self)
-
-    def build(self, action : typing.Callable) -> typing.Dict[str, typing.Any]:
+        super(InteractionAffordance, self).__init__()
+    
+    def build(self, action : typing.Callable, instance : Thing) -> typing.Dict[str, typing.Any]:
         if not hasattr(action, '_remote_info'):
             raise RuntimeError("This object is not an action")
+        assert isinstance(action._remote_info, RemoteResourceInfoValidator)
         if action._remote_info.argument_schema: 
             self.input = action._remote_info.argument_schema 
         if action._remote_info.return_value_schema: 
             self.output = action._remote_info.return_value_schema 
-        self.title = action.__qualname__
+        self.title = action.__name__
         if action.__doc__:
             self.description = self.format_doc(action.__doc__)
         self.safe = True 
         self.idempotent = False 
         self.synchronous = True 
+        self.forms = []
+        for method in action._remote_info.http_method:
+            form = Form()
+            form.op = 'invokeaction'
+            form.href = f'http://localhost:8083{instance._full_URL_path_prefix}{action._remote_info.URL_path}'
+            form.htv_methodName = method.upper()
+            self.forms.append(form.asdict())
         return self.asdict()
     
 
@@ -305,7 +332,7 @@ class ThingDescription(Schema):
 
     skip_parameters = ['expose', 'httpserver_resources', 'rpc_resources', 'gui_resources',
                     'events', 'debug_logs', 'warn_logs', 'info_logs', 'error_logs', 'critical_logs',  
-                    'thing_description', 'maxlen', 'execution_logs' ]
+                    'thing_description', 'maxlen', 'execution_logs', 'GUI', 'object_info'  ]
 
     skip_actions = ['_parameter_values', '_parameters', 'push_events', 'stop_events', 
                     'postman_collection']
@@ -315,19 +342,18 @@ class ThingDescription(Schema):
     
     def build(self, instance : Thing) -> typing.Dict[str, typing.Any]: 
         self.context = "https://www.w3.org/2022/wot/td/v1.1"
-        self.id = instance.instance_name
+        self.id = "http://localhost:8083/" + instance.instance_name
         self.title = instance.__class__.__name__ 
-        if instance.__doc__:
-            self.description = self.format_doc(instance.__doc__)
+        self.description = self.format_doc(instance.__doc__) if instance.__doc__ else "no classdoc provided" 
         self.properties = dict()
         self.actions = dict()
         self.events = dict()
 
         for resource in instance.instance_resources.values():
             if resource.isparameter and resource.obj_name not in self.properties and resource.obj_name not in self.skip_parameters: 
-                    self.properties[resource.obj_name] = PropertyAffordance().build(resource.obj) 
+                self.properties[resource.obj_name] = PropertyAffordance().build(resource.obj, instance) 
             elif resource.iscallable and resource.obj_name not in self.actions and resource.obj_name not in self.skip_actions:
-                    self.actions[resource.obj_name] = ActionAffordance().build(resource.obj)
+                self.actions[resource.obj_name] = ActionAffordance().build(resource.obj, instance)
 
         # events still need to standardized so not including for now - they only work, but not neatly
         # for event in instance.events:
