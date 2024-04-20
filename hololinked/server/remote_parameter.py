@@ -136,7 +136,7 @@ class RemoteParameter(Parameter):
 
     def __init__(self, default: typing.Any = None, *, doc : typing.Optional[str] = None, constant : bool = False, 
                 readonly : bool = False, allow_None : bool = False, 
-                URL_path : str = USE_OBJECT_NAME, remote : bool = True, observable : bool = True, 
+                URL_path : str = USE_OBJECT_NAME, remote : bool = True, observable : bool = False, 
                 http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (HTTP_METHODS.GET, HTTP_METHODS.PUT), 
                 state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
                 db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
@@ -152,9 +152,8 @@ class RemoteParameter(Parameter):
         self.db_persist = db_persist
         self.db_init    = db_init
         self.db_commit  = db_commit
-        if URL_path is not USE_OBJECT_NAME:
-            assert URL_path.startswith('/'), "URL path should start with a leading '/'"
-        self._remote_info = None
+        self.metadata = metadata
+        self.observable = observable
         if remote:
             self._remote_info = RemoteResourceInfoValidator(
                 http_method=http_method,
@@ -162,14 +161,16 @@ class RemoteParameter(Parameter):
                 state=state,
                 isparameter=True
             )
-        self.metadata = metadata
-        self.observable = observable
+        else:
+            self._remote_info = None
         
     def _post_slot_set(self, slot : str, old : typing.Any, value : typing.Any) -> None:
         if slot == 'owner' and self.owner is not None:
             if self._remote_info is not None:
                 if self._remote_info.URL_path == USE_OBJECT_NAME:
                     self._remote_info.URL_path = '/' + self.name
+                elif not self._remote_info.URL_path.startswith('/'): 
+                    self._remote_info.URL_path = f'/{self._remote_info.URL_path}',
                 self._remote_info.obj_name = self.name
             # In principle the above could be done when setting name itself however to simplify
             # we do it with owner. So we should always remember order of __set_name__ -> 1) attrib_name, 

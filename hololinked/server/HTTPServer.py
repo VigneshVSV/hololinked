@@ -204,7 +204,7 @@ async def update_router_with_remote_objects(application : Application, zmq_clien
         _, _, _, _, _, reply, _ = await client.async_execute(
                     CommonRPC.http_resource_read(client.server_instance_name), 
                     raise_client_side_exception=True)
-        resources.update(reply[ServerMessageData.RETURN_VALUE])
+        resources.update(reply)
      
     handlers = []
     for route, http_resource in resources.items():

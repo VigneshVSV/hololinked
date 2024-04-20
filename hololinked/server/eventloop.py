@@ -236,58 +236,44 @@ class EventLoop(RemoteObject):
             instructions = await instance.message_broker.async_recv_instructions()
             for instruction in instructions:
                 client, _, client_type, _, msg_id, _, instruction_str, arguments, context = instruction
-                plain_reply = context.pop("plain_reply", False)
                 fetch_execution_logs = context.pop("fetch_execution_logs", False)
-                if not plain_reply and fetch_execution_logs:
+                if fetch_execution_logs:
                     list_handler = ListHandler([])
                     list_handler.setLevel(logging.DEBUG)
                     list_handler.setFormatter(instance.logger.handlers[0].formatter)
                     instance.logger.addHandler(list_handler)
                 try:
-                    instance.logger.debug("client {} of client type {} issued instruction {} with message id {}. \
-                                starting execution".format(client, client_type, instruction_str, msg_id))
+                    instance.logger.debug(f"client {client} of client type {client_type} issued instruction " +
+                                f"{instruction_str} with message id {msg_id}. starting execution.")
                     return_value = await cls.execute_once(instance_name, instance, instruction_str, arguments) #type: ignore 
-                    if not plain_reply:
+                    if fetch_execution_logs:
                         return_value = {
                             "returnValue" : return_value,
-                            "state"       : {
-                                instance_name : instance.state()
-                            }
+                            "execution_logs" : list_handler.log_list
                         }
-                        if fetch_execution_logs:
-                            return_value["logs"] = list_handler.log_list
                     await instance.message_broker.async_send_reply(instruction, return_value)
                     # Also catches exception in sending messages like serialization error
                 except (BreakInnerLoop, BreakAllLoops):
                     instance.logger.info("Remote object {} with instance name {} exiting event loop.".format(
                                                             instance.__class__.__name__, instance_name))
                     return_value = None
-                    if not plain_reply:
+                    if fetch_execution_logs:
                         return_value = { 
                             "returnValue" : None,
-                            "state"       : { 
-                                instance_name : instance.state() 
-                            }
+                            "execution_logs" : list_handler.log_list
                         }
-                        if fetch_execution_logs:
-                            return_value["logs"] = list_handler.log_list    
-                                       
                     await instance.message_broker.async_send_reply(instruction, return_value)
                 except Exception as ex:
                     instance.logger.error("RemoteObject {} with instance name {} produced error : {}.".format(
                                                             instance.__class__.__name__, instance_name, ex))
-                    if not plain_reply:    
-                        return_value = {
-                            "exception" : format_exception_as_json(ex), 
-                            "state"     : { 
-                                instance_name : instance.state()
-                            }
-                        }          
-                        if fetch_execution_logs:
-                            return_value["logs"] = list_handler.log_list      
+                    return_value = {
+                        "exception" : format_exception_as_json(ex),  
+                    }
+                    if fetch_execution_logs:
+                        return_value["execution_logs"] = list_handler.log_list
                     await instance.message_broker.async_send_reply_with_message_type(instruction, 
                                                                     b'EXCEPTION', return_value)
-                if not plain_reply and fetch_execution_logs:
+                if fetch_execution_logs:
                     instance.logger.removeHandler(list_handler)
 
     @classmethod

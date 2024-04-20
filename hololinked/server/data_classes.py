@@ -43,25 +43,34 @@ class RemoteResourceInfoValidator:
     isparameter : bool, default False
         True for a parameter
     request_as_argument : bool, default False
-        if True, http request object will be passed as an argument to the callable. 
+        if True, http/RPC request object will be passed as an argument to the callable. 
         The user is warned to not use this generally. 
     argument_schema: JSON, default None
-        JSON schema validations for arguments of a callable. Assumption is therefore arguments will be
-        JSON complaint. 
+        JSON schema validations for arguments of a callable. Assumption is therefore arguments will be JSON complaint. 
     return_value_schema: JSON, default None 
         schema for return value of a callable
     """
 
-    URL_path = String(default=USE_OBJECT_NAME)
-    http_method = TupleSelector(default=HTTP_METHODS.POST, objects=http_methods, accept_list=True)
-    state = Tuple(default=None, item_type=(Enum, str), allow_None=True, accept_list=True, accept_item=True)
-    obj_name = String(default=USE_OBJECT_NAME)
-    iscoroutine = Boolean(default=False)
-    iscallable = Boolean(default=False)
-    isparameter = Boolean(default=False)
-    request_as_argument = Boolean(default=False)
-    argument_schema = TypedDict(default=None, allow_None=True, key_type=str)
-    return_value_schema = TypedDict(default=None, allow_None=True, key_type=str)
+    URL_path = String(default=USE_OBJECT_NAME,
+                    doc="the path in the URL under which the object is accesible.") # type: str
+    http_method = TupleSelector(default=HTTP_METHODS.POST, objects=http_methods, accept_list=True,
+                    doc="HTTP request method under which the object is accessible. GET, POST, PUT, DELETE or PATCH are supported.") # typing.Tuple[str]
+    state = Tuple(default=None, item_type=(Enum, str), allow_None=True, accept_list=True, accept_item=True,
+                    doc="State machine state at which a callable will be executed or attribute/parameter can be written.") # type: typing.Union[Enum, str]
+    obj_name = String(default=USE_OBJECT_NAME, 
+                    doc="the name of the object which will be supplied to the ``ObjectProxy`` class to populate its own namespace.") # type: str
+    iscoroutine = Boolean(default=False,
+                    doc="whether the callable should be awaited") # type: bool
+    iscallable = Boolean(default=False,
+                    doc="True for a method or function or callable") # type: bool
+    isparameter = Boolean(default=False,
+                    doc="True for a parameter") # type: bool
+    request_as_argument = Boolean(default=False,
+                    doc="if True, http/RPC request object will be passed as an argument to the callable.") # type: bool
+    argument_schema = TypedDict(default=None, allow_None=True, key_type=str,
+                    doc="JSON schema validations for arguments of a callable")
+    return_value_schema = TypedDict(default=None, allow_None=True, key_type=str,
+                    doc="schema for return value of a callable")
  
     def __init__(self, **kwargs) -> None:
         """   

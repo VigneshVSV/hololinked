@@ -38,6 +38,7 @@ class BaseHandler(RequestHandler):
         merges all arguments to a single JSON body and retrieves execution context and timeouts
         """
         arguments = {}
+        print(self.request)
         if len(self.request.query_arguments) >= 1:
             for key, value in self.request.query_arguments.items():
                 if len(value) == 1:
@@ -149,6 +150,7 @@ class RPCHandler(BaseHandler):
         else:
             try:
                 arguments, context, timeout = self.get_execution_parameters()
+                print("arguments", arguments)
                 reply = await self.zmq_client_pool.async_execute(self.resource.instance_name, 
                                         self.resource.instructions.__dict__[http_method], arguments,
                                         context=context, raise_client_side_exception=False, 
@@ -158,6 +160,8 @@ class RPCHandler(BaseHandler):
                 # and provides that as reply directly 
                 self.set_status(200, "ok")
             except Exception as ex:
+                self.logger.error(f"error while scheduling RPC call - {str(ex)}")
+                self.logger.debug(f"traceback - {ex.__traceback__}")
                 self.set_status(500, "error while scheduling RPC call")
                 reply = self.json_serializer.dumps({"exception" : format_exception_as_json(ex)})
             self.set_headers()
