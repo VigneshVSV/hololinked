@@ -21,7 +21,7 @@ class BaseHandler(RequestHandler):
                     logger : logging.Logger, allowed_clients : typing.List[str] = list()) -> None:
         self.resource = resource
         self.zmq_client_pool = zmq_client_pool 
-        self.json_serializer = json_serializer
+        self.serializer = json_serializer
         self.logger = logger
         self.allowed_clients = allowed_clients
        
@@ -42,11 +42,11 @@ class BaseHandler(RequestHandler):
         if len(self.request.query_arguments) >= 1:
             for key, value in self.request.query_arguments.items():
                 if len(value) == 1:
-                    arguments[key] = self.json_serializer.loads(value[0]) 
+                    arguments[key] = self.serializer.loads(value[0]) 
                 else:
-                    arguments[key] = [self.json_serializer.loads(val) for val in value]
+                    arguments[key] = [self.serializer.loads(val) for val in value]
         if len(self.request.body) > 0:
-            arguments.update(self.json_serializer.loads(self.request.body))
+            arguments.update(self.serializer.loads(self.request.body))
         context = dict(fetch_execution_logs=arguments.pop('fetch_execution_logs', False))
         timeout = arguments.pop('timeout', None)
         if timeout is not None and timeout < 0:
@@ -163,7 +163,7 @@ class RPCHandler(BaseHandler):
                 self.logger.error(f"error while scheduling RPC call - {str(ex)}")
                 self.logger.debug(f"traceback - {ex.__traceback__}")
                 self.set_status(500, "error while scheduling RPC call")
-                reply = self.json_serializer.dumps({"exception" : format_exception_as_json(ex)})
+                reply = self.serializer.dumps({"exception" : format_exception_as_json(ex)})
             self.set_headers()
             if reply:
                 self.write(reply)
@@ -178,7 +178,7 @@ class EventHandler(BaseHandler):
     def initialize(self, resource : ServerSentEvent, json_serializer : JSONSerializer,
                 logger : logging.Logger, allowed_clients : typing.List[str] = []) -> None:
         self.resource = resource
-        self.json_serializer = json_serializer
+        self.serializer = json_serializer
         self.logger = logger
         self.allowed_clients = allowed_clients 
 
@@ -232,12 +232,12 @@ class EventHandler(BaseHandler):
                 except StreamClosedError:
                     break 
                 except Exception as ex:
-                    self.write(data_header % self.json_serializer.dumps(
+                    self.write(data_header % self.serializer.dumps(
                         {"exception" : format_exception_as_json(ex)}))
             event_consumer.exit()
         except Exception as ex:
             self.set_status(500, "could not subscribe to event source from remote object")
-            self.write(data_header % self.json_serializer.dumps(
+            self.write(data_header % self.serializer.dumps(
                        {"exception" : format_exception_as_json(ex)}))
 
 
@@ -250,7 +250,8 @@ class ImageEventHandler(EventHandler):
         try:
             self.set_header("Content-Type", "application/x-mpegURL")
             event_consumer = AsyncEventConsumer(self.resource.unique_identifier, self.resource.socket_address, 
-                            f"{self.resource.unique_identifier}|HTTPEvent|{current_datetime_ms_str()}")         
+                            f"{self.resource.unique_identifier}|HTTPEvent|{current_datetime_ms_str()}", 
+                            json_serializer=self.serializer)         
             self.write("#EXTM3U\n")
             delimiter = "#EXTINF:{},\n"
             data_header = b'data:image/jpeg;base64,%s\n'
@@ -266,11 +267,11 @@ class ImageEventHandler(EventHandler):
                 except StreamClosedError:
                     break 
                 except Exception as ex:
-                    self.write(data_header % self.json_serializer.dumps(
+                    self.write(data_header % self.serializer.dumps(
                         {"exception" : format_exception_as_json(ex)}))
             event_consumer.exit()
         except Exception as ex:
-            self.write(data_header % self.json_serializer.dumps(
+            self.write(data_header % self.serializer.dumps(
                         {"exception" : format_exception_as_json(ex)}))
     
 
@@ -320,7 +321,7 @@ class RemoteObjectsHandler(BaseHandler):
             try:
                 await update_router_with_remote_objects(application=self.application, zmq_client_pool=self.zmq_client_pool,
                                             request_handler=self.request_handler, event_handler=self.event_handler,
-                                            json_serializer=self.json_serializer, logger=self.logger, 
+                                            json_serializer=self.serializer, logger=self.logger, 
                                             allowed_clients=self.allowed_clients)
                 self.set_status(200, "ok")
             except Exception as ex:

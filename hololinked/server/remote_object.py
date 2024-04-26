@@ -270,7 +270,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
                         doc="""object's data read by hololinked-portal GUI client, similar to http_resources but differs 
                         in details.""",
                         fget=lambda self: GUIResources().build(self)) # type: typing.Dict[str, typing.Any]
-    thing_description = RemoteParameter(readonly=True, URL_path='/resources/wot', 
+    thing_description = RemoteParameter(readonly=True, URL_path='/resources/wot-td', 
                             doc="thing description schema of W3 Web of Things https://www.w3.org/TR/wot-thing-description11/",
                         )
     events = RemoteParameter(readonly=True, URL_path='/events', 
@@ -352,7 +352,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
                                                 what=ResourceTypes.CALLABLE,
                                                 instance_name=self._owner.instance_name if self._owner is not None else self.instance_name,
                                                 instruction=fullpath,                                                                                                                                                                                        
-                                                name=getattr(resource, '__name__'),
+                                                obj_name=getattr(resource, '__name__'),
                                                 qualname=getattr(resource, '__qualname__'), 
                                                 doc=getattr(resource, '__doc__'),
                                                 top_owner=self._owner is None,
@@ -379,14 +379,17 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
             resource._owner = self
             resource._unique_identifier = bytes(f"{self._full_URL_path_prefix}{resource.URL_path}", encoding='utf-8')
             resource.publisher = self._event_publisher
+            metadata = ServerSentEvent(
+                                # event URL_path has '/' prefix
+                                obj_name=name,
+                                what=ResourceTypes.EVENT,
+                                unique_identifier=f"{self._full_URL_path_prefix}{resource.URL_path}",
+                                socket_address=self._event_publisher.socket_address
+                            )
             httpserver_resources['{}{}'.format(
-                        self._full_URL_path_prefix, resource.URL_path)] = ServerSentEvent(
-                                                            # event URL_path has '/' prefix
-                                                            what=ResourceTypes.EVENT,
-                                                            name=resource.name,
-                                                            unique_identifier=f"{self._full_URL_path_prefix}{resource.URL_path}",
-                                                            socket_address=self._event_publisher.socket_address
-                                                        )
+                        self._full_URL_path_prefix, resource.URL_path)] = metadata
+            rpc_resources['{}{}'.format(
+                        self._full_URL_path_prefix, resource.URL_path)] = metadata
         # Parameters
         for parameter in self.parameters.descriptors.values():
             if hasattr(parameter, '_remote_info') and parameter._remote_info is not None: 
@@ -416,7 +419,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
                                 instance_name=self._owner.instance_name if self._owner is not None else self.instance_name, 
                                 instruction=fullpath, 
                                 doc=parameter.__doc__, 
-                                name=remote_info.obj_name,
+                                obj_name=remote_info.obj_name,
                                 qualname=self.__class__.__name__ + '.' + remote_info.obj_name,
                                 # qualname is not correct probably, does not respect inheritance
                                 top_owner=self._owner is None,

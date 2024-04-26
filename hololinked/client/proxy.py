@@ -4,14 +4,12 @@ import typing
 import logging
 import uuid
 
+from ..server.constants import JSON, CommonRPC, ServerMessage, ResourceTypes
+from ..server.utils import current_datetime_ms_str
+from ..server.serializers import BaseSerializer
 from ..server.data_classes import RPCResource, ServerSentEvent
 from ..server.zmq_message_brokers import AsyncZMQClient, SyncZMQClient, EventConsumer, PROXY
-from ..server.utils import current_datetime_ms_str
-from ..server.constants import (JSON, CommonRPC, 
-                            ServerMessage, ServerMessageData, ResourceTypes)
 
-
-__WRAPPER_ASSIGNMENTS__ =  ('__name__', '__qualname__', '__doc__')
 
 
 class ObjectProxy:
@@ -44,9 +42,10 @@ class ObjectProxy:
     """
 
     _own_attrs = frozenset([
-        '_zmq_client', '_async_zmq_client', 'identity', '__annotations__', '_allow_foreign_attributes',
-        'instance_name', 'logger', 'execution_timeout', 'invokation_timeout', '_execution_timeout', '_invokation_timeout', 
-        '_events'
+        '__annotations__',
+        '_zmq_client', '_async_zmq_client', '_allow_foreign_attributes',
+        'identity', 'instance_name', 'logger', 'execution_timeout', 'invokation_timeout', 
+        '_execution_timeout', '_invokation_timeout', '_events'
     ])
 
     def __init__(self, instance_name : str, protocol : str, invokation_timeout : float = 5, load_remote_object = True, 
@@ -150,8 +149,9 @@ class ObjectProxy:
         self._execution_timeout = value
     
     execution_timeout = property(fget=get_execution_timeout, fset=set_execution_timeout,
-                        doc="Timeout in seconds on server side for execution of method or read/write parameter. \
-                                Defaults to None (i.e. waits indefinitely until return) and network times not considered."
+                            doc="Timeout in seconds on server side for execution of method or read/write parameter." +
+                                "Starts ticking after invokation timeout completes." + 
+                                "Defaults to None (i.e. waits indefinitely until return) and network times not considered."
     )
 
 
@@ -379,7 +379,7 @@ class ObjectProxy:
                                                 self.execution_timeout, self._async_zmq_client), data)
             elif data.what == ResourceTypes.EVENT:
                 assert isinstance(data, ServerSentEvent)
-                _add_event(self, _Event(self._zmq_client, data.name, data.unique_identifier, data.socket_address), data)
+                _add_event(self, _Event(self._zmq_client, data.obj_name, data.unique_identifier, data.socket_address), data)
         self._events = {}
 
 
@@ -392,7 +392,10 @@ SM_INDEX_MESSAGE_ID = ServerMessage.MESSAGE_ID.value
 SM_INDEX_DATA = ServerMessage.DATA.value
 
 class _RemoteMethod:
-    """method call abstraction"""
+    """
+    server method call abstraction
+    
+    """
 
     def __init__(self, sync_client : SyncZMQClient, instruction : str, invokation_timeout : typing.Optional[float] = 5, 
                     execution_timeout : typing.Optional[float] = None, argument_schema : typing.Optional[JSON] = None,
@@ -457,6 +460,7 @@ class _RemoteParameter:
         self._zmq_client = client
         self._async_zmq_client = async_client
         self._invokation_timeout = invokation_timeout
+        self._execution_timeout = execution_timeout
         self._read_instruction = instruction + '/read'
         self._write_instruction = instruction + '/write'
 
@@ -487,7 +491,7 @@ class _RemoteParameter:
         return self._last_value[SM_INDEX_DATA]
     
     def oneway_set(self, value : typing.Any) -> None:
-        self._zmq_client.send_instruction(self._instruction, dict(value=value))
+        self._zmq_client.send_instruction(self._write_instruction, dict(value=value))
 
     def noblock_set(self, value : typing.Any) -> None:
         pass 
@@ -497,12 +501,14 @@ class _RemoteParameter:
 class _Event:
     """event streaming"""
 
-    def __init__(self, client : SyncZMQClient, name : str, unique_identifier : str, socket : str) -> None:
+    def __init__(self, client : SyncZMQClient, name : str, unique_identifier : str, socket : str, 
+                    serializer : BaseSerializer = None) -> None:
         self._zmq_client = client 
         self._name = name
-        self._unique_identifier = bytes(unique_identifier, encoding='utf-8')
+        self._unique_identifier = unique_identifier
         self._socket_address = socket
         self._callbacks = None 
+        self._serializer = serializer
 
     def add_callbacks(self, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable]) -> None:
         if not self._callbacks:
@@ -515,7 +521,8 @@ class _Event:
     def subscribe(self, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable], 
                     thread_callbacks : bool = False):
         self._event_consumer = EventConsumer(self._unique_identifier, self._socket_address, 
-                                f"{self._name}_RPCEvent@"+current_datetime_ms_str())
+                                f"{self._name}_RPCEvent@"+current_datetime_ms_str(), b'PROXY',
+                                rpc_serializer=self._serializer)
         self.add_callbacks(callbacks) 
         self._subscribed = True
         self._thread_callbacks = thread_callbacks
@@ -523,13 +530,17 @@ class _Event:
         self._thread.start()
 
     def listen(self):
+        print("started event")
         while self._subscribed:
             try:
-                data = self._event_consumer.receive_event(deserialize=True)
+                data = self._event_consumer.receive()
                 for cb in self._callbacks: 
-                    cb(data)
+                    if not self._thread_callbacks:
+                        cb(data)
+                    else: 
+                        threading.Thread(target=cb, args=(data,)).start()
             except Exception as ex:
-                warnings.warn(f"Uncaught exception - {str(ex)}", 
+                warnings.warn(f"Uncaught exception from {self._name} event - {str(ex)}", 
                                 category=RuntimeWarning)
         self._event_consumer.exit()
 
@@ -595,6 +606,7 @@ class _StreamResultIterator(object):
 
 
 __allowed_attribute_types__ = (_RemoteParameter, _RemoteMethod, _Event)
+__WRAPPER_ASSIGNMENTS__ =  ('__name__', '__qualname__', '__doc__')
 
 def _add_method(client_obj : ObjectProxy, method : _RemoteMethod, func_info : RPCResource) -> None:
     if not func_info.top_owner:
@@ -606,20 +618,20 @@ def _add_method(client_obj : ObjectProxy, method : _RemoteMethod, func_info : RP
         else:
             info = func_info.get_dunder_attr(dunder)
         setattr(method, dunder, info)
-    client_obj.__setattr__(func_info.name, method)
+    client_obj.__setattr__(func_info.obj_name, method)
 
 def _add_parameter(client_obj : ObjectProxy, parameter : _RemoteParameter, parameter_info : RPCResource) -> None:
     if not parameter_info.top_owner:
         return
         raise RuntimeError("logic error")
-    for attr in ['doc', 'name']: 
+    for attr in ['__doc__', '__name__']: 
         # just to imitate _add_method logic
-        setattr(parameter, attr, getattr(parameter_info, attr))
-    client_obj.__setattr__(parameter_info.name, parameter)
+        setattr(parameter, attr, parameter_info.get_dunder_attr(attr))
+    client_obj.__setattr__(parameter_info.obj_name, parameter)
 
-def _add_event(client_obj : ObjectProxy, event : _Event, event_info) -> None:
-    client_obj.__setattr__(event.name)
-
+def _add_event(client_obj : ObjectProxy, event : _Event, event_info : ServerSentEvent) -> None:
+    setattr(client_obj, event_info.obj_name, event)
+    
 
 __all__ = ['ObjectProxy']
 

@@ -21,7 +21,7 @@ class postman_collection:
     def json(self):
         return asdict(self)
     
-    def json_file(self, filename = 'collection.json'):
+    def save_json_file(self, filename = 'collection.json'):
         with open(filename, 'w') as file: 
             JSONSerializer.generic_dump(self.json(), file)
 

@@ -281,25 +281,27 @@ class RPCResource(SerializableDataclass):
     what : str 
     instance_name : str 
     instruction : str
-    name : str
+    obj_name : str
     qualname : str
     doc : typing.Optional[str]
     top_owner : bool 
     argument_schema : typing.Optional[JSON]
 
-    def __init__(self, *, what : str, instance_name : str, instruction : str, name : str,
+    def __init__(self, *, what : str, instance_name : str, instruction : str, obj_name : str,
                 qualname : str, doc : str, top_owner : bool, argument_schema : typing.Optional[JSON] = None) -> None:
         self.what = what 
         self.instance_name = instance_name
         self.instruction = instruction
-        self.name = name 
+        self.obj_name = obj_name 
         self.qualname = qualname
         self.doc = doc
         self.top_owner = top_owner
         self.argument_schema = argument_schema
 
     def get_dunder_attr(self, __dunder_name : str):
-        return getattr(self, __dunder_name.strip('_'))
+        name = __dunder_name.strip('_')
+        name = 'obj_name' if name == 'name' else name
+        return getattr(self, name)
 
 
 @dataclass
@@ -318,7 +320,7 @@ class ServerSentEvent(SerializableDataclass):
     what: str, default EVENT
         is it a parameter, method or event?
     """
-    name : str 
+    obj_name : str 
     unique_identifier : str
     socket_address : str 
     what : str = field(default="EVENT")
