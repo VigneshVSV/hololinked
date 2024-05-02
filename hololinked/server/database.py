@@ -19,9 +19,14 @@ from .remote_parameter import RemoteParameter
 
 
 class RemoteObjectTableBase(DeclarativeBase):
+    """SQLAlchemy base table for all remote object related tables"""
     pass 
     
 class SerializedParameter(MappedAsDataclass, RemoteObjectTableBase):
+    """
+    Parameter value is serialized before storing in database, therefore providing unified version for 
+    SQLite and other relational tables
+    """
     __tablename__ = "parameters"
 
     instance_name  : Mapped[str] = mapped_column(String)
@@ -39,7 +44,7 @@ class RemoteObjectInformation(MappedAsDataclass, RemoteObjectTableBase):
     eventloop_instance_name : Mapped[str] = mapped_column(String)
     http_server    : Mapped[str] = mapped_column(String)
     level          : Mapped[int] = mapped_column(Integer)
-    level_type     : Mapped[str] = mapped_column(String)
+    level_type     : Mapped[str] = mapped_column(String) # starting local to computer or global to system?
 
     def json(self):
         return {
@@ -50,7 +55,9 @@ class RemoteObjectInformation(MappedAsDataclass, RemoteObjectTableBase):
             "eventloop_instance_name" : self.eventloop_instance_name,
             "http_server" : self.http_server,
             "level" : self.level, 
+            "level_type" : self.level_type
         }
+    
 
 @dataclass 
 class DeserializedParameter: # not part of database

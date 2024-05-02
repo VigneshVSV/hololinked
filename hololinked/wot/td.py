@@ -1,4 +1,6 @@
+import inspect
 import typing 
+import socket
 from dataclasses import dataclass, asdict, field
 
 from ..server.data_classes import RemoteResourceInfoValidator
@@ -6,6 +8,7 @@ from ..server.remote_parameters import *
 from ..server.constants import JSONSerializable
 from .thing import Thing
 from .properties import Property
+from .events import Event
 
 
 @dataclass
@@ -60,7 +63,8 @@ class InteractionAffordance(Schema):
     description : str
     descriptions : typing.Optional[typing.Dict[str, str]] 
     forms : typing.List["Form"]
-  
+    # uri variables 
+
     def __init__(self):
         super().__init__()
 
@@ -166,14 +170,14 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
         Path : 'string',
         TypedList : 'array',
         TypedDict : 'object',
-        RemoteParameter : 'null' # i.e. NullShema - nothing to add
+        RemoteParameter : 'object' # i.e. NullShema - nothing to add
     }
 
     def __init__(self):
         super(InteractionAffordance, self).__init__()
         super(DataSchema, self).__init__()
 
-    def build(self, property : Property, instance : Thing) -> typing.Dict[str, typing.Any]:
+    def build(self, property : Property, instance : Thing, authority : str) -> typing.Dict[str, JSONSerializable]:
         self.type = self.property_type[property.__class__]
         self.title = property.name
         self.readOnly = property.readonly
@@ -194,17 +198,24 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
 
         elif self.type == 'number':
             assert isinstance(property, (Number, Integer))
-            if isinstance(property.bounds[0], (int, float)):
-                self.minimum = property.bounds[0]
-            if isinstance(property.bounds[1], (int, float)):
-                self.maximum = property.bounds[1]
+            if property.bounds is not None:      
+                if isinstance(property.bounds[0], (int, float)): # i.e. not None which is allowed by param
+                    self.minimum = property.bounds[0]
+                if isinstance(property.bounds[1], (int, float)):
+                    self.maximum = property.bounds[1]
             self.exclusiveMinimum = not property.inclusive_bounds[0]
             self.exclusiveMaximum = not property.inclusive_bounds[1]
             if property.step:
                 self.multipleOf = property.step
         
         elif self.type == 'boolean':
+            # doing by order, just for reminder
             pass 
+
+        elif self.type == 'array':
+            if isinstance(property, (List, Tuple)):
+                
+   
 
         self.forms = []
         for index, method in enumerate(property._remote_info.http_method):
@@ -213,7 +224,7 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
                 form.op = 'readproperty'
             elif index == 1:
                 form.op = 'writeproperty'
-            form.href = f"http://localhost:8083{instance._full_URL_path_prefix}{property._remote_info.URL_path}"
+            form.href = f"{authority}{instance._full_URL_path_prefix}{property._remote_info.URL_path}"
             form.htv_methodName = method.upper()
             self.forms.append(form.asdict())
         
@@ -235,7 +246,7 @@ class ActionAffordance(InteractionAffordance):
     def __init__(self):
         super(InteractionAffordance, self).__init__()
     
-    def build(self, action : typing.Callable, instance : Thing) -> typing.Dict[str, typing.Any]:
+    def build(self, action : typing.Callable, instance : Thing, authority : str) -> typing.Dict[str, JSONSerializable]:
         if not hasattr(action, '_remote_info'):
             raise RuntimeError("This object is not an action")
         assert isinstance(action._remote_info, RemoteResourceInfoValidator)
@@ -247,20 +258,23 @@ class ActionAffordance(InteractionAffordance):
         if action.__doc__:
             self.description = self.format_doc(action.__doc__)
         self.safe = True 
-        self.idempotent = False 
+        if instance.state_machine is not None and instance.state_machine.has_object(action):
+            self.idempotent = False 
+        else:
+            self.idempotent = True      
         self.synchronous = True 
         self.forms = []
         for method in action._remote_info.http_method:
             form = Form()
             form.op = 'invokeaction'
-            form.href = f'http://localhost:8083{instance._full_URL_path_prefix}{action._remote_info.URL_path}'
+            form.href = f'{authority}{instance._full_URL_path_prefix}{action._remote_info.URL_path}'
             form.htv_methodName = method.upper()
             self.forms.append(form.asdict())
         return self.asdict()
     
 
 @dataclass
-class EventAffordance:
+class EventAffordance(InteractionAffordance):
     """
     creates event affordance schema from events.
     schema - https://www.w3.org/TR/wot-thing-description11/#eventaffordance
@@ -268,8 +282,17 @@ class EventAffordance:
     subscription : str
     data : typing.Dict[str, JSONSerializable]
 
-    def build(self, event):
-        return asdict(self)
+    def __init__(self):
+        super(InteractionAffordance, self).__init__()
+    
+    def build(self, event : Event, instance : Thing, authority : str) -> typing.Dict[str, JSONSerializable]:
+        form = Form()
+        form.op = "subscribeevent"
+        form.href = f"{authority}{instance._full_URL_path_prefix}{event.URL_path}"
+        form.contentType = "text/event-stream"
+        form.htv_methodName = "GET"
+        self.forms = [form.asdict()]
+        return self.asdict()
 
 
 @dataclass
@@ -340,24 +363,26 @@ class ThingDescription(Schema):
     def __init__(self):
         super().__init__()
     
-    def build(self, instance : Thing) -> typing.Dict[str, typing.Any]: 
+    def build(self, instance : Thing, authority = f"https://{socket.gethostname()}:8080") -> typing.Dict[str, typing.Any]: 
         self.context = "https://www.w3.org/2022/wot/td/v1.1"
-        self.id = "http://localhost:8083/" + instance.instance_name
+        self.id = f"{authority}/{instance.instance_name}"
         self.title = instance.__class__.__name__ 
         self.description = self.format_doc(instance.__doc__) if instance.__doc__ else "no classdoc provided" 
         self.properties = dict()
         self.actions = dict()
         self.events = dict()
 
+        # properties and actions
         for resource in instance.instance_resources.values():
             if resource.isparameter and resource.obj_name not in self.properties and resource.obj_name not in self.skip_parameters: 
-                self.properties[resource.obj_name] = PropertyAffordance().build(resource.obj, instance) 
+                self.properties[resource.obj_name] = PropertyAffordance().build(resource.obj, instance, authority) 
             elif resource.iscallable and resource.obj_name not in self.actions and resource.obj_name not in self.skip_actions:
-                self.actions[resource.obj_name] = ActionAffordance().build(resource.obj, instance)
-
-        # events still need to standardized so not including for now - they only work, but not neatly
-        # for event in instance.events:
-        #     self.events[event["name"]] = EventAffordance().build(event)
+                self.actions[resource.obj_name] = ActionAffordance().build(resource.obj, instance, authority)
+        # Events
+        for name, resource in vars(instance).items(): 
+            if not isinstance(resource, Event):
+                continue
+            self.events[name] = EventAffordance().build(resource, instance, authority)
 
         self.security = 'unimplemented'
         self.securityDefinitions = SecurityScheme().build('unimplemented', instance)

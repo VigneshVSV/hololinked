@@ -6,7 +6,8 @@ import typing
 from tornado import ioloop
 from tornado.web import Application
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
-from tornado.httpclient import AsyncHTTPClient, HTTPRequest 
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+
 # from tornado_http2.server import Server as TornadoHTTP2Server 
 
 
@@ -18,6 +19,7 @@ from .utils import get_default_logger, run_coro_sync
 from .constants import ResourceTypes, CommonRPC, HTTPServerTypes
 from .data_classes import HTTPResource, ServerSentEvent
 from .serializers import JSONSerializer
+from .database import RemoteObjectInformation 
 from .zmq_message_brokers import MessageMappedZMQClientPool
 from .handlers import RPCHandler, BaseHandler, EventHandler, RemoteObjectsHandler
 
@@ -103,16 +105,16 @@ class HTTPServer(Parameterized):
             (r'/remote-objects', RemoteObjectsHandler, dict(request_handler=self.request_handler))
         ])
         
-        self.zmq_client_pool = MessageMappedZMQClientPool(self.remote_objects, 
-                                    self._IP, json_serializer=self.serializer)
+        self.zmq_client_pool = MessageMappedZMQClientPool(self.remote_objects, identity=self._IP, 
+                                                    deserialize_server_messages=False, json_serializer=self.serializer)
     
         event_loop = asyncio.get_event_loop()
         event_loop.call_soon(lambda : asyncio.create_task(
                             update_router_with_remote_objects(
                     application=self.app, zmq_client_pool=self.zmq_client_pool,  
                     request_handler=self.request_handler, event_handler=self.event_handler,
-                    json_serializer=self.serializer, logger=self.logger, 
-                    allowed_clients= ', '.join(self.allowed_clients) if self.allowed_clients is not None else []
+                    json_serializer=self.serializer, logger=self.logger, allowed_clients=self.allowed_clients,
+                    server_address="{}://{}".format("https" if self.ssl_context is not None else "http", self._IP)
                 )))
         event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
         event_loop.call_soon(lambda : asyncio.create_task(self.zmq_client_pool.poll()) )
@@ -175,8 +177,8 @@ class HTTPServer(Parameterized):
 
 
 async def update_router_with_remote_objects(application : Application, zmq_client_pool : MessageMappedZMQClientPool, 
-                                request_handler : BaseHandler, event_handler : BaseHandler, json_serializer : JSONSerializer, 
-                                logger : logging.Logger, allowed_clients : typing.List[str] = None) -> None:
+                        request_handler : BaseHandler, event_handler : BaseHandler, json_serializer : JSONSerializer, 
+                        logger : logging.Logger, allowed_clients : typing.List[str], server_address : str) -> None:
     """
     updates HTTP router with paths from newly instantiated ``RemoteObject`` 
     
@@ -205,7 +207,8 @@ async def update_router_with_remote_objects(application : Application, zmq_clien
                     CommonRPC.http_resource_read(client.server_instance_name), 
                     raise_client_side_exception=True)
         resources.update(reply)
-     
+
+       
     handlers = []
     for route, http_resource in resources.items():
         if http_resource["what"] in [ResourceTypes.PARAMETER, ResourceTypes.CALLABLE] :
@@ -254,6 +257,14 @@ async def update_router_with_remote_objects(application : Application, zmq_clien
     application.wildcard_router.add_rules(handlers)
 
 
+    for client in zmq_client_pool:
+        _, _, _, _, _, reply, _ = await client.async_execute(
+                    CommonRPC.object_info_read(client.server_instance_name), 
+                    raise_client_side_exception=True)
+        object_info = RemoteObjectInformation(**reply)
+        object_info.http_server = f"{server_address.split(':')[0]}://{socket.gethostname()}:{server_address.split(':')[-1]}"
+        await client.async_execute(CommonRPC.object_info_write(client.server_instance_name),
+                                arguments={ "value" : object_info }, raise_client_side_exception=True)
 
 
 __all__ = ['HTTPServer']

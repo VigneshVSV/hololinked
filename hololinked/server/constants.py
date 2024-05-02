@@ -41,16 +41,26 @@ class ResourceOperations(StrEnum):
 class CommonRPC(StrEnum):
     "some common RPC instructions"
 
-    RPC_RESOURCES = '/resources/object-proxy/read'
-    HTTP_RESOURCES = '/resources/http-server/read'
+    RPC_RESOURCES = '/resources/object-proxy'
+    HTTP_RESOURCES = '/resources/http-server'
+    OBJECT_INFO = '/object-info'
+
 
     @classmethod
     def rpc_resource_read(cls, instance_name : str) -> str:
-        return f"/{instance_name}{cls.RPC_RESOURCES}"
+        return f"/{instance_name}{cls.RPC_RESOURCES}/read"
 
     @classmethod
     def http_resource_read(cls, instance_name : str) -> str:
-        return f"/{instance_name}{cls.HTTP_RESOURCES}"
+        return f"/{instance_name}{cls.HTTP_RESOURCES}/read"
+    
+    @classmethod
+    def object_info_read(cls, instance_name : str) -> str: 
+        return f"/{instance_name}{cls.OBJECT_INFO}/read"
+    
+    @classmethod
+    def object_info_write(cls, instance_name : str) -> str: 
+        return f"/{instance_name}{cls.OBJECT_INFO}/write"
 
 
 class REGEX(StrEnum):
@@ -117,10 +127,6 @@ class ServerMessage(IntEnum):
     MESSAGE_TYPE = 3
     MESSAGE_ID = 4
     DATA = 5
-
-
-class ServerMessageData(StrEnum):
-    RETURN_VALUE = "returnValue"
 
 
 class ServerTypes(Enum):

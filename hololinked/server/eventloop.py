@@ -279,7 +279,9 @@ class EventLoop(RemoteObject):
     @classmethod
     async def execute_once(cls, instance_name : str, instance : RemoteObject, instruction_str : str, 
                            arguments : typing.Dict[str, typing.Any]) -> typing.Dict[str, typing.Any]:
-        resource = instance.instance_resources[instruction_str] 
+        resource = instance.instance_resources.get(instruction_str, None) 
+        if resource is None:
+            raise AttributeError(f"unknown remote resource represented by instruction {instruction_str}")
         if resource.iscallable:      
             if resource.state is None or (hasattr(instance, 'state_machine') and 
                             instance.state_machine.current_state in resource.state):

@@ -313,6 +313,8 @@ class ServerSentEvent(SerializableDataclass):
     ----------
     name : str
         name of the event, must be unique
+    obj_name: str
+        name of the event variable used to populate the RPC client
     socket_address : str
         address of the socket
     unique_identifier: str
@@ -320,6 +322,7 @@ class ServerSentEvent(SerializableDataclass):
     what: str, default EVENT
         is it a parameter, method or event?
     """
+    name : str
     obj_name : str 
     unique_identifier : str
     socket_address : str 

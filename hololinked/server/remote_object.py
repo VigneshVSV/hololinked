@@ -191,8 +191,11 @@ class StateMachine:
     current_state = property(get_state, set_state, None, 
         doc = """read and write current state of the state machine""")
 
-    def query(self, info : typing.Union[str, typing.List[str]] ) -> typing.Any:
-        raise NotImplementedError("arbitrary quering of {} not possible".format(self.__class__.__name__))
+    def has_object(self, object : typing.Union[RemoteParameter, typing.Callable]) -> bool:
+        for state, objects in self.machine.items():
+            if object in objects:
+                return True 
+        return False
     
 
 
@@ -276,7 +279,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
     events = RemoteParameter(readonly=True, URL_path='/events', 
                         doc="returns a dictionary with two fields containing event name and event information") # type: typing.Dict[str, typing.Any]
     object_info = RemoteParameter(doc="contains information about this object like the class name, script location etc.",
-                        readonly=True, URL_path='/info', fget = lambda self: self._object_info) # type: RemoteObjectDB.RemoteObjectInfo
+                        URL_path='/object-info') # type: RemoteObjectDB.RemoteObjectInfo
     GUI = ClassSelector(class_=ReactApp, default=None, allow_None=True, 
                         doc="GUI specified here will become visible at GUI tab of hololinked-portal dashboard tool") # type: typing.Optional[ReactApp]
     
@@ -369,7 +372,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
             resource._owner = self
             resource._prepare_resources()                 
             httpserver_resources.update(resource.httpserver_resources)
-            rpc_resources.update(resource.rpc_resources)
+            # rpc_resources.update(resource.rpc_resources)
             instance_resources.update(resource.instance_resources)
         # Events
         for name, resource in inspect.getmembers(self, lambda o : isinstance(o, Event)):
@@ -381,6 +384,7 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
             resource.publisher = self._event_publisher
             metadata = ServerSentEvent(
                                 # event URL_path has '/' prefix
+                                name=resource.name,
                                 obj_name=name,
                                 what=ResourceTypes.EVENT,
                                 unique_identifier=f"{self._full_URL_path_prefix}{resource.URL_path}",
@@ -434,25 +438,25 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
         self._httpserver_resources = httpserver_resources 
         self.instance_resources = instance_resources    
 
-    
-    def _create_object_info(self, script_path : typing.Optional[str] = None):
-        if not script_path:
-            try:
-                script_path = os.path.dirname(os.path.abspath(inspect.getfile(self.__class__)))
-            except:
-                script_path = ''
-        return RemoteObjectInformation(
+    @object_info.getter
+    def get_object_info(self):
+        if not hasattr(self, '_object_info'):
+            self._object_info = RemoteObjectInformation(
                     instance_name  = self.instance_name, 
                     class_name     = self.__class__.__name__,
-                    script         = script_path,
+                    script         = os.path.dirname(os.path.abspath(inspect.getfile(self.__class__))),
                     http_server    = "USER_MANAGED", 
                     kwargs         = "USER_MANAGED",  
                     eventloop_instance_name = "USER_MANAGED", 
                     level          = "USER_MANAGED", 
                     level_type     = "USER_MANAGED"
                 )  
+        return self._object_info
     
-
+    @object_info.setter
+    def set_object_info(self, value):
+        self._object_info = RemoteObjectInformation(**value)  
+      
     @property
     def _event_publisher(self) -> EventPublisher:
         try:
@@ -484,13 +488,14 @@ class RemoteSubobject(Parameterized, metaclass=RemoteObjectMeta):
         }
     
     @remote_method(http_method=HTTP_METHODS.GET, URL_path='/resources/postman-collection')
-    def postman_collection(self, domain_prefix : str) -> postman_collection:
-        return postman_collection.build(instance=self, domain_prefix=domain_prefix)
+    def postman_collection(self, domain_prefix : str = None) -> postman_collection:
+        return postman_collection.build(instance=self, 
+                    domain_prefix=domain_prefix if domain_prefix is not None else self._object_info.http_server)
     
     @thing_description.getter 
     def get_thing_description(self):
         from ..wot import ThingDescription
-        return ThingDescription().build(self)
+        return ThingDescription().build(self, self._object_info.http_server)
     
        
 
@@ -512,7 +517,10 @@ class RemoteObject(RemoteSubobject):
     json_serializer = ClassSelector(class_=(JSONSerializer, str), default=None, allow_None=True, remote=False,
                                 doc = """Serializer used for exchanging messages with a HTTP server,
                                 subclass JSONSerializer to implement your own serialization requirements.""") # type: JSONSerializer
- 
+    state = String(default=None, allow_None=True, URL_path='/state', readonly=True,
+                fget= lambda self :  self.state_machine.current_state  if hasattr(self, 'state_machine') else None,  
+                doc='current state machine state if state machine present') #type: type.Optional[str]
+       
     
     def __init__(self, *, instance_name : str, logger : typing.Optional[logging.Logger] = None, 
                 rpc_serializer : typing.Optional[BaseSerializer] = 'json', 
@@ -584,16 +592,15 @@ class RemoteObject(RemoteSubobject):
 
     def _prepare_DB(self, default_db : bool = False, config_file : str = None):
         if not default_db and not config_file: 
-            self._object_info = self._create_object_info()
+            self.object_info
             return 
         # 1. create engine 
         self.db_engine = RemoteObjectDB(instance=self, config_file=None if default_db else config_file, 
                                     serializer=self.rpc_serializer) # type: RemoteObjectDB 
         # 2. create an object metadata to be used by different types of clients
         object_info = self.db_engine.fetch_own_info()
-        if object_info is None:
-            object_info = self._create_object_info()
-        self._object_info = object_info
+        if object_info is not None:
+            self._object_info = object_info
         # 3. enter parameters to DB if not already present 
         if self.object_info.class_name != self.__class__.__name__:
             raise ValueError("Fetched instance name and class name from database not matching with the ", 
@@ -639,13 +646,6 @@ class RemoteObject(RemoteSubobject):
                 data[parameter] = self.parameters[parameter].__get__(self, type(self))
         return data 
 
-    @get('/state')    
-    def state(self):
-        if hasattr(self, 'state_machine'):
-            return self.state_machine.current_state
-        else:
-            return None
-    
     # Example of get and post decorator 
     @remote_method(URL_path='/exit', http_method=HTTP_METHODS.POST)                                                                                                                                          
     def exit(self) -> None:

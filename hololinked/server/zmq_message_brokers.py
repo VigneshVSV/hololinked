@@ -1149,7 +1149,8 @@ class BaseZMQClient(BaseZMQ):
         raise ex from None 
 
 
-    def parse_server_message(self, message : typing.List[bytes], raise_client_side_exception : bool = False) -> typing.Any:
+    def parse_server_message(self, message : typing.List[bytes], raise_client_side_exception : bool = False, 
+                                    deserialize : bool = True) -> typing.Any:
         """
         server's message to client: 
 
@@ -1172,10 +1173,11 @@ class BaseZMQClient(BaseZMQ):
        
         message_type = message[SM_INDEX_MESSAGE_TYPE]
         if message_type == REPLY:
-            if self.client_type == HTTP_SERVER:
-                message[SM_INDEX_DATA] = self.json_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
-            elif self.client_type == PROXY:
-                message[SM_INDEX_DATA] = self.rpc_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
+            if deserialize:
+                if self.client_type == HTTP_SERVER:
+                    message[SM_INDEX_DATA] = self.json_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
+                elif self.client_type == PROXY:
+                    message[SM_INDEX_DATA] = self.rpc_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
             return message 
         elif message_type == HANDSHAKE:
             self.logger.debug("""handshake messages arriving out of order are silently dropped as receiving this message 
@@ -1208,20 +1210,20 @@ class BaseZMQClient(BaseZMQ):
         """
         message_id = bytes(str(uuid4()), encoding='utf-8')
         if self.client_type == HTTP_SERVER:
-            timeout : bytes = self.json_serializer.dumps(timeout)
-            instruction : bytes = self.json_serializer.dumps(instruction)
+            timeout = self.json_serializer.dumps(timeout) # type: bytes
+            instruction = self.json_serializer.dumps(instruction) # type: bytes
             # TODO - following can be improved
             if arguments == b'':
-                arguments : bytes = self.json_serializer.dumps({}) 
+                arguments = self.json_serializer.dumps({}) # type: bytes
             elif not isinstance(arguments, byte_types):
-                arguments : bytes = self.json_serializer.dumps(arguments) 
-            context : bytes = self.json_serializer.dumps(context)
+                arguments = self.json_serializer.dumps(arguments) # type: bytes
+            context = self.json_serializer.dumps(context) # type: bytes
         elif self.client_type == PROXY:
-            timeout : bytes = self.rpc_serializer.dumps(timeout)
-            instruction : bytes = self.rpc_serializer.dumps(instruction)
+            timeout = self.rpc_serializer.dumps(timeout) # type: bytes
+            instruction = self.rpc_serializer.dumps(instruction) # type: bytes
             if not isinstance(arguments, byte_types):
-                arguments : bytes = self.rpc_serializer.dumps(arguments) 
-            context : bytes = self.rpc_serializer.dumps(context)
+                arguments = self.rpc_serializer.dumps(arguments) # type: bytes
+            context = self.rpc_serializer.dumps(context)
               
         return [
             self.server_address, 
@@ -1335,7 +1337,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                                                     self.server_instance_name, message[SM_INDEX_MESSAGE_ID]))
         return message[SM_INDEX_MESSAGE_ID]
     
-    def recv_reply(self, raise_client_side_exception : bool = False) -> typing.List[typing.Union[
+    def recv_reply(self, raise_client_side_exception : bool = False, deserialize : bool = True) -> typing.List[typing.Union[
                                                                             bytes, typing.Dict[str, typing.Any]]]:
         """
         Receives reply from server. Messages are identified by message id, so call this method immediately after 
@@ -1349,7 +1351,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             See docs of ``raise_local_exception()`` for info on exception 
         """
         while True:
-            reply = self.parse_server_message(self.socket.recv_multipart(), raise_client_side_exception) # type: ignore
+            reply = self.parse_server_message(self.socket.recv_multipart(), raise_client_side_exception, deserialize) # type: ignore
             if reply:
                 self.logger.debug("received reply with msg-id {}".format(reply[SM_INDEX_MESSAGE_ID]))
                 return reply
@@ -1528,7 +1530,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                                                             self.server_instance_name, message[SM_INDEX_MESSAGE_ID]))
         return message[SM_INDEX_MESSAGE_ID]
     
-    async def async_recv_reply(self, raise_client_side_exception : bool) -> typing.List[typing.Union[bytes, 
+    async def async_recv_reply(self, raise_client_side_exception : bool, deserialize : bool = True) -> typing.List[typing.Union[bytes, 
                                                                                     typing.Dict[str, typing.Any]]]:
         """
         Receives reply from server. Messages are identified by message id, so call this method immediately after 
@@ -1542,7 +1544,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             See docs of ``raise_local_exception()`` for info on exception 
         """
         while True:
-            reply = self.parse_server_message(await self.socket.recv_multipart(), raise_client_side_exception)# [2] # type: ignore
+            reply = self.parse_server_message(await self.socket.recv_multipart(), raise_client_side_exception, deserialize)# [2] # type: ignore
             if reply:
                 self.logger.debug("received reply with message-id {}".format(reply[SM_INDEX_MESSAGE_ID]))
                 return reply
@@ -1596,7 +1598,8 @@ class MessageMappedZMQClientPool(BaseZMQClient):
     """
 
     def __init__(self, server_instance_names: typing.List[str], identity: str, poll_timeout = 25, 
-                protocol : str = 'IPC', client_type = HTTP_SERVER, **serializer) -> None:
+                protocol : str = 'IPC', client_type = HTTP_SERVER, deserialize_server_messages : bool= True, 
+                **serializer) -> None:
         self.identity = identity 
         self.logger = self.get_logger(identity, 'pooled', logging.DEBUG)
         # this class does not call create_socket method
@@ -1618,7 +1621,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         self.cancelled_messages = []
         self.poll_timeout = poll_timeout
         self.stop_poll = False 
-
+        self._deserialize_server_messages = deserialize_server_messages
 
     def create_new(self, server_instance_name : str, protocol : str = 'IPC') -> None:
         """
@@ -1666,7 +1669,8 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             for socket, _ in sockets:
                 while True:
                     try:
-                        reply = self.parse_server_message(await socket.recv_multipart(zmq.NOBLOCK))
+                        reply = self.parse_server_message(await socket.recv_multipart(zmq.NOBLOCK), 
+                                                    deserialize=self._deserialize_server_messages)
                     except zmq.Again:
                         # errors in handle_message should reach the client. 
                         break

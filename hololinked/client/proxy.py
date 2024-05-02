@@ -312,7 +312,12 @@ class ObjectProxy:
         return await parameter.async_get()
 
 
-    def set_parameters(self, parameter : str, value : typing.Any, oneway : bool) -> None:
+    def set_parameters(self, values : typing.Dict[str, typing.Any], oneway : bool) -> None:
+        if not isinstance(values, dict):
+            raise ValueError("set_parameters values must be dictionary with parameter names as key")
+        for name in values.keys():
+            if not isinstance(getattr(self, name), _RemoteParameter):
+                raise AttributeError(f"remote parameter {name} does not belong to object")
         parameter = getattr(self, parameter, None) # type: _RemoteParameter
         if not isinstance(parameter, _RemoteParameter):
             raise AttributeError(f"No remote parameter named {parameter}")
@@ -356,7 +361,6 @@ class ObjectProxy:
                                     self._invokation_timeout) # type: _RemoteMethod
         reply = fetch() # type: typing.Dict[str, typing.Dict[str, typing.Any]]
 
-        allowed_events = []
         for name, data in reply.items():
             if isinstance(data, dict):
                 try:
@@ -379,9 +383,9 @@ class ObjectProxy:
                                                 self.execution_timeout, self._async_zmq_client), data)
             elif data.what == ResourceTypes.EVENT:
                 assert isinstance(data, ServerSentEvent)
-                _add_event(self, _Event(self._zmq_client, data.obj_name, data.unique_identifier, data.socket_address), data)
-        self._events = {}
-
+                event = _Event(self._zmq_client, data.obj_name, data.unique_identifier, data.socket_address)
+                _add_event(self, event, data)
+                self.__dict__[data.name] = event 
 
 
 # SM = Server Message
@@ -501,10 +505,11 @@ class _RemoteParameter:
 class _Event:
     """event streaming"""
 
-    def __init__(self, client : SyncZMQClient, name : str, unique_identifier : str, socket : str, 
+    def __init__(self, client : SyncZMQClient, name : str, obj_name : str, unique_identifier : str, socket : str, 
                     serializer : BaseSerializer = None) -> None:
         self._zmq_client = client 
         self._name = name
+        self._obj_name = obj_name
         self._unique_identifier = unique_identifier
         self._socket_address = socket
         self._callbacks = None 
@@ -530,7 +535,6 @@ class _Event:
         self._thread.start()
 
     def listen(self):
-        print("started event")
         while self._subscribed:
             try:
                 data = self._event_consumer.receive()

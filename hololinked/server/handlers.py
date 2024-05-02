@@ -37,23 +37,25 @@ class BaseHandler(RequestHandler):
         """
         merges all arguments to a single JSON body and retrieves execution context and timeouts
         """
-        arguments = {}
-        print(self.request)
-        if len(self.request.query_arguments) >= 1:
-            for key, value in self.request.query_arguments.items():
-                if len(value) == 1:
-                    arguments[key] = self.serializer.loads(value[0]) 
-                else:
-                    arguments[key] = [self.serializer.loads(val) for val in value]
         if len(self.request.body) > 0:
-            arguments.update(self.serializer.loads(self.request.body))
-        context = dict(fetch_execution_logs=arguments.pop('fetch_execution_logs', False))
-        timeout = arguments.pop('timeout', None)
-        if timeout is not None and timeout < 0:
-            timeout = None
-        if self.resource.request_as_argument:
-            arguments['request'] = self.request
-        return arguments, context, timeout
+            arguments = self.serializer.loads(self.request.body)
+        else:
+            arguments = dict()
+        if isinstance(arguments, dict):
+            if len(self.request.query_arguments) >= 1:
+                for key, value in self.request.query_arguments.items():
+                    if len(value) == 1:
+                        arguments[key] = self.serializer.loads(value[0]) 
+                    else:
+                        arguments[key] = [self.serializer.loads(val) for val in value]
+            context = dict(fetch_execution_logs=arguments.pop('fetch_execution_logs', False))
+            timeout = arguments.pop('timeout', None)
+            if timeout is not None and timeout < 0:
+                timeout = None
+            if self.resource.request_as_argument:
+                arguments['request'] = self.request
+            return arguments, context, timeout
+        return arguments, dict(), 5 # arguments, context is empty, 5 seconds invokation timeout
     
     @property
     def has_access_control(self):
@@ -150,7 +152,6 @@ class RPCHandler(BaseHandler):
         else:
             try:
                 arguments, context, timeout = self.get_execution_parameters()
-                print("arguments", arguments)
                 reply = await self.zmq_client_pool.async_execute(self.resource.instance_name, 
                                         self.resource.instructions.__dict__[http_method], arguments,
                                         context=context, raise_client_side_exception=False, 
@@ -310,8 +311,8 @@ class RemoteObjectsHandler(BaseHandler):
         return super().initialize(resource, zmq_client_pool, json_serializer, logger, allowed_clients)
 
     async def get(self):
-        with self.async_session() as session:
-            pass
+        self.set_status(404)
+        self.finish()
     
     async def post(self):
         if not self.has_access_control:
@@ -323,7 +324,7 @@ class RemoteObjectsHandler(BaseHandler):
                                             request_handler=self.request_handler, event_handler=self.event_handler,
                                             json_serializer=self.serializer, logger=self.logger, 
                                             allowed_clients=self.allowed_clients)
-                self.set_status(200, "ok")
+                self.set_status(204, "ok")
             except Exception as ex:
                 self.set_status(500, str(ex))
             self.set_headers()
