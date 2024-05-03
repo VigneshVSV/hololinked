@@ -10,22 +10,22 @@
 Development Notes
 =================
 
-|module-highlighted| is fundamentally a Object Oriented ZeroMQ RPC with control over which attributes, methods 
-and events are exposed on the network. Nevertheless, a non-trivial support for HTTP exists in an attempt to cast 
+|module-highlighted| is fundamentally a Object Oriented ZeroMQ RPC with control over the attributes, methods 
+and events that are exposed on the network. Nevertheless, a non-trivial support for HTTP exists in an attempt to cast 
 atleast certain aspects of instrumentation control & data-acquisition for web development practices, without having to 
 explicitly implement a HTTP server. The following is possible with significantly lesser code:  
 
 * |module-highlighted| gives the freedom to choose the HTTP request method & end-point URL desirable for
-  each method, parameter/attribute and event
+  parameter/attribute, method and event
 * All HTTP requests will be automatically queued and executed serially by the RPC server unless threaded or 
   made async by the developer
 * JSON serialization-deserialization overheads while tunneling HTTP requests through the RPC server  
   are reduced to a minimum. 
-* web request handlers may be modified to change headers, authentication etc. or add additional 
-  endpoints which may cast resources to REST-like while leaving the RPC details to the package
 * Events pushed by the object will be automatically tunneled as HTTP server sent events
 
-One uses exposed object members as follows: 
+Further web request handlers may be modified to change headers, authentication etc. or add additional 
+endpoints which may cast resources to REST-like while leaving the RPC details to the package. One uses exposed object 
+members as follows: 
 
 * parameters can be used to model settings of instrumentation (both hardware and software-only), 
   general class/instance attributes, hold captured & computed data
@@ -87,9 +87,6 @@ Considering an example device like a spectrometer, the table above may dictate t
      - 
      - 
 
-If one wants further inspiration how to use this module, one may refer to W3C Web of Things 
-`Architecture <https://www.w3.org/TR/wot-architecture/#sec-interaction-model>`_ and
-`Thing Description <https://www.w3.org/TR/wot-thing-description11/>`_, where the ``Thing`` maps to base class ``RemoteObject``
 
 Further, plain RPC calls directly through object proxy are possible without the details of HTTP.
 
