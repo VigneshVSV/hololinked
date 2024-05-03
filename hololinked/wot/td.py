@@ -52,10 +52,10 @@ class Schema:
     
 
 
-class SchemaTypes:
+class JSONSchema:
     """type restrictor converting python types to JSON schema types"""
 
-    _allowed_schema_types = ('string', 'object', 'array',  'number', 'integer', 'boolean', 'null')
+    _allowed_types = ('string', 'object', 'array',  'number', 'integer', 'boolean', 'null')
 
     _replacements = {
         int : 'integer',
@@ -68,26 +68,52 @@ class SchemaTypes:
         type(None) : 'null'
     }
 
+    _schemas = {
+
+    }
+
     @classmethod
     def is_allowed_type(cls, type : typing.Any) -> bool: 
-        if type in SchemaTypes._replacements.keys():
+        if type in JSONSchema._replacements.keys():
             return True 
         return False 
     
     @classmethod
-    def get_allowed_type(cls, type : typing.Any) -> str:
-        if not SchemaTypes.is_allowed_type(type):
-            raise TypeError(f"Object for wot-td has invalid type for JSON conversion. Given type - {type(object)}." +
-                                "use SchemaTypes.register_replacements on hololinked.wot.td.SchemaTypes object to recognise the type.")
-        return SchemaTypes._replacements[type]
-
+    def get_type(cls, typ : typing.Any) -> str:
+        if not JSONSchema.is_allowed_type(typ):
+            raise TypeError(f"Object for wot-td has invalid type for JSON conversion. Given type - {type(typ)}. " +
+                                "Use JSONSchema.register_replacements on hololinked.wot.td.JSONSchema object to recognise the type.")
+        return JSONSchema._replacements[typ]
+    
     @classmethod
-    def register_replacement(self, type : typing.Any, json_schema_type : str) -> None:
-        if not json_schema_type in SchemaTypes._allowed_schema_types:
-            SchemaTypes._replacements[type] = json_schema_type
+    def register_type_replacement(self, type : typing.Any, json_schema_type : str, 
+                                schema : typing.Optional[typing.Dict[str, JSONSerializable]] = None) -> None:
+        """
+        specify a python type as a JSON type.
+        schema only supported for array and objects. 
+        """
+        if json_schema_type in JSONSchema._allowed_types:
+            JSONSchema._replacements[type] = json_schema_type
+            if schema is not None:
+                if json_schema_type not in ('array', 'object'):
+                    raise ValueError(f"schemas support only for array and object JSON schema types, your specified type - {type}.")
+                JSONSchema._schemas[type] = schema
         else:
             raise TypeError(f"json schema replacement type must be one of allowed type - 'string', 'object', 'array', 'string', " +
                                 f"'number', 'integer', 'boolean', 'null'. Given value {json_schema_type}")
+
+    @classmethod
+    def is_supported(cls, typ: typing.Any) -> bool:
+        if typ in JSONSchema._schemas.keys():
+            return True 
+        return False 
+    
+    @classmethod
+    def get(cls, typ : typing.Any):
+        """schema for array and objects only supported"""
+        if not JSONSchema.is_supported(typ):
+            raise ValueError(f"Schema for {typ} not provided. register one with JSONSchema.register_type_replacement()")
+        return JSONSchema._schemas[typ]
 
 
 
@@ -126,7 +152,7 @@ class DataSchema(Schema):
     format : typing.Optional[str]
     unit : typing.Optional[str]
     type : str
-    oneOf : typing.Optional[typing.List[Schema]]
+    oneOf : typing.Optional[typing.List[typing.Dict[str, JSONSerializable]]]
     enum : typing.Optional[typing.List[typing.Any]]
 
     def __init__(self):
@@ -204,7 +230,7 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
             schema = ArraySchema()
         elif isinstance(property, Selector):
             schema = EnumSchema()
-        elif isinstance(property, TypedDict):
+        elif isinstance(property, (TypedDict, TypedKeyMappingsDict)):
             schema = ObjectSchema()       
         elif isinstance(property, ClassSelector):
             schema = OneOfSchema()
@@ -306,6 +332,8 @@ class ArraySchema(PropertyAffordance):
     """
 
     items : typing.Optional[typing.Dict[str, JSONSerializable]]
+    minItems : typing.Optional[int]
+    maxItems : typing.Optional[int]
 
     def __init__(self):
         super().__init__()
@@ -315,18 +343,23 @@ class ArraySchema(PropertyAffordance):
         self.type = 'array'
         PropertyAffordance.build(self, property, owner, authority)
         self.items = []
-        if isinstance(property, (List, Tuple, TypedList)):
+        if isinstance(property, (List, Tuple, TypedList)) and property.item_type is not None:
+            if property.bounds:
+                if property.bounds[0]:
+                    self.minItems = property.bounds[0]
+                if property.bounds[1]:
+                    self.maxItems = property.bounds[1]
             if isinstance(property.item_type, (list, tuple)):
                 for typ in property.item_type:
-                    self.items.append(dict(type=SchemaTypes.get_allowed_type(typ)))
+                    self.items.append(dict(type=JSONSchema.get_type(typ)))
             else: 
-                self.items.append(dict(type=SchemaTypes.get_allowed_type(property.item_type)))
+                self.items.append(dict(type=JSONSchema.get_type(property.item_type)))
         elif isinstance(property, TupleSelector):
             objects = list(property.objects)
             for obj in objects:
-                if any(types["type"] == SchemaTypes._replacements.get(type(obj), None) for types in self.items):
+                if any(types["type"] == JSONSchema._replacements.get(type(obj), None) for types in self.items):
                     continue 
-                self.items.append(dict(type=SchemaTypes.get_allowed_type(type(obj))))
+                self.items.append(dict(type=JSONSchema.get_type(type(obj))))
             
 
 @dataclass
@@ -335,14 +368,35 @@ class ObjectSchema(PropertyAffordance):
     object schema - https://www.w3.org/TR/wot-thing-description11/#objectschema
     Used by TypedDict
     """
+    properties : typing.Optional[typing.Dict[str, JSONSerializable]]
+    required : typing.Optional[typing.List[str]]
 
     def __init__(self):
         super().__init__()
         
     def build(self, property: Property, owner: Thing, authority: str) -> None:
         """generates the schema"""
-        self.type = 'object'
         PropertyAffordance.build(self, property, owner, authority)
+        properties = None 
+        required = None 
+        if hasattr(property, 'json_schema'):
+            # Code will not reach here for now as have not implemented schema for typed dictionaries. 
+            properties = property.json_schema["properties"]
+            if property.json_schema.get("required", NotImplemented) is not NotImplemented:
+                required = property.json_schema["required"] 
+        if not property.allow_None:
+            self.type = 'object'
+            if properties:
+                self.properties = properties
+            if required:
+                self.required = required
+        else:
+            schema = dict(type='object')
+            if properties:
+                schema['properties'] = properties
+            if required:
+                schema['required'] = required
+            self.oneOf.append(schema)
 
 
 @dataclass
@@ -351,6 +405,13 @@ class OneOfSchema(PropertyAffordance):
     custom schema to deal with ClassSelector to fill oneOf field correctly
     https://www.w3.org/TR/wot-thing-description11/#dataschema
     """
+    properties : typing.Optional[typing.Dict[str, JSONSerializable]]
+    required : typing.Optional[typing.List[str]]
+    items : typing.Optional[typing.Dict[str, JSONSerializable]]
+    minItems : typing.Optional[int]
+    maxItems : typing.Optional[int]
+    # ClassSelector can technically have a JSON serializable as a class_
+
     def __init__(self):
         super().__init__()
 
@@ -358,17 +419,50 @@ class OneOfSchema(PropertyAffordance):
         """generates the schema"""
         self.oneOf = []
         if isinstance(property, ClassSelector):
-            objects = list(property.class_)
-        if isinstance(property, Selector):
+            if not property.isinstance:
+                raise NotImplementedError("WoT TD for ClassSelector with isinstance set to True is not supported yet. "  +
+                                          "Consider user this parameter in a different way.")
+            if isinstance(property.class_, (list, tuple)):
+                objects = list(property.class_)
+            else:
+                objects = [property.class_]
+        elif isinstance(property, Selector):
             objects = list(property.objects)
+        else:
+            raise TypeError(f"EnumSchema and OneOfSchema supported only for Selector and ClassSelector. Given Type - {property}")
         for obj in objects:
-            if any(types["type"] == SchemaTypes._replacements.get(type(obj), None) for types in self.oneOf):
+            if any(types["type"] == JSONSchema._replacements.get(type(obj), None) for types in self.oneOf):
                 continue 
-            self.oneOf.append(dict(type=SchemaTypes.get_allowed_type(type(obj))))
-        if len(self.oneOf) == 1:
-            self.type = self.oneOf[0]["type"]
-            del self.oneOf
+            if isinstance(property, ClassSelector):
+                if not JSONSchema.is_allowed_type(obj):
+                    raise TypeError(f"Object for wot-td has invalid type for JSON conversion. Given type - {obj}. " +
+                                "Use JSONSchema.register_replacements on hololinked.wot.td.JSONSchema object to recognise the type.")
+                subschema = dict(type=JSONSchema.get_type(obj))
+                if JSONSchema.is_supported(obj):
+                    subschema.update(JSONSchema.get(obj))
+                self.oneOf.append(subschema)
+            elif isinstance(property, Selector):
+                self.oneOf.append(dict(type=JSONSchema.get_type(type(obj))))
         PropertyAffordance.build(self, property, owner, authority)
+        self.cleanup()
+
+    def cleanup(self):
+        if len(self.oneOf) == 1:
+            oneOf = self.oneOf[0]
+            self.type = oneOf["type"]
+            if oneOf["type"] == 'object':
+                if oneOf.get("properites", NotImplemented) is not NotImplemented:
+                    self.properties = oneOf["properties"]
+                if oneOf.get("required", NotImplemented) is not NotImplemented:
+                    self.required = oneOf["required"]
+            elif oneOf["type"] == 'array':
+                if oneOf.get("items", NotImplemented) is not NotImplemented:
+                    self.items = oneOf["items"]
+                if oneOf.get("maxItems", NotImplemented) is not NotImplemented:
+                    self.minItems = oneOf["minItems"]
+                if oneOf.get("maxItems", NotImplemented) is not NotImplemented:
+                    self.maxItems = oneOf["maxItems"]
+            del self.oneOf
 
 
 class EnumSchema(OneOfSchema):
@@ -439,8 +533,6 @@ class Form(Schema):
     def __init__(self):
         super().__init__()
 
-    def build(self, object):
-        return self.asdict()
     
     
 @dataclass
@@ -449,8 +541,8 @@ class ActionAffordance(InteractionAffordance):
     creates action affordance schema from actions (or methods).
     schema - https://www.w3.org/TR/wot-thing-description11/#actionaffordance
     """
-    input : object 
-    output : object 
+    input : typing.Dict[str, JSONSerializable]
+    output : typing.Dict[str, JSONSerializable]
     safe : bool
     idempotent : bool 
     synchronous : bool 
@@ -468,7 +560,8 @@ class ActionAffordance(InteractionAffordance):
         if action.__doc__:
             self.description = self.format_doc(action.__doc__)
         self.safe = True 
-        if hasattr(owner, 'state_machine') and owner.state_machine is not None and owner.state_machine.has_object(action):
+        if (hasattr(owner, 'state_machine') and owner.state_machine is not None and 
+                owner.state_machine.has_object(action._remote_info.obj)):
             self.idempotent = False 
         else:
             self.idempotent = True      
@@ -588,7 +681,7 @@ class ThingDescription(Schema):
         self.context = "https://www.w3.org/2022/wot/td/v1.1"
         self.id = f"{authority}/{instance.instance_name}"
         self.title = instance.__class__.__name__ 
-        self.description = self.format_doc(instance.__doc__) if instance.__doc__ else "no classdoc provided" 
+        self.description = Schema.format_doc(instance.__doc__) if instance.__doc__ else "no class doc provided" 
         self.properties = dict()
         self.actions = dict()
         self.events = dict()
@@ -616,5 +709,6 @@ class ThingDescription(Schema):
         
         
 __all__ = [
-    ThingDescription.__name__
+    ThingDescription.__name__,
+    JSONSchema.__name__
 ]
