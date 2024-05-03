@@ -31,10 +31,9 @@ members as follows:
   general class/instance attributes, hold captured & computed data
 * methods can be used to issue commands to instruments like start and stop acquisition, connect/disconnect etc.
 * events can be used to push measured data, create alerts/alarms, inform availability of certain type of data etc.
-* Verb like URLs may be used for methods (acts like HTTP-RPC although ZeroMQ mediates this) & noun-like URLs are 
-  may be used for parameters and events. 
 
-HTTP request methods may be mapped as follows:
+Verb like URLs may be used for methods (acts like HTTP-RPC although ZeroMQ mediates this) & noun-like URLs may be used 
+for parameters and events. Further, HTTP request methods may be mapped as follows:
 
 .. list-table:: 
    :header-rows: 1
@@ -86,8 +85,13 @@ Considering an example device like a spectrometer, the table above may dictate t
      - set integration time onto device
      - 
      - 
+   * - PATCH 
+     - edit integration time bound values 
+     - 
+     - 
 
 
-Further, plain RPC calls directly through object proxy are possible without the details of HTTP.
+Further, plain RPC calls directly through object proxy are possible without the details of HTTP. This is directly mediated 
+by ZeroMQ. 
 
 
