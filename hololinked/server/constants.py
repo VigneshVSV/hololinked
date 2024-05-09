@@ -21,21 +21,12 @@ UNSPECIFIED : str = "UNSPECIFIED"
 class ResourceTypes(StrEnum):
     "Exposed resource types"
 
-    FUNC  = "FUNC"
-    ATTRIBUTE = "ATTRIBUTE"
     PARAMETER = "PARAMETER"
-    IMAGE_STREAM = "IMAGE_STREAM"
     CALLABLE = "CALLABLE"
-    FILE = "FILE"
     EVENT = "EVENT"
+    IMAGE_STREAM = "IMAGE_STREAM"
+    FILE = "FILE"
 
-
-class ResourceOperations(StrEnum):
-    "some common eventloop side operations"
-
-    PARAMETER_READ = "read"
-    PARAMETER_WRITE = "write"
-    PARAMETER_DELETE = "delete"
 
 
 class CommonRPC(StrEnum):

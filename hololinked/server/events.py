@@ -3,11 +3,20 @@ import threading
 
 from ..param import Parameterized
 from .zmq_message_brokers import EventPublisher
+from .data_classes import ServerSentEvent
+
 
 
 class Event:
     """
     Asynchronously push arbitrary messages to clients. 
+
+    Parameters
+    ----------
+    name: str
+        name of the event. specified name may contain dashes and can be used on client side to subscribe to this event.
+    URL_path: str
+        url path of the event if a HTTP server is used. only GET HTTP methods are supported. 
     """
 
     def __init__(self, name : str, URL_path : typing.Optional[str] = None) -> None:
@@ -16,6 +25,7 @@ class Event:
         self.URL_path = URL_path or '/' + name
         self._unique_identifier = None # type: typing.Optional[str]
         self._owner = None  # type: typing.Optional[Parameterized]
+        self._remote_info = None # type: typing.Optional[ServerSentEvent]
         # above two attributes are not really optional, they are set later. 
 
     @property

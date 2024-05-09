@@ -55,7 +55,7 @@ class Schema:
 class JSONSchema:
     """type restrictor converting python types to JSON schema types"""
 
-    _allowed_types = ('string', 'object', 'array',  'number', 'integer', 'boolean', 'null')
+    _allowed_types = ('string', 'object', 'array',  'number', 'integer', 'boolean', None)
 
     _replacements = {
         int : 'integer',
@@ -145,7 +145,7 @@ class DataSchema(Schema):
     titles : typing.Optional[typing.Dict[str, str]]
     description : str
     descriptions : typing.Optional[typing.Dict[str, str]] 
-    const : bool
+    constant : bool
     default : typing.Optional[typing.Any] 
     readOnly : bool
     writeOnly : bool
@@ -161,7 +161,7 @@ class DataSchema(Schema):
     def build(self, property : Property, owner : Thing, authority : str) -> None:
         """generates the schema"""
         self.title = property.name # or property.label
-        self.const = property.constant
+        self.constant = property.constant
         self.readOnly = property.readonly
         self.writeOnly = False
         
@@ -171,14 +171,14 @@ class DataSchema(Schema):
             self.description = Schema.format_doc(property.doc)
         if property.metadata and property.metadata.get("unit", None) is not None:
             self.unit = property.metadata["unit"]
-        if property.allow_None:
-            if not hasattr(self, 'oneOf'):
-                self.oneOf = []
-            if hasattr(self, 'type'):
-                self.oneOf.append(dict(type=self.type))
-                del self.type
-            if not any(types["type"] == "null" for types in self.oneOf):
-                self.oneOf.append(dict(type="null"))
+        # if property.allow_None:
+        #     if not hasattr(self, 'oneOf'):
+        #         self.oneOf = []
+        #     if hasattr(self, 'type'):
+        #         self.oneOf.append(dict(type=self.type))
+        #         del self.type
+        #     if not any(types["type"] == None for types in self.oneOf):
+        #         self.oneOf.append(dict(type=None))
 
 
 
@@ -360,6 +360,8 @@ class ArraySchema(PropertyAffordance):
                 if any(types["type"] == JSONSchema._replacements.get(type(obj), None) for types in self.items):
                     continue 
                 self.items.append(dict(type=JSONSchema.get_type(type(obj))))
+        if len(self.items) > 1:
+            self.items = dict(oneOf=self.items)
             
 
 @dataclass
@@ -442,6 +444,8 @@ class OneOfSchema(PropertyAffordance):
                     subschema.update(JSONSchema.get(obj))
                 self.oneOf.append(subschema)
             elif isinstance(property, Selector):
+                if JSONSchema.get_type(type(obj)) == "null":
+                    continue
                 self.oneOf.append(dict(type=JSONSchema.get_type(type(obj))))
         PropertyAffordance.build(self, property, owner, authority)
         self.cleanup()
@@ -677,7 +681,8 @@ class ThingDescription(Schema):
     def __init__(self):
         super().__init__()
     
-    def build(self, instance : Thing, authority = f"https://{socket.gethostname()}:8080") -> typing.Dict[str, typing.Any]: 
+    def build(self, instance : Thing, authority = f"https://{socket.gethostname()}:8080", 
+                    allow_loose_schema : typing.Optional[bool] = False) -> typing.Dict[str, typing.Any]: 
         self.context = "https://www.w3.org/2022/wot/td/v1.1"
         self.id = f"{authority}/{instance.instance_name}"
         self.title = instance.__class__.__name__ 

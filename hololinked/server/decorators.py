@@ -81,6 +81,7 @@ def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_MET
             obj._remote_info.iscoroutine = iscoroutinefunction(obj)
             obj._remote_info.argument_schema = argument_schema
             obj._remote_info.return_value_schema = return_value_schema
+            obj._remote_info.obj = original
             return original
         else:
             raise TypeError(

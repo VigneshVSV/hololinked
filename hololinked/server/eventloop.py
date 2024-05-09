@@ -9,13 +9,15 @@ import threading
 import logging
 from uuid import uuid4
 
-from .constants import ResourceOperations, HTTP_METHODS
+
+from .constants import HTTP_METHODS
 from .config import *
 from .webserver_utils import format_exception_as_json
 from .remote_parameters import TypedDict
 from .decorators import remote_method
 from .exceptions import *
 from .remote_object import *
+from .logger import ListHandler
 from .remote_object import RemoteObjectMeta
 from .zmq_message_brokers import ServerTypes 
 from .remote_parameter import RemoteParameter
@@ -38,13 +40,13 @@ class Consumer:
     Container class for RemoteObject to pass to eventloop for multiprocessing applications in case 
     of rare needs. 
     """
-    consumer = ClassSelector(default=None, allow_None=True, class_=RemoteObject, isinstance=False,
+    object_cls = ClassSelector(default=None, allow_None=True, class_=RemoteObject, isinstance=False,
                             remote=False)
     args = List(default=None, allow_None=True, accept_tuple=True, remote=False)
     kwargs = TypedDict(default=None, allow_None=True, key_type=str, remote=False)
    
-    def __init__(self, consumer : typing.Type[RemoteObject], args : typing.Tuple = tuple(), **kwargs) -> None:
-        self.consumer = consumer
+    def __init__(self, object_cls : typing.Type[RemoteObject], args : typing.Tuple = tuple(), **kwargs) -> None:
+        self.object_cls = object_cls
         self.args = args 
         self.kwargs = kwargs
 
@@ -58,29 +60,34 @@ class EventLoop(RemoteObject):
     """
     server_type = ServerTypes.EVENTLOOP
 
+    expose = Boolean(default=True, remote=False,
+                     doc="""set to False to use the object locally to avoid alloting network resources 
+                        of your computer for this object""")
+
     remote_objects = TypedList(item_type=(RemoteObject, Consumer), bounds=(0,100), allow_None=True, default=None,
                         doc="list of RemoteObjects which are being executed", remote=False) #type: typing.List[RemoteObject]
     
     threaded = Boolean(default=False, remote=False, 
                         doc="set True to run each remote object in its own thread")
   
-    def __new__(cls, **kwargs):
-        obj = super().__new__(cls, **kwargs)
-        obj._internal_fixed_attributes.append('_message_broker_pool')
-        return obj
 
-    def __init__(self, *, instance_name : str, 
-            remote_objects : typing.Union[RemoteObject, Consumer, typing.List[typing.Union[RemoteObject, Consumer]]] = list(), # type: ignore - requires covariant types
-            log_level : int = logging.INFO, **kwargs) -> None:
+    def __init__(self, *, 
+                instance_name : str, 
+                remote_objects : typing.Union[RemoteObject, Consumer, typing.List[typing.Union[RemoteObject, Consumer]]] = list(), # type: ignore - requires covariant types
+                log_level : int = logging.INFO, 
+                **kwargs
+            ) -> None:
         super().__init__(instance_name=instance_name, remote_objects=remote_objects, log_level=log_level, **kwargs)
-        remote_objects : typing.List[RemoteObject] = [self]
+        remote_objects = [] # type: typing.List[RemoteObject]
+        if self.expose:
+            remote_objects.append(self) 
         if self.remote_objects is not None:
             for consumer in self.remote_objects:
                 if isinstance(consumer, RemoteObject):
                     remote_objects.append(consumer)
-                    consumer.object_info.eventloop_name = self.instance_name
+                    consumer.object_info.eventloop_instance_name = self.instance_name
                 elif isinstance(consumer, Consumer):
-                    instance = consumer.consumer(*consumer.args, **consumer.kwargs, 
+                    instance = consumer.object_cls(*consumer.args, **consumer.kwargs, 
                                             eventloop_name=self.instance_name)
                     remote_objects.append(instance) 
         self.remote_objects = remote_objects # re-assign the instantiated objects as well
@@ -156,7 +163,7 @@ class EventLoop(RemoteObject):
         consumer = self.uninstantiated_remote_objects[id]
         instance = consumer(**kwargs, eventloop_name=self.instance_name) # type: RemoteObject
         self.remote_objects.append(instance)
-        rpc_server = instance._rpc_server
+        rpc_server = instance.rpc_server
         self.request_listener_loop.call_soon(asyncio.create_task(lambda : rpc_server.poll()))
         self.request_listener_loop.call_soon(asyncio.create_task(lambda : rpc_server.tunnel_message_to_remote_objects()))
         if not self.threaded:
@@ -201,7 +208,7 @@ class EventLoop(RemoteObject):
         Please dont call this method when the async loop is already running. 
         """
         self.request_listener_loop = self.get_async_loop()
-        rpc_servers = [remote_object._rpc_server for remote_object in self.remote_objects]
+        rpc_servers = [remote_object.rpc_server for remote_object in self.remote_objects]
         methods = [] #type: typing.List[asyncio.Future]
         for rpc_server in rpc_servers:
             methods.append(rpc_server.poll())
@@ -295,21 +302,23 @@ class EventLoop(RemoteObject):
                     return func(*args, **arguments)
             else: 
                 raise StateMachineError("RemoteObject '{}' is in '{}' state, however command can be executed only in '{}' state".format(
-                        instance_name, instance.state(), resource.state))
+                        instance_name, instance.state, resource.state))
         
         elif resource.isparameter:
             action = instruction_str.split('/')[-1]
             parameter = resource.obj # type: RemoteParameter
             owner_inst = resource.bound_obj # type: RemoteObject
-            if action == ResourceOperations.PARAMETER_WRITE: 
+            if action == "write": 
                 if resource.state is None or (hasattr(instance, 'state_machine') and  
                                         instance.state_machine.current_state in resource.state):
                     return parameter.__set__(owner_inst, arguments["value"])
                 else: 
                     raise StateMachineError("RemoteObject {} is in `{}` state, however attribute can be written only in `{}` state".format(
                         instance_name, instance.state_machine.current_state, resource.state))
-            elif action == ResourceOperations.PARAMETER_READ:
+            elif action == "read":
                 return parameter.__get__(owner_inst, type(owner_inst))             
+            elif action == "delete":
+                return parameter.deleter() # this may not be correct yet
         raise NotImplementedError("Unimplemented execution path for RemoteObject {} for instruction {}".format(instance_name, instruction_str))
 
 

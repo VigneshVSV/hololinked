@@ -3,8 +3,9 @@ import warnings
 import typing 
 import logging
 import uuid
+import zmq
 
-from ..server.constants import JSON, CommonRPC, ServerMessage, ResourceTypes
+from ..server.constants import JSON, CommonRPC, ServerMessage, ResourceTypes, ZMQ_PROTOCOLS
 from ..server.utils import current_datetime_ms_str
 from ..server.serializers import BaseSerializer
 from ..server.data_classes import RPCResource, ServerSentEvent
@@ -20,25 +21,29 @@ class ObjectProxy:
     Parameters
     ----------
     instance_name: str
-        instance name of the server
+        instance name of the server to connect.
     invokation_timeout: float, int
         timeout to schedule a method call or parameter read/write in server. execution time wait is controlled by 
-        ``execution_timeout``
+        ``execution_timeout``. When invokation timeout expires, the method is not executed. 
     execution_timeout: float, int
-        timeout to return without a reply after scheduling a method call or parameter read/write. 
+        timeout to return without a reply after scheduling a method call or parameter read/write. This timer starts
+        ticking only after the method has started to execute. Returning a call before end of execution can lead to 
+        change of state in the server. 
     load_remote_object: bool, default True
-        when True, remote object is located and its resources are loaded. 
+        when True, remote object is located and its resources are loaded. Otherwise, only the client is initialised.
     protocol: str
         ZMQ protocol used to connect to server. Unlike the server, only one can be specified.  
     **kwargs:
-        asynch_mixin: bool, default False
+        async_mixin: bool, default False
             whether to use both synchronous and asynchronous clients. 
         serializer: BaseSerializer
             use a custom serializer, must be same as the serializer supplied to the server. 
         allow_foreign_attributes: bool, default False
             allows local attributes for proxy apart from parameters fetched from the server.
+        logger: logging.Logger
+            logger instance
         log_level: int
-            log level corresponding to logging.Logger, applied to all loggers
+            log level corresponding to logging.Logger when internally created
     """
 
     _own_attrs = frozenset([
@@ -48,30 +53,32 @@ class ObjectProxy:
         '_execution_timeout', '_invokation_timeout', '_events'
     ])
 
-    def __init__(self, instance_name : str, protocol : str, invokation_timeout : float = 5, load_remote_object = True, 
-                    **kwargs) -> None:
+    def __init__(self, instance_name : str, protocol : str = ZMQ_PROTOCOLS.IPC, invokation_timeout : float = 5, 
+                    load_remote_object = True, **kwargs) -> None:
         self._allow_foreign_attributes = kwargs.get('allow_foreign_attributes', False)
         self.instance_name = instance_name
         self.invokation_timeout = invokation_timeout
         self.execution_timeout = kwargs.get("execution_timeout", None)
         self.identity = f"{instance_name}|{uuid.uuid4()}"
-        self.logger = logging.Logger(self.identity, level=kwargs.get('log_level', 0))
+        self.logger = kwargs.get('logger', logging.Logger(self.identity, level=kwargs.get('log_level', logging.INFO)))
         # compose ZMQ client in Proxy client so that all sending and receiving is
         # done by the ZMQ client and not by the Proxy client directly. Proxy client only 
         # bothers mainly about __setattr__ and _getattr__
         self._async_zmq_client = None    
         self._zmq_client = SyncZMQClient(instance_name, self.identity, client_type=PROXY, protocol=protocol, 
-                                            rpc_serializer=kwargs.get('serializer', None), **kwargs)
-        if kwargs.get("asynch_mixin", False):
+                                            rpc_serializer=kwargs.get('serializer', None), handshake=load_remote_object,
+                                            **kwargs)
+        if kwargs.get("async_mixin", False):
             self._async_zmq_client = AsyncZMQClient(instance_name, self.identity, client_type=PROXY, protocol=protocol, 
-                                            rpc_serializer=kwargs.get('serializer', None), **kwargs)
+                                            rpc_serializer=kwargs.get('serializer', None), handshake=load_remote_object,
+                                            **kwargs)
         if load_remote_object:
             self.load_remote_object()
 
     def __del__(self) -> None:
-        if hasattr(self, '_zmq_client') and self._zmq_client:
+        if hasattr(self, '_zmq_client') and self._zmq_client is not None:
             self._zmq_client.exit()
-        if hasattr(self, '_async_zmq_client') and self._async_zmq_client:
+        if hasattr(self, '_async_zmq_client') and self._async_zmq_client is not None:
             self._async_zmq_client.exit()
 
     def __getattribute__(self, __name: str) -> typing.Any:
@@ -81,7 +88,8 @@ class ObjectProxy:
         return obj
 
     def __setattr__(self, __name : str, __value : typing.Any) -> None:
-        if __name in ObjectProxy._own_attrs or (__name not in self.__dict__ and isinstance(__value, __allowed_attribute_types__)) or self._allow_foreign_attributes:
+        if (__name in ObjectProxy._own_attrs or (__name not in self.__dict__ and 
+                isinstance(__value, __allowed_attribute_types__)) or self._allow_foreign_attributes):
             # allowed attribute types are _RemoteParameter and _RemoteMethod defined after this class
             return super(ObjectProxy, self).__setattr__(__name, __value)
         elif __name in self.__dict__:
@@ -93,14 +101,14 @@ class ObjectProxy:
         raise AttributeError(f"Cannot set foreign attribute {__name} to ObjectProxy for {self.instance_name}. Given attribute not found in server object.")
 
     def __repr__(self) -> str:
-        return f'ObjectProxy {self.instance_name}'
+        return f'ObjectProxy {self.identity}'
 
     def __enter__(self):
-        raise NotImplementedError("with statement is not completely implemented yet. Avoid.")
+        return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        raise NotImplementedError("with statement is not completely implemented yet. Avoid.")
-    
+        del self
+
     def __bool__(self) -> bool: 
         try: 
             self._zmq_client.handshake(num_of_tries=10)
@@ -158,8 +166,7 @@ class ObjectProxy:
     def invoke(self, method : str, oneway : bool = False, noblock : bool = False, 
                                 *args, **kwargs) -> typing.Any:
         """
-        call a method on the server by name string with positional and keyword 
-        arguments.
+        call a method specified by name on the server with positional/keyword arguments
 
         Parameters
         ----------
@@ -169,16 +176,22 @@ class ObjectProxy:
             only send an instruction to invoke the method but do not fetch the reply.
         noblock: bool, default False 
             request a method call but collect the reply later using a reply id
+        *args: Any
+            arguments for the method 
+        **kwargs: Dict[str, Any]
+            keyword arguments for the method
 
         Returns
         -------
-        return value: Any 
-            return value of the method call
+        Any 
+            return value of the method call or an id if noblock is True 
 
         Raises
         ------
         AttributeError: 
             if no method with specified name found on the server
+        Exception:
+            server raised exception are propagated 
         """
         method = getattr(self, method, None) # type: _RemoteMethod 
         if not isinstance(method, _RemoteMethod):
@@ -193,17 +206,21 @@ class ObjectProxy:
 
     async def async_invoke(self, method : str, *args, **kwargs) -> typing.Any:
         """
-        async call a method on the server by name string with positional and keyword 
+        async(io) call a method specified by name on the server with positional/keyword 
         arguments. noblock and oneway not supported for async calls. 
 
         Parameters
         ----------
         method: str 
             name of the method
+        *args: Any
+            arguments for the method 
+        **kwargs: Dict[str, Any]
+            keyword arguments for the method
 
         Returns
         -------
-        return_value: Any 
+        Any 
             return value of the method call
         
         Raises
@@ -211,7 +228,9 @@ class ObjectProxy:
         AttributeError: 
             if no method with specified name found on the server
         RuntimeError:
-            if asynch_mixin was False at ``__init__()`` - no asynchronous client was created
+            if async_mixin was False at ``__init__()`` - no asynchronous client was created
+        Exception:
+            server raised exception are propagated
         """
         method = getattr(self, method, None) # type: _RemoteMethod 
         if not isinstance(method, _RemoteMethod):
@@ -222,7 +241,7 @@ class ObjectProxy:
     def set_parameter(self, name : str, value : typing.Any, oneway : bool = False, 
                         noblock : bool = False) -> None:
         """
-        set parameter on server by name string with specified value. 
+        set parameter specified by name on server with specified value. 
 
         Parameters
         ----------
@@ -232,14 +251,18 @@ class ObjectProxy:
             value of parameter to be set
         oneway: bool, default False 
             only send an instruction to set the parameter but do not fetch the reply.
-            (whether set was successful or not)
+            (irrespective of whether set was successful or not)
+        noblock: bool, default False 
+            request the set parameter but collect the reply later using a reply id
 
         Raises
         ------
         AttributeError: 
             if no method with specified name found on the server
+        Exception:
+            server raised exception are propagated
         """
-        parameter = getattr(self, name, None) # type: _RemoteParameter
+        parameter = self.__dict__.get(name, None) # type: _RemoteParameter
         if not isinstance(parameter, _RemoteParameter):
             raise AttributeError(f"No remote parameter named {parameter}")
         if oneway:
@@ -252,7 +275,8 @@ class ObjectProxy:
 
     async def async_set_parameter(self, name : str, value : typing.Any) -> None:
         """
-        async set parameter on server by name string with specified value. 
+        async(io) set parameter specified by name on server with specified value.  
+        noblock and oneway not supported for async calls. 
 
         Parameters
         ----------
@@ -265,79 +289,187 @@ class ObjectProxy:
         ------
         AttributeError: 
             if no method with specified name found on the server
+        Exception:
+            server raised exception are propagated
         """
-        parameter = getattr(self, name, None) # type: _RemoteParameter
+        parameter = self.__dict__.get(name, None) # type: _RemoteParameter
         if not isinstance(parameter, _RemoteParameter):
             raise AttributeError(f"No remote parameter named {parameter}")
         await parameter.async_set(value)
     
 
-    def get_parameter(self, name : str) -> None:
+    def get_parameter(self, name : str, noblock : bool = False) -> typing.Any:
         """
-        async get parameter on server by name string. 
+        get parameter specified by name on server. 
 
         Parameters
         ----------
         name: str 
             name of the parameter
+        noblock: bool, default False 
+            request the parameter get but collect the reply/value later using a reply id
 
         Raises
         ------
         AttributeError: 
             if no method with specified name found on the server
+        Exception:
+            server raised exception are propagated
         """
-        parameter = getattr(self, name, None) # type: _RemoteParameter
+        parameter = self.__dict__.get(name, None) # type: _RemoteParameter
         if not isinstance(parameter, _RemoteParameter):
             raise AttributeError(f"No remote parameter named {parameter}")
-        return parameter.get()
+        if noblock:
+            return parameter.noblock_get()
+        else:
+            return parameter.get()
     
 
     async def async_get_parameter(self, name : str) -> None:
         """
-        async set parameter on server by name string with specified value. 
+        async(io) get parameter specified by name on server. 
 
         Parameters
         ----------
-        value: Any 
-            value of parameter to be set
-        
+        name: Any 
+            name of the parameter to fetch 
+
         Raises
         ------
         AttributeError: 
             if no method with specified name found on the server
+        Exception:
+            server raised exception are propagated
         """
-        parameter = getattr(self, parameter, None) # type: _RemoteParameter
+        parameter = self.__dict__.get(name, None) # type: _RemoteParameter
         if not isinstance(parameter, _RemoteParameter):
             raise AttributeError(f"No remote parameter named {parameter}")
         return await parameter.async_get()
 
 
-    def set_parameters(self, values : typing.Dict[str, typing.Any], oneway : bool) -> None:
+    def get_parameters(self, names : typing.List[str], noblock : bool = False) -> typing.Any:
+        """
+        get parameters specified by list of names.
+
+        Parameters
+        ----------
+        names: List[str]
+            names of parameters to be fetched 
+        noblock: bool, default False 
+            request the fetch but collect the reply later using a reply id
+
+        Returns
+        -------
+        Dict[str, Any]:
+            dictionary with names as keys and values corresponding to those keys
+        """
+        method = getattr(self, '_get_parameters', None) # type: _RemoteMethod
+        if not method:
+            raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
+        if noblock:
+            return method.noblock(names=names)
+        else:
+            return method(names=names)
+        
+    
+    async def async_get_parameters(self, names) -> None:
+        """
+        async(io) get parameters specified by list of names. no block gets are not supported for asyncio.
+
+        Parameters
+        ----------
+        names: List[str]
+            names of parameters to be fetched 
+ 
+        Returns
+        -------
+        Dict[str, Any]:
+            dictionary with parameter names as keys and values corresponding to those keys
+        """
+        method = getattr(self, '_get_parameters', None) # type: _RemoteMethod
+        if not method:
+            raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
+        await method.async_call(names=names)
+
+
+    def set_parameters(self, values : typing.Dict[str, typing.Any], oneway : bool = False, 
+                            noblock : bool = False) -> None:
+        """
+        set parameters whose name is specified by keys of a dictionary
+
+        Parameters
+        ----------
+        values: Dict[str, Any] 
+            name and value of parameters to be set
+        oneway: bool, default False 
+            only send an instruction to set the parameter but do not fetch the reply.
+            (irrespective of whether set was successful or not)
+        noblock: bool, default False 
+            request the set parameter but collect the reply later using a reply id
+
+        Raises
+        ------
+        AttributeError: 
+            if no method with specified name found on the server
+        Exception:
+            server raised exception are propagated
+        """
         if not isinstance(values, dict):
             raise ValueError("set_parameters values must be dictionary with parameter names as key")
-        for name in values.keys():
-            if not isinstance(getattr(self, name), _RemoteParameter):
-                raise AttributeError(f"remote parameter {name} does not belong to object")
-        parameter = getattr(self, parameter, None) # type: _RemoteParameter
-        if not isinstance(parameter, _RemoteParameter):
-            raise AttributeError(f"No remote parameter named {parameter}")
+        method = getattr(self, '_set_parameters', None) # type: _RemoteMethod
+        if not method:
+            raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         if oneway:
-            parameter.oneway_set(value)
+            method.oneway(values=values)
+        elif noblock:
+            method.noblock(values=values)
         else:
-            parameter.set(value)
+            return method(values=values)
 
-    async def async_set_parameters(self, oneway : bool = False, noblock : bool = False, **parameters) -> None:
-        parameter = getattr(self, parameter, None) # type: _RemoteParameter
-        if not isinstance(parameter, _RemoteParameter):
-            raise AttributeError(f"No remote parameter named {parameter}")
-        if oneway:
-            parameter.oneway(value)
-        else:
-            parameter.set(value)
+
+    async def async_set_parameters(self, **parameters) -> None:
+        """
+        async(io) set parameters whose name is specified by keys of a dictionary
+
+        Parameters
+        ----------
+        values: Dict[str, Any] 
+            name and value of parameters to be set
+       
+        Raises
+        ------
+        AttributeError: 
+            if no method with specified name found on the server
+        Exception:
+            server raised exception are propagated
+        """
+        method = getattr(self, '_set_parameters', None) # type: _RemoteMethod
+        if not method:
+            raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
+        await method.async_call(**parameters)
 
 
     def subscribe_event(self, name : str, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable],
                         thread_callbacks : bool = False) -> None:
+        """
+        Subscribe to event specified by name. Events are listened in separate threads and supplied callbacks are
+        are also called in those threads. 
+
+        Parameters
+        ----------
+        name: str
+            name of the event, either the object name used in the server or the name specified in the name argument of
+            the Event object 
+        callbacks: Callable | List[Callable]
+            one or more callbacks that will be executed when this event is received
+        thread_callbacks: bool
+            thread the callbacks otherwise the callbacks will be executed serially
+        
+        Raises
+        ------
+        AttributeError: 
+            if no event with specified name is found
+        """
         event = getattr(self, name, None) # type: _Event
         if not isinstance(event, _Event):
             raise AttributeError(f"No event named {name}")
@@ -347,6 +479,23 @@ class ObjectProxy:
             event.subscribe(callbacks, thread_callbacks)
        
     def unsubscribe_event(self, name : str):
+        """
+        Unsubscribe to event specified by name. 
+
+        Parameters
+        ----------
+        name: str
+            name of the event 
+        callbacks: Callable | List[Callable]
+            one or more callbacks that will be executed when this event is received
+        thread_callbacks: bool
+            thread the callbacks otherwise the callbacks will be executed serially
+        
+        Raises
+        ------
+        AttributeError: 
+            if no event with specified name is found
+        """
         event = getattr(self, name, None) # type: _Event
         if not isinstance(event, _Event):
             raise AttributeError(f"No event named {name}")
@@ -357,7 +506,7 @@ class ObjectProxy:
         """
         Get exposed resources from server (methods, parameters, events) and remember them as attributes of the proxy.
         """
-        fetch = _RemoteMethod(self._zmq_client, f'/{self.instance_name}{CommonRPC.RPC_RESOURCES}', 
+        fetch = _RemoteMethod(self._zmq_client, CommonRPC.rpc_resource_read(instance_name=self.instance_name), 
                                     self._invokation_timeout) # type: _RemoteMethod
         reply = fetch() # type: typing.Dict[str, typing.Dict[str, typing.Any]]
 
@@ -370,8 +519,7 @@ class ObjectProxy:
                         data = RPCResource(**data)
                 except Exception as ex:
                     ex.add_note("Did you correctly configure your serializer? " + 
-                            "This part fails when serializer does not work with the instance_resources dictionary (especially recursive deserilization)."
-                            + "The error message may not be related to serialization as well. Visit https://hololinked.readthedocs.io/en/latest/howto/index.html" ) 
+                            "This exception occurs when given serializer does not work the same way as server serializer")
                     raise ex from None
             elif not isinstance(data, (RPCResource, ServerSentEvent)):
                 raise RuntimeError("Logic error - deserialized info about server not instance of hololinked.server.data_classes.RPCResource")
@@ -383,9 +531,11 @@ class ObjectProxy:
                                                 self.execution_timeout, self._async_zmq_client), data)
             elif data.what == ResourceTypes.EVENT:
                 assert isinstance(data, ServerSentEvent)
-                event = _Event(self._zmq_client, data.obj_name, data.unique_identifier, data.socket_address)
+                event = _Event(self._zmq_client, data.name, data.obj_name, data.unique_identifier, data.socket_address, 
+                            serializer=self._zmq_client.rpc_serializer)
                 _add_event(self, event, data)
                 self.__dict__[data.name] = event 
+
 
 
 # SM = Server Message
@@ -396,21 +546,31 @@ SM_INDEX_MESSAGE_ID = ServerMessage.MESSAGE_ID.value
 SM_INDEX_DATA = ServerMessage.DATA.value
 
 class _RemoteMethod:
-    """
-    server method call abstraction
     
-    """
+    __slots__ = ['_zmq_client', '_async_zmq_client', '_instruction', '_invokation_timeout', '_execution_timeout',
+                 '_schema', '_last_return_value', '__name__', '__qualname__', '__doc__']
+    # method call abstraction
+    # Dont add doc otherwise __doc__ in slots will conflict with class variable
 
     def __init__(self, sync_client : SyncZMQClient, instruction : str, invokation_timeout : typing.Optional[float] = 5, 
                     execution_timeout : typing.Optional[float] = None, argument_schema : typing.Optional[JSON] = None,
                     async_client : typing.Optional[AsyncZMQClient] = None) -> None:
+        """
+        Parameters
+        ----------
+        sync_client: SyncZMQClient
+            synchronous ZMQ client
+        async_zmq_client: AsyncZMQClient
+            asynchronous ZMQ client for async calls
+        instruction: str
+            The instruction needed to call the method        
+        """
         self._zmq_client = sync_client
         self._async_zmq_client = async_client
         self._instruction = instruction
         self._invokation_timeout = invokation_timeout
         self._execution_timeout = execution_timeout
         self._schema = argument_schema
-        # self._loop = asyncio.get_event_loop()
     
     @property # i.e. cannot have setter
     def last_return_value(self):
@@ -418,6 +578,10 @@ class _RemoteMethod:
         cached return value of the last call to the method
         """
         return self._last_return_value[SM_INDEX_DATA]
+    
+    @property
+    def last_zmq_message(self) -> typing.List:
+        return self._last_return_value
     
     def oneway(self, *args, **kwargs) -> None:
         """
@@ -429,7 +593,10 @@ class _RemoteMethod:
         self._zmq_client.send_instruction(self._instruction, kwargs, None, None, self._schema)
 
     def noblock(self, *args, **kwargs) -> None:
-        pass 
+        raise NotImplementedError("no block calls are not yet implemented")
+        if len(args) > 0: 
+            kwargs["__args__"] = args
+        self._zmq_client.send_instruction(self._instruction, kwargs, None, None, self._schema)
 
     def __call__(self, *args, **kwargs) -> typing.Any:
         """
@@ -447,7 +614,7 @@ class _RemoteMethod:
         async execute method on server
         """
         if not self._async_zmq_client:
-            raise RuntimeError("async calls not possible as asynch_mixin was not set at __init__()")
+            raise RuntimeError("async calls not possible as async_mixin was not set at __init__()")
         if len(args) > 0: 
             kwargs["__args__"] = args
         self._last_return_value = await self._async_zmq_client.async_execute(self._instruction, 
@@ -457,7 +624,11 @@ class _RemoteMethod:
 
     
 class _RemoteParameter:
-    """parameter set & get abstraction"""
+
+    __slots__ = ['_zmq_client', '_async_zmq_client', '_read_instruction', '_write_instruction', 
+                '_invokation_timeout', '_execution_timeout', '_last_value', '__name__', '__doc__']   
+    # parameter get set abstraction
+    # Dont add doc otherwise __doc__ in slots will conflict with class variable
 
     def __init__(self, client : SyncZMQClient, instruction : str, invokation_timeout : typing.Optional[float] = 5, 
                     execution_timeout : typing.Optional[float] = None, async_client : typing.Optional[AsyncZMQClient] = None) -> None:
@@ -472,6 +643,13 @@ class _RemoteParameter:
     def last_read_value(self) -> typing.Any:
         """
         cache of last read value
+        """
+        return self._last_value[SM_INDEX_DATA]
+    
+    @property
+    def last_zmq_message(self) -> typing.List:
+        """
+        cache of last message received for this parameter
         """
         return self._last_value
     
@@ -498,12 +676,19 @@ class _RemoteParameter:
         self._zmq_client.send_instruction(self._write_instruction, dict(value=value))
 
     def noblock_set(self, value : typing.Any) -> None:
-        pass 
+        raise NotImplementedError("no block set not implemented for parameters")
+    
+    def noblock_get(self) -> None:
+        raise NotImplementedError("no block get not implemented for parameters")
   
 
 
 class _Event:
-    """event streaming"""
+    
+    __slots__ = ['_zmq_client', '_name', '_obj_name', '_unique_identifier', '_socket_address', '_callbacks',
+                    '_serializer', '_subscribed', '_thread', '_thread_callbacks', '_event_consumer']
+    # event subscription
+    # Dont add class doc otherwise __doc__ in slots will conflict with class variable
 
     def __init__(self, client : SyncZMQClient, name : str, obj_name : str, unique_identifier : str, socket : str, 
                     serializer : BaseSerializer = None) -> None:
@@ -538,6 +723,8 @@ class _Event:
         while self._subscribed:
             try:
                 data = self._event_consumer.receive()
+                if data == 'INTERRUPT':
+                    break
                 for cb in self._callbacks: 
                     if not self._thread_callbacks:
                         cb(data)
@@ -546,66 +733,19 @@ class _Event:
             except Exception as ex:
                 warnings.warn(f"Uncaught exception from {self._name} event - {str(ex)}", 
                                 category=RuntimeWarning)
-        self._event_consumer.exit()
+        try:
+            self._event_consumer.exit()
+        except:
+            pass
+       
 
-    def unsubscribe(self, join_thread : bool = False):
+    def unsubscribe(self, join_thread : bool = True):
         self._subscribed = False
+        self._event_consumer.interrupt()
         if join_thread:
             self._thread.join()
-
-
-
-class _StreamResultIterator(object):
-    """
-    Pyro returns this as a result of a remote call which returns an iterator or generator.
-    It is a normal iterable and produces elements on demand from the remote iterator.
-    You can simply use it in for loops, list comprehensions etc.
-    """
-    def __init__(self, streamId, proxy):
-        self.streamId = streamId
-        self.proxy = proxy
-        self.pyroseq = proxy._pyroSeq
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        if self.proxy is None:
-            raise StopIteration
-        if self.proxy._pyroConnection is None:
-            raise errors.ConnectionClosedError("the proxy for this stream result has been closed")
-        self.pyroseq += 1
-        try:
-            return self.proxy._pyroInvoke("get_next_stream_item", [self.streamId], {}, objectId=core.DAEMON_NAME)
-        except (StopIteration, GeneratorExit):
-            # when the iterator is exhausted, the proxy is removed to avoid unneeded close_stream calls later
-            # (the server has closed its part of the stream by itself already)
-            self.proxy = None
-            raise
-
-    def __del__(self):
-        try:
-            self.close()
-        except Exception:
-            pass
-
-    def close(self):
-        if self.proxy and self.proxy._pyroConnection is not None:
-            if self.pyroseq == self.proxy._pyroSeq:
-                # we're still in sync, it's okay to use the same proxy to close this stream
-                self.proxy._pyroInvoke("close_stream", [self.streamId], {},
-                                       flags=protocol.FLAGS_ONEWAY, objectId=core.DAEMON_NAME)
-            else:
-                # The proxy's sequence number has diverged.
-                # One of the reasons this can happen is because this call is being done from python's GC where
-                # it decides to gc old iterator objects *during a new call on the proxy*.
-                # If we use the same proxy and do a call in between, the other call on the proxy will get an out of sync seq and crash!
-                # We create a temporary second proxy to call close_stream on. This is inefficient, but avoids the problem.
-                with contextlib.suppress(errors.CommunicationError):
-                    with self.proxy.__copy__() as closingProxy:
-                        closingProxy._pyroInvoke("close_stream", [self.streamId], {},
-                                                 flags=protocol.FLAGS_ONEWAY, objectId=core.DAEMON_NAME)
-        self.proxy = None
+            
+            
 
 
 

@@ -17,7 +17,7 @@ from enum import Enum
 from .utils import *
 from .config import global_config
 from .constants import JSON, ZMQ_PROTOCOLS, ServerTypes
-from .serializers import BaseSerializer, JSONSerializer, PickleSerializer, serializers
+from .serializers import BaseSerializer, JSONSerializer, _get_serializer_from_user_given_options
 
 
 
@@ -28,6 +28,7 @@ TIMEOUT = b'TIMEOUT'
 INSTRUCTION = b'INSTRUCTION'
 REPLY       = b'REPLY'
 EXCEPTION   = b'EXCEPTION'
+INTERRUPT   = b'INTERRUPT'
 
 EVENT       = b'EVENT'
 EVENT_SUBSCRIPTION = b'EVENT_SUBSCRIPTION'
@@ -194,7 +195,7 @@ class BaseAsyncZMQ(BaseZMQ):
     Base class for all async ZMQ servers and clients.
     """
 
-    def create_socket(self, instance_name : str, context : typing.Union[zmq.asyncio.Context, None], *, identity : str, 
+    def create_socket(self, instance_name : str, *, identity : str, context : typing.Optional[zmq.asyncio.Context] = None, 
             bind : bool = False, protocol : str = "IPC", socket_type : zmq.SocketType = zmq.ROUTER, **kwargs) -> None:
         """
         Overloads ``create_socket()`` to create, bind/connect an async socket. A async context is created if none is supplied. 
@@ -210,7 +211,7 @@ class BaseSyncZMQ(BaseZMQ):
     Base class for all sync ZMQ servers and clients.
     """
 
-    def create_socket(self, instance_name : str, context : typing.Union[zmq.Context, None], *, identity : str, 
+    def create_socket(self, instance_name : str, *, identity : str, context : typing.Optional[zmq.Context] = None, 
             bind : bool = False, protocol : str = "IPC", socket_type : zmq.SocketType = zmq.ROUTER, **kwargs) -> None:
         """
         Overloads ``create_socket()`` to create, bind/connect a synchronous socket. A (synchronous) context is created 
@@ -255,18 +256,10 @@ class BaseZMQServer(BaseZMQ):
     """
     def __init__(self, server_type : Enum, json_serializer : typing.Union[None, JSONSerializer] = None, 
                 rpc_serializer : typing.Union[str, BaseSerializer, None] = None) -> None:
-        if json_serializer in [None, 'json'] or isinstance(json_serializer, JSONSerializer):
-            self.json_serializer = json_serializer if isinstance(json_serializer, JSONSerializer) else JSONSerializer()
-        else:
-            raise ValueError("invalid JSON serializer option for {}. Given option : {}".format(self.__class__, json_serializer))
-        if isinstance(rpc_serializer, BaseSerializer):
-            self.rpc_serializer = rpc_serializer 
-            if isinstance(self.rpc_serializer, PickleSerializer) or self.rpc_serializer.type == pickle:
-                warnings.warn("using pickle serializer which is unsafe, consider another like msgpack.", UserWarning)
-        elif isinstance(rpc_serializer, str) or rpc_serializer is None: 
-            self.rpc_serializer = serializers.get(rpc_serializer, JSONSerializer)()
-        else:
-            raise ValueError("invalid proxy serializer option for {}. Given option : {}".format(self.__class__, rpc_serializer))
+        self.rpc_serializer, self.json_serializer = _get_serializer_from_user_given_options(
+                                                            rpc_serializer=rpc_serializer,
+                                                            json_serializer=json_serializer
+                                                        )
         self.server_type = server_type # type: bytes
         super().__init__()
 
@@ -521,7 +514,7 @@ class AsyncZMQServer(BaseAsyncZMQServer, BaseAsyncZMQ):
                                rpc_serializer=kwargs.get('rpc_serializer', None))
         BaseAsyncZMQ.__init__(self)
         self.instance_name = instance_name
-        self.create_socket(instance_name, context, identity=instance_name, bind=True, protocol=protocol, 
+        self.create_socket(instance_name, context=context, identity=instance_name, bind=True, protocol=protocol, 
                         socket_type=socket_type, socket_address=kwargs.get("socket_address", None)) 
         self._terminate_context = context == None # terminate if it was created by instance
 
@@ -887,19 +880,28 @@ class RPCServer(BaseZMQServer):
         self.context = context or zmq.asyncio.Context()
         self.poller = zmq.asyncio.Poller()
         protocols = protocols if isinstance(protocols, list) else [protocols]
-        self.inproc_server = self.ipc_server = self.tcp_server = None 
+        self.inproc_server = self.ipc_server = self.tcp_server = self.event_publisher = event_publisher_protocol = None
         if ZMQ_PROTOCOLS.TCP in protocols or "TCP" in protocols:
             self.tcp_server = AsyncPollingZMQServer(instance_name=instance_name, server_type=server_type, 
                                     context=self.context, protocol=ZMQ_PROTOCOLS.TCP, poll_timeout=poll_timeout, **kwargs)
-            self.poller.register(self.tcp_server.socket)
+            self.poller.register(self.tcp_server.socket, zmq.POLLIN)
+            event_publisher_protocol = ZMQ_PROTOCOLS.TCP
         if ZMQ_PROTOCOLS.IPC in protocols or "IPC" in protocols: 
             self.ipc_server = AsyncPollingZMQServer(instance_name=instance_name, server_type=server_type, 
                                     context=self.context, protocol=ZMQ_PROTOCOLS.IPC, poll_timeout=poll_timeout, **kwargs)
-            self.poller.register(self.ipc_server.socket)
+            self.poller.register(self.ipc_server.socket, zmq.POLLIN)
+            event_publisher_protocol = ZMQ_PROTOCOLS.IPC if not event_publisher_protocol else event_publisher_protocol              
         if ZMQ_PROTOCOLS.INPROC in protocols or "INPROC" in protocols: 
             self.inproc_server = AsyncPollingZMQServer(instance_name=instance_name, server_type=server_type, 
                                     context=self.context, protocol=ZMQ_PROTOCOLS.INPROC, poll_timeout=poll_timeout, **kwargs)
-            self.poller.register(self.inproc_server.socket)
+            self.poller.register(self.inproc_server.socket, zmq.POLLIN)
+            event_publisher_protocol = ZMQ_PROTOCOLS.INPROC if not event_publisher_protocol else event_publisher_protocol    
+        self.event_publisher = EventPublisher(
+                            identity=instance_name,
+                            protocol=event_publisher_protocol,
+                            rpc_serializer=self.rpc_serializer,
+                            json_serializer=self.json_serializer
+                        )        
         self.poll_timeout = poll_timeout
         self.inproc_client = AsyncZMQClient(server_instance_name=f'{instance_name}/inner', identity=f'{instance_name}/tunneler',
                                 client_type=TUNNELER, context=self.context, protocol=ZMQ_PROTOCOLS.INPROC, handshake=False)
@@ -1099,26 +1101,10 @@ class BaseZMQClient(BaseZMQ):
             self.client_type = client_type
         else:
             raise ValueError("Invalid client type for {}. Given option {}.".format(self.__class__, client_type)) 
-        self.rpc_serializer = None
-        self.json_serializer = None
-        if client_type == HTTP_SERVER:
-            json_serializer = kwargs.get("json_serializer", None)
-            if json_serializer in [None, 'json'] or isinstance(json_serializer, JSONSerializer):
-                self.json_serializer = json_serializer if isinstance(json_serializer, JSONSerializer) else JSONSerializer()
-            else:
-                raise ValueError("Invalid JSON serializer option for {}. Given option {}.".format(self.__class__, 
-                                                                                            json_serializer))
-        elif client_type == PROXY: 
-            rpc_serializer = kwargs.get("rpc_serializer", None)
-            if rpc_serializer is None or isinstance(rpc_serializer, BaseSerializer):  
-                self.rpc_serializer = rpc_serializer or JSONSerializer()
-            elif isinstance(rpc_serializer, str) and rpc_serializer in serializers.keys():
-                self.rpc_serializer = serializers[rpc_serializer]()
-            else:
-                raise ValueError("invalid proxy serializer option for {}. Given option {}.".format(self.__class__, 
-                                                                                            rpc_serializer))
-            if isinstance(self.rpc_serializer, PickleSerializer) or self.rpc_serializer.type == pickle:
-                warnings.warn("using pickle serializer which is unsafe, consider something else like msgpack.", UserWarning)
+        self.rpc_serializer, self.json_serializer = _get_serializer_from_user_given_options(
+                                                        rpc_serializer=kwargs.get("rpc_serializer", None), 
+                                                        json_serializer=kwargs.get("json_serializer", None)
+                                                    )
         if server_instance_name:
             self.server_address = bytes(server_instance_name, encoding='utf-8')
         self.server_instance_name = server_instance_name
@@ -1289,7 +1275,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         BaseZMQClient.__init__(self, server_instance_name=server_instance_name, 
                             client_type=client_type, **kwargs)
         BaseSyncZMQ.__init__(self)
-        self.create_socket(server_instance_name, context, identity=identity, protocol=protocol, **kwargs)
+        self.create_socket(server_instance_name, context=context, identity=identity, protocol=protocol, **kwargs)
         self.protocol = protocol
         self._terminate_context = context == None
         if handshake:
@@ -1395,7 +1381,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                 raise RuntimeError("Could not handshake within number of tries") 
             i += 1
             self.socket.send_multipart(self.craft_empty_message_with_type(HANDSHAKE))
-            self.logger.debug("sent Handshake to server '{}'".format(self.server_instance_name))
+            print("sent Handshake to server '{}'".format(self.server_instance_name))
             if poller.poll(500):
                 try:
                     message = self.socket.recv_multipart(zmq.NOBLOCK)
@@ -1961,14 +1947,20 @@ class AsyncioEventPool:
 
 
 
-class EventPublisher(BaseZMQServer):
+class EventPublisher(BaseZMQServer, BaseSyncZMQ):
 
-    def __init__(self,  identity : str, context : typing.Union[zmq.Context, None] = None, **serializer) -> None:
+    def __init__(self,  identity : str, protocol : str, 
+                    context : typing.Union[zmq.Context, None] = None, **serializer) -> None:
         super().__init__(server_type=ServerTypes.UNKNOWN_TYPE, **serializer)
         self.context = context or zmq.Context()
         self.identity = identity
         self.socket = self.context.socket(zmq.PUB)
-        for i in range(1000, 65535):
+        #  super().__init__(server_type=ServerTypes.UNKNOWN_TYPE, **serializer)
+        # self.create_socket(instance_name=instance_name, identity=f"{instance_name}-events", protocol=protocol,
+        #                    sock)
+        # self.identity = identity
+        # self.create_socket
+        for i in range(global_config.TCP_SOCKET_SEARCH_START_PORT, global_config.TCP_SOCKET_SEARCH_END_PORT):
             try:
                 self.socket.bind(f"tcp://0.0.0.0:{i}")
                 self.socket_address = f"tcp://localhost:{i}"
@@ -1976,7 +1968,6 @@ class EventPublisher(BaseZMQServer):
                 if ex.strerror.startswith('Address in use'):
                     pass 
                 else:
-                    print("Following error while atttempting to bind to socket address : {}".format(self.socket_address))
                     raise ex from None
             else:
                 self.logger = self.get_logger(identity, "PUB", "TCP", logging.DEBUG)
@@ -2076,7 +2067,8 @@ class BaseEventConsumer(BaseZMQClient):
             instance name of the remote object publishing the event
     """
 
-    def __init__(self, unique_identifier : str, socket_address : str, identity : str, client_type = b'HTTP_SERVER', 
+    def __init__(self, unique_identifier : str, socket_address : str, 
+                    identity : str, client_type = b'HTTP_SERVER', 
                         **kwargs) -> None:
         super().__init__(server_instance_name=kwargs.get('server_instance_name', None), 
                     client_type=client_type, **kwargs)
@@ -2086,7 +2078,15 @@ class BaseEventConsumer(BaseZMQClient):
         self.socket = self.context.socket(zmq.SUB)
         self.socket.connect(socket_address)
         self.socket.setsockopt(zmq.SUBSCRIBE, self.unique_identifier)
-        self.poller.register(self.socket)
+        # pair sockets cannot be polled unforunately, so we use router
+        self.interruptor = self.context.socket(zmq.PAIR)
+        self.interruptor.setsockopt_string(zmq.IDENTITY, f'interrupting-server')
+        self.interruptor.bind(f'inproc://{self.identity}/interruption')    
+        self.interrupting_peer = self.context.socket(zmq.PAIR)
+        self.interrupting_peer.setsockopt_string(zmq.IDENTITY, f'interrupting-client')
+        self.interrupting_peer.connect(f'inproc://{self.identity}/interruption')
+        self.poller.register(self.socket, zmq.POLLIN)
+        self.poller.register(self.interruptor, zmq.POLLIN)
         self.logger = self.get_logger(identity, self.identity, "TCP", logging.DEBUG)
         self.logger.info("connected event consuming socket to address {}".format(self.socket_address))
 
@@ -2096,16 +2096,24 @@ class BaseEventConsumer(BaseZMQClient):
             self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
         try:
             self.poller.unregister(self.socket)
-            self.socket.close(0)
-            self.logger.info("terminated event consuming socket with address '{}'".format(self.socket_address))
+            self.poller.unregister(self.interruptor)
         except Exception as E:
-            self.logger.warn("could not properly terminate context or attempted to terminate an already terminated context at address '{}'. Exception message : {}".format(
+            self.logger.warn("could not properly terminate socket or attempted to terminate an already terminated socket of event consuming socket at address '{}'. Exception message : {}".format(
                 self.socket_address, str(E)))
+            
+        try:
+            self.socket.close(0)
+            self.interruptor.close(0)
+            self.interrupting_peer.close(0)
+            self.logger.info("terminated event consuming socket with address '{}'".format(self.socket_address))
+        except:
+            self.logger.warn("could not terminate sockets")
+
         try:
             self.context.term()
             self.logger.info("terminated context of event consuming socket with address '{}'".format(self.socket_address)) 
         except Exception as E: 
-            self.logger.warn("could not properly terminate socket or attempted to terminate an already terminated socket of event consuming socket at address '{}'. Exception message : {}".format(
+            self.logger.warn("could not properly terminate context or attempted to terminate an already terminated context at address '{}'. Exception message : {}".format(
                 self.socket_address, str(E)))
 
 
@@ -2142,8 +2150,7 @@ class AsyncEventConsumer(BaseEventConsumer):
         super().__init__(unique_identifier=unique_identifier, socket_address=socket_address, 
                         identity=identity, client_type=client_type, **kwargs)
         
-
-    async def receive(self, timeout : typing.Optional[float] = None, deserialize = True):
+    async def receive(self, timeout : typing.Optional[float] = None, deserialize = True) -> typing.Union[bytes, typing.Any]:
         """
         receive event with given timeout
 
@@ -2154,18 +2161,19 @@ class AsyncEventConsumer(BaseEventConsumer):
         deserialize: bool, default True
             deseriliaze the data, use False for HTTP server sent event to simply bypass
         """
-        if timeout is not None:
-            if not isinstance(timeout, (float, int)) or timeout < 0.0:
-                raise ValueError("timeout must be float or int and greater than 0")
-            sockets = await self.poller.poll(timeout) 
-            for socket, _ in sockets:
-                try:
-                    _, contents = await socket.recv_multipart(zmq.NOBLOCK)
-                except zmq.Again:
-                    raise TimeoutError(f"timed out without a message for event {self.unique_identifier}") 
-        else:
-            _, contents = await self.socket.recv_multipart()
-        if not deserialize: 
+        contents = None
+        sockets = await self.poller.poll(timeout) 
+        if len(sockets) > 1:
+            if socket[0] == self.interrupting_peer:
+                sockets = [socket[0]]
+            elif sockets[1] == self.interrupting_peer:
+                sockets = [socket[1]]
+        for socket, _ in sockets:
+            try:
+                _, contents = await socket.recv_multipart(zmq.NOBLOCK)
+            except zmq.Again:
+                pass     
+        if not deserialize or not contents: 
             return contents
         if self.client_type == HTTP_SERVER:
             return self.json_serializer.loads(contents)
@@ -2174,7 +2182,19 @@ class AsyncEventConsumer(BaseEventConsumer):
         else:
             raise ValueError("invalid client type")
 
-        
+    async def interrupt(self):
+        """
+        interrupts the event consumer and returns a 'INTERRUPT' string from the receive() method, 
+        generally should be used for exiting this object
+        """
+        if self.client_type == HTTP_SERVER:
+            message = [self.json_serializer.dumps(f'{self.identity}/interrupting-server'), 
+                       self.json_serializer.dumps("INTERRUPT")]
+        elif self.client_type == PROXY:
+            message = [self.rpc_serializer.dumps(f'{self.identity}/interrupting-server'), 
+                       self.rpc_serializer.dumps("INTERRUPT")]
+        await self.interrupting_peer.send_multipart(message)
+
     
 class EventConsumer(BaseEventConsumer):
     """
@@ -2208,7 +2228,7 @@ class EventConsumer(BaseEventConsumer):
         super().__init__(unique_identifier=unique_identifier, socket_address=socket_address,
                         identity=identity, client_type=client_type, **kwargs)
         
-    def receive(self, timeout : typing.Optional[float] = None, deserialize = True):
+    def receive(self, timeout : typing.Optional[float] = None, deserialize = True) -> typing.Union[bytes, typing.Any]:
         """
         receive event with given timeout
 
@@ -2219,17 +2239,17 @@ class EventConsumer(BaseEventConsumer):
         deserialize: bool, default True
             deseriliaze the data, use False for HTTP server sent event to simply bypass
         """
-        if timeout is not None:
-            if not isinstance(timeout, (float, int)) or timeout < 0.0:
-                raise ValueError("timeout must be float or int and greater than 0")
-            sockets = self.poller.poll(timeout) # typing.List[typing.Tuple[zmq.Socket, int]]
-            for socket, _ in sockets:
-                try:
-                    _, contents = socket.recv_multipart(zmq.NOBLOCK) 
-                except zmq.Again:
-                    raise TimeoutError(f"timed out without a message for event {self.unique_identifier}") 
-        else:
-            _, contents = self.socket.recv_multipart()
+        sockets = self.poller.poll(timeout) # typing.List[typing.Tuple[zmq.Socket, int]]
+        if len(sockets) > 1:
+            if socket[0] == self.interrupting_peer:
+                sockets = [socket[0]]
+            elif sockets[1] == self.interrupting_peer:
+                sockets = [socket[1]]
+        for socket, _ in sockets:
+            try:
+                _, contents = socket.recv_multipart(zmq.NOBLOCK) 
+            except zmq.Again:
+                pass
         if not deserialize: 
             return contents
         if self.client_type == HTTP_SERVER:
@@ -2238,10 +2258,21 @@ class EventConsumer(BaseEventConsumer):
             return self.rpc_serializer.loads(contents)
         else:
             raise ValueError("invalid client type for event")
+        
+    def interrupt(self):
+        """
+        interrupts the event consumer and returns a 'INTERRUPT' string from the receive() method, 
+        generally should be used for exiting this object
+        """
+        if self.client_type == HTTP_SERVER:
+            message = [self.json_serializer.dumps(f'{self.identity}/interrupting-server'), 
+                       self.json_serializer.dumps("INTERRUPT")]
+        elif self.client_type == PROXY:
+            message = [self.rpc_serializer.dumps(f'{self.identity}/interrupting-server'), 
+                       self.rpc_serializer.dumps("INTERRUPT")]
+        self.interrupting_peer.send_multipart(message)
     
         
-
-
 
 from .events import Event
 

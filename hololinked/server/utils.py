@@ -7,7 +7,7 @@ import asyncio
 import inspect
 import typing
 import asyncio
-
+import types
 
 
 def uuid4_in_bytes() -> bytes:
@@ -128,6 +128,28 @@ def get_signature(callable : typing.Callable) -> typing.Tuple[typing.List[str], 
         arg_types.append(arg_type)
 
     return arg_names, arg_types
+
+
+
+def getattr_without_descriptor_read(instance, key):
+    """
+    supply to inspect._get_members (not inspect.get_members) to avoid calling 
+    __get__ on hardware attributes
+    """
+    if key in instance.__dict__:
+        return instance.__dict__[key]
+    mro =  mro = (instance.__class__,) + inspect.getmro(instance.__class__)
+    for base in mro:
+        if key in base.__dict__:
+            value = base.__dict__[key]
+            if isinstance(value, types.FunctionType):
+                method = getattr(instance, key, None)
+                if isinstance(method, types.MethodType):
+                    return method 
+            return value 
+    # for descriptor, first try to find it in class dict or instance dict (for instance descriptors (per_instance_descriptor=True))
+    # and then getattr from the instance. For descriptors/property, it will be mostly at above two levels.
+    return getattr(instance, key, None) # we can deal with None where we use this getter, so dont raise AttributeError  
 
 
 __all__ = [

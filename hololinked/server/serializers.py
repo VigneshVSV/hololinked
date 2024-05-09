@@ -33,6 +33,7 @@ import datetime
 import uuid
 import decimal
 import typing
+import warnings
 from enum import Enum, StrEnum
 from collections import deque
 
@@ -218,13 +219,35 @@ class MsgpackSerializer(BaseSerializer):
 
 
 serializers = {
-    'pickle'  : PickleSerializer,
+    None      : JSONSerializer,
     'json'    : JSONSerializer, 
+    'pickle'  : PickleSerializer,
     'serpent' : SerpentSerializer,
-    None      : MsgpackSerializer,
     'msgpack' : MsgpackSerializer,
 }
 
+
+
+def _get_serializer_from_user_given_options(
+        rpc_serializer : typing.Union[str, BaseSerializer], 
+        json_serializer : typing.Union[str, JSONSerializer]
+    ) -> typing.Tuple[BaseSerializer, JSONSerializer]:
+    """
+    We give options to specify serializer as a string or an object,  
+    """ 
+    if json_serializer in [None, 'json'] or isinstance(json_serializer, JSONSerializer):
+        json_serializer = json_serializer if isinstance(json_serializer, JSONSerializer) else JSONSerializer()
+    else:
+        raise ValueError("invalid JSON serializer option : {}".format(json_serializer))
+    if isinstance(rpc_serializer, BaseSerializer):
+        rpc_serializer = rpc_serializer 
+        if isinstance(rpc_serializer, PickleSerializer) or rpc_serializer.type == pickle:
+            warnings.warn("using pickle serializer which is unsafe, consider another like msgpack.", UserWarning)
+    elif isinstance(rpc_serializer, str) or rpc_serializer is None: 
+        rpc_serializer = serializers.get(rpc_serializer, JSONSerializer)()
+    else:
+        raise ValueError("invalid rpc serializer option : {}".format(rpc_serializer))    
+    return rpc_serializer, json_serializer
 
 
 

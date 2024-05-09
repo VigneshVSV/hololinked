@@ -1,4 +1,4 @@
-from typing import Dict, List, Any, Union, Optional
+from typing import Dict, List, Any, Union
 from dataclasses import dataclass, field, asdict
 
 from .constants import HTTP_METHODS

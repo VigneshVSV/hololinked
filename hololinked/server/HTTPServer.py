@@ -113,7 +113,8 @@ class HTTPServer(Parameterized):
                             update_router_with_remote_objects(
                     application=self.app, zmq_client_pool=self.zmq_client_pool,  
                     request_handler=self.request_handler, event_handler=self.event_handler,
-                    json_serializer=self.serializer, logger=self.logger, allowed_clients=self.allowed_clients,
+                    json_serializer=self.serializer, logger=self.logger, 
+                    allowed_clients=self.allowed_clients if self.allowed_clients is not None else [],
                     server_address="{}://{}".format("https" if self.ssl_context is not None else "http", self._IP)
                 )))
         event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
@@ -199,7 +200,8 @@ async def update_router_with_remote_objects(application : Application, zmq_clien
     allowed_clients: List[str] | None
         list of allowed clients that can access the HTTP server
     """
-    resources = dict()
+    resources = dict() # type: typing.Dict[str, HTTPResource]
+
 
     for client in zmq_client_pool:
         await client.handshake_complete()
@@ -210,18 +212,20 @@ async def update_router_with_remote_objects(application : Application, zmq_clien
 
        
     handlers = []
-    for route, http_resource in resources.items():
+    for instruction, http_resource in resources.items():
         if http_resource["what"] in [ResourceTypes.PARAMETER, ResourceTypes.CALLABLE] :
-            handlers.append((route, request_handler, dict(
-                                                    resource=HTTPResource(**http_resource), 
+            resource = HTTPResource(**http_resource)
+            handlers.append((resource.fullpath, request_handler, dict(
+                                                    resource=resource, 
                                                     zmq_client_pool=zmq_client_pool, 
                                                     json_serializer=json_serializer,
                                                     logger=logger,
                                                     allowed_clients=allowed_clients                                                     
                                                 )))
         elif http_resource["what"] == ResourceTypes.EVENT:
-            handlers.append((route, event_handler, dict(
-                                                    resource=ServerSentEvent(**http_resource),
+            resource = ServerSentEvent(**http_resource)
+            handlers.append((instruction, event_handler, dict(
+                                                    resource=resource,
                                                     json_serializer=json_serializer,
                                                     logger=logger,
                                                     allowed_clients=allowed_clients          

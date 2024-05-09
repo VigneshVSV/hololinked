@@ -65,6 +65,8 @@ class BaseHandler(RequestHandler):
         """
         self.set_header("Access-Control-Allow-Origin", "*")
         return True
+        if len(self.allowed_clients) == 0:
+            return True
         origin = self.request.headers.get("Origin")
         if origin is not None and (origin in self.allowed_clients or origin + '/' in self.allowed_clients):
             self.set_header("Access-Control-Allow-Origin", origin)
@@ -152,11 +154,16 @@ class RPCHandler(BaseHandler):
         else:
             try:
                 arguments, context, timeout = self.get_execution_parameters()
-                reply = await self.zmq_client_pool.async_execute(self.resource.instance_name, 
-                                        self.resource.instructions.__dict__[http_method], arguments,
-                                        context=context, raise_client_side_exception=False, 
-                                        invokation_timeout=timeout, execution_timeout=None, 
-                                        argument_schema=self.resource.argument_schema) # type: ignore
+                reply = await self.zmq_client_pool.async_execute(
+                                        instance_name=self.resource.instance_name, 
+                                        instruction=self.resource.instructions.__dict__[http_method], 
+                                        arguments=arguments,
+                                        context=context, 
+                                        raise_client_side_exception=False, 
+                                        invokation_timeout=timeout, 
+                                        execution_timeout=None, 
+                                        argument_schema=self.resource.argument_schema
+                                    ) # type: ignore
                 # message mapped client pool currently strips the data part from return message
                 # and provides that as reply directly 
                 self.set_status(200, "ok")
@@ -221,25 +228,33 @@ class EventHandler(BaseHandler):
             data_header = b'data: %s\n\n'
             event_consumer = AsyncEventConsumer(self.resource.unique_identifier, self.resource.socket_address, 
                             f"{self.resource.unique_identifier}|HTTPEvent|{current_datetime_ms_str()}")
+        except Exception as ex:
+            self.logger.error(f"error while subscribing to event - {str(ex)}")
+            self.set_status(500, "could not subscribe to event source from remote object")
+            self.write(data_header % self.serializer.dumps(
+                       {"exception" : format_exception_as_json(ex)}))
+        else:
             self.set_status(200)
             while True:
                 try:
-                    data = await event_consumer.receive(timeout=10000, deserialize=False)
+                    data = await event_consumer.receive(timeout=None, deserialize=False)
                     if data:
                         # already JSON serialized 
                         self.write(data_header % data)
                         await self.flush()
                         self.logger.debug(f"new data sent - {self.resource.name}")
+                    else:
+                        self.logger.debug(f"found no new data")
                 except StreamClosedError:
                     break 
                 except Exception as ex:
+                    self.logger.error(f"error while subscribing to event - {str(ex)}")
                     self.write(data_header % self.serializer.dumps(
                         {"exception" : format_exception_as_json(ex)}))
-            event_consumer.exit()
-        except Exception as ex:
-            self.set_status(500, "could not subscribe to event source from remote object")
-            self.write(data_header % self.serializer.dumps(
-                       {"exception" : format_exception_as_json(ex)}))
+            try:
+                event_consumer.exit()
+            except Exception as ex:
+                self.logger.error(f"error while closing event consumer - {str(ex)}" )
 
 
 class ImageEventHandler(EventHandler):

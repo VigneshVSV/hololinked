@@ -1,5 +1,5 @@
 """
-Contains type de
+Contains type definitions used by other parts of the package
 """
 
 class ReactApp: 

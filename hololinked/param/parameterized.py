@@ -297,9 +297,8 @@ class Parameter(metaclass=ParameterMetaclass):
         self.deepcopy_default = deepcopy_default
         self.class_member = class_member
         self.precedence = precedence
-        self.watchers : typing.Dict[str, typing.List] = {}
-        self.overloads : typing.Dict[str, typing.Union[typing.Callable, None]] = dict(fget=fget, 
-                                                                                fset=fset, fdel=fdel)
+        self.watchers = {} # typing.Dict[str, typing.List]
+        self.overloads = dict(fget=fget, fset=fset, fdel=fdel) #: typing.Dict[str, typing.Union[typing.Callable, None]]
         
     def __set_name__(self, owner : typing.Any, attrib_name : str) -> None:
         self._internal_name = f"_{attrib_name}_param_value"
