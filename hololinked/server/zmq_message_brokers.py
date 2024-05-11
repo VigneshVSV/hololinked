@@ -1,8 +1,5 @@
 import builtins
 import os
-import pickle
-import warnings
-import socket
 import zmq
 import zmq.asyncio
 import asyncio
@@ -78,22 +75,51 @@ byte_types = (bytes, bytearray, memoryview)
 
 class BaseZMQ: 
     """
-    Base class for all ZMQ message brokers. Implements `create_socket()` method & logger which is common to 
-    all server and client implementations. 
+    Base class for all ZMQ message brokers. Implements socket creation, logger, serializer instantiation 
+    which is common to all server and client implementations. For HTTP clients, json_serializer is necessary and 
+    for RPC clients, any of the allowed serializer is possible.
+
+    Parameters
+    ----------
+    instance_name: str
+        instance name of the serving ``RemoteObject``
+    server_type: Enum
+        metadata about the nature of the server
+    json_serializer: hololinked.server.serializers.JSONSerializer
+        serializer used to send message to HTTP Server
+    rpc_serializer: any of hololinked.server.serializers.serializer, default serpent
+        serializer used to send message to RPC clients
+    logger: logging.Logger, Optional
+        logger, on will be created while creating a socket automatically if None supplied 
     """
-    def __init__(self) -> None:
-        # only type definition for logger
-        self.logger : logging.Logger
+    def __init__(self, 
+                server_type : typing.Union[bytes, str], 
+                json_serializer : typing.Union[None, JSONSerializer] = None, 
+                rpc_serializer : typing.Union[str, BaseSerializer, None] = None,
+                logger : typing.Optional[logging.Logger] = None,
+                **kwargs
+            ) -> None:
+        super().__init__()
+        self.rpc_serializer, self.json_serializer = _get_serializer_from_user_given_options(
+                                                            rpc_serializer=rpc_serializer,
+                                                            json_serializer=json_serializer
+                                                        )
+        self.server_type = server_type if isinstance(server_type, bytes) else bytes(server_type, encoding='utf-8') 
+        self.logger = logger
         
     def exit(self) -> None:
         """
         Cleanup method to terminate ZMQ sockets and contexts before quitting. Called by `__del__()`
         automatically. Each subclass server/client should implement their version of exiting if necessary.
         """
-        raise NotImplementedError("Implement exit() to gracefully exit ZMQ in {}.".format(self.__class__))
+        if self.logger is None:
+            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, self.instance_name))
 
-    def create_socket(self, context : typing.Union[zmq.asyncio.Context, zmq.Context], instance_name : str, 
-                    identity : str, bind : bool = False, protocol : ZMQ_PROTOCOLS = ZMQ_PROTOCOLS.IPC, 
+    def __del__(self) -> None:
+        self.exit()
+
+    def create_socket(self, *, identity : str, bind : bool, context : typing.Union[zmq.asyncio.Context, zmq.Context], 
+                    protocol : ZMQ_PROTOCOLS = ZMQ_PROTOCOLS.IPC, 
                     socket_type : zmq.SocketType = zmq.ROUTER, **kwargs) -> None:
         """
         Create a socket with certain specifications. When successful, a logger is also created. Supported ZeroMQ protocols
@@ -101,17 +127,13 @@ class BaseZMQ:
 
         Parameters
         ----------
-        context: zmq.Context or zmq.asyncio.Context
-            ZeroMQ Context object that creates the socket
-        instance_name: str
-            ``instance_name`` of the ``RemoteObject``. For servers, this serves as a name for the created
-            ROUTER socket. For clients, for IPC or INPROC, this allows to connect to the socket with the correct name. 
-            must be unique. 
         identity: str
-            especially useful for clients to have a different name than the ``instance_name`` of the ``RemoteObject``.
-            For servers, supply the ``instance_name`` is sufficient.
+            especially useful for clients to have a different ID other than the ``instance_name`` of the ``RemoteObject``.
+            For servers, supplying the ``instance_name`` is sufficient.
         bind: bool
             whether to bind (server) or connect (client)
+        context: zmq.Context or zmq.asyncio.Context
+            ZeroMQ Context object that creates the socket
         protocol: Enum
             TCP, IPC or INPROC. Message crafting/passing/routing is protocol invariant as suggested by ZeroMQ docs.
         socket_type: zmq.SocketType, default zmq.ROUTER
@@ -119,6 +141,8 @@ class BaseZMQ:
         **kwargs: dict
             socket_address: str
                 applicable only for TCP socket to find the correct socket to connect. 
+            log_level: int
+                logging.Logger log level
 
         Returns
         -------
@@ -129,14 +153,14 @@ class BaseZMQ:
         NotImplementedError
             if protocol other than TCP, IPC or INPROC is used
         RuntimeError
-            if protocol is TCP, a connection from client side is desired but a socket address is not supplied
+            if protocol is TCP, a socket connect from client side is requested but a socket address is not supplied
         """
         self.context = context
         self.identity = identity
         self.socket = self.context.socket(socket_type)
         self.socket.setsockopt_string(zmq.IDENTITY, identity)
         if protocol == ZMQ_PROTOCOLS.IPC or protocol == "IPC":
-            split_instance_name = instance_name.split('/')
+            split_instance_name = self.instance_name.split('/')
             socket_dir = os.sep  + os.sep.join(split_instance_name[:-1]) if len(split_instance_name) > 1 else ''
             directory = global_config.TEMP_DIR + socket_dir
             if not os.path.exists(directory):
@@ -167,43 +191,36 @@ class BaseZMQ:
                 raise RuntimeError(f"Socket address not supplied for TCP connection to identity - {identity}")
         elif protocol == ZMQ_PROTOCOLS.INPROC or protocol == "INPROC":
             # inproc_instance_name = instance_name.replace('/', '_').replace('-', '_')
-            socket_address = f'inproc://{instance_name}'
+            socket_address = f'inproc://{self.instance_name}'
             if bind:
                 self.socket.bind(socket_address)
             else:
                 self.socket.connect(socket_address)
         else:
-            raise NotImplementedError("protocols other than IPC, TCP & INPROC are not implemented now for {}".format(self.__class__))
-        self.logger = self.get_logger(self.identity, socket_type.name, protocol.name if isinstance(protocol, Enum) else protocol,
-                                        kwargs.get('log_level', logging.INFO)) 
-        self.logger.info("created socket with address {} and {}".format(socket_address, "bound" if bind else "connected"))
+            raise NotImplementedError("protocols other than IPC, TCP & INPROC are not implemented now for {}".format(
+                                                                                                    self.__class__))
+        if not self.logger:
+            self.logger = get_default_logger('{}|{}|{}|{}'.format(self.__class__.__name__, 
+                                                socket_type, protocol, identity), kwargs.get('log_level', logging.INFO))
+        self.logger.info("created socket with address {} and {}".format(socket_address, 
+                                                            "bound" if bind else "connected"))
 
-    @classmethod
-    def get_logger(cls, identity : str, socket_type : str, protocol : str, level = logging.INFO) -> logging.Logger:
-        """
-        creates a logger with name {class name} | {socket type} | {protocol} | {identity},
-        default logging level is ``logging.INFO`` 
-        """
-        return get_default_logger('{}|{}|{}|{}'.format(cls.__name__, socket_type, protocol, identity) , level)
-    
-    def __del__(self) -> None:
-        self.exit()
-
-
+   
 class BaseAsyncZMQ(BaseZMQ):
     """
     Base class for all async ZMQ servers and clients.
     """
 
-    def create_socket(self, instance_name : str, *, identity : str, context : typing.Optional[zmq.asyncio.Context] = None, 
-            bind : bool = False, protocol : str = "IPC", socket_type : zmq.SocketType = zmq.ROUTER, **kwargs) -> None:
+    def create_socket(self, *, identity : str, bind : bool = False, context : typing.Optional[zmq.asyncio.Context] = None, 
+                        protocol : str = "IPC", socket_type : zmq.SocketType = zmq.ROUTER, **kwargs) -> None:
         """
         Overloads ``create_socket()`` to create, bind/connect an async socket. A async context is created if none is supplied. 
         """
         if context and not isinstance(context, zmq.asyncio.Context):
             raise TypeError("async ZMQ message broker accepts only async ZMQ context. supplied type {}".format(type(context)))
         context = context or zmq.asyncio.Context()
-        super().create_socket(context, instance_name, identity, bind, protocol, socket_type, **kwargs)
+        super().create_socket(identity=identity, bind=bind, context=context, protocol=protocol, 
+                            socket_type=socket_type, **kwargs)
         
 
 class BaseSyncZMQ(BaseZMQ):
@@ -211,8 +228,8 @@ class BaseSyncZMQ(BaseZMQ):
     Base class for all sync ZMQ servers and clients.
     """
 
-    def create_socket(self, instance_name : str, *, identity : str, context : typing.Optional[zmq.Context] = None, 
-            bind : bool = False, protocol : str = "IPC", socket_type : zmq.SocketType = zmq.ROUTER, **kwargs) -> None:
+    def create_socket(self, *, identity : str, bind : bool = False, context : typing.Optional[zmq.Context] = None, 
+                    protocol : str = "IPC", socket_type : zmq.SocketType = zmq.ROUTER, **kwargs) -> None:
         """
         Overloads ``create_socket()`` to create, bind/connect a synchronous socket. A (synchronous) context is created 
         if none is supplied. 
@@ -220,14 +237,14 @@ class BaseSyncZMQ(BaseZMQ):
         if context and not isinstance(context, zmq.Context):
             raise TypeError("sync ZMQ message broker accepts only sync ZMQ context. supplied type {}".format(type(context)))
         context = context or zmq.Context()
-        super().create_socket(context, instance_name, identity, bind, protocol, socket_type, **kwargs)
+        super().create_socket(identity=identity, bind=bind, context=context, protocol=protocol, 
+                            socket_type=socket_type, **kwargs)
+        
 
 
 class BaseZMQServer(BaseZMQ):
     """
-    Implements serializer instantiation and message parsing for ZMQ servers and can be subclassed by all 
-    server instances irrespective of sync or async. For HTTP clients, json_serializer is necessary and for RPC clients, 
-    any of the allowed serializer is possible. As suggested by ZMQ, a messaging contract is defined which is defined 
+    Implements messaging contract as suggested by ZMQ, this is defined as 
     as follows: 
     
     client's message to server: 
@@ -244,26 +261,19 @@ class BaseZMQServer(BaseZMQ):
         [   0   ,   1    ,    2       ,      3      ,      4    ,  5  ,       6     ]
 
     The messaging contract does not depend on sync or async implementation.  
-
-    Parameters
-    ----------
-    server_type: Enum
-        metadata about the nature of the server - currently not important.
-    json_serializer: hololinked.server.serializers.JSONSerializer
-        serializer used to send message to HTTP Server
-    rpc_serializer: any of hololinked.server.serializers.serializer, default serpent
-        serializer used to send message to RPC clients
     """
-    def __init__(self, server_type : Enum, json_serializer : typing.Union[None, JSONSerializer] = None, 
-                rpc_serializer : typing.Union[str, BaseSerializer, None] = None) -> None:
-        self.rpc_serializer, self.json_serializer = _get_serializer_from_user_given_options(
-                                                            rpc_serializer=rpc_serializer,
-                                                            json_serializer=json_serializer
-                                                        )
-        self.server_type = server_type # type: bytes
-        super().__init__()
-
-
+    def __init__(self, 
+                instance_name : str, server_type : typing.Union[bytes, str], 
+                json_serializer : typing.Union[None, JSONSerializer] = None, 
+                rpc_serializer : typing.Union[str, BaseSerializer, None] = None,
+                logger : typing.Optional[logging.Logger] = None,
+                **kwargs
+            ) -> None:
+        self.instance_name = instance_name 
+        super().__init__(server_type=server_type, json_serializer=json_serializer, 
+                        rpc_serializer=rpc_serializer, logger=logger)
+    
+    
     def parse_client_message(self, message : typing.List[bytes]) -> typing.List[typing.Union[bytes, typing.Any]]:
         """
         deserializes important parts of the client's message, namely instruction, arguments, execution context 
@@ -280,7 +290,7 @@ class BaseZMQServer(BaseZMQ):
                5   ,      6     ,     7    ,       8          ]
 
         Execution Context Definitions (typing.Dict[str, typing.Any] or JSON):
-            - "plain_reply" - does not return state 
+            - "oneway" - does not reply to client after executing the instruction 
             - "fetch_execution_logs" - fetches logs that were accumulated while execution
 
         Parameters
@@ -385,8 +395,8 @@ class BaseZMQServer(BaseZMQ):
         elif client_type == PROXY:
             data = self.rpc_serializer.dumps(data)
         else:
-            raise ValueError("invalid client type given '{}' for preparing message to send from '{}' of type {}".format(
-                                                                        client_type, self.identity, self.__class__))
+            raise ValueError(f"invalid client type given '{client_type}' for preparing message to send from " +
+                            f"'{self.identity}' of type {self.__class__}.")
         return [
             original_client_message[CM_INDEX_ADDRESS],
             EMPTY_BYTE,
@@ -415,8 +425,7 @@ class BaseZMQServer(BaseZMQ):
         run_callable_somehow(self._handshake(original_client_message))
 
     def _handshake(self, original_client_message : typing.List[bytes]) -> None:
-        raise NotImplementedError("handshake cannot be handled - implement _handshake in {} to handshake.".format(
-                self.__class__))
+        raise NotImplementedError(f"handshake cannot be handled - implement _handshake in {self.__class__} to handshake.")
 
 
     def handle_invalid_message(self, original_client_message : typing.List[bytes], exception : Exception) -> None:
@@ -438,9 +447,8 @@ class BaseZMQServer(BaseZMQ):
         run_callable_somehow(self._handle_invalid_message(original_client_message, exception))
 
     def _handle_invalid_message(self, message : typing.List[bytes], exception : Exception) -> None:
-        raise NotImplementedError("invalid message cannot be handled", 
-                " - implement _handle_invalid_message in {} to handle invalid messages.".format(
-                self.__class__))
+        raise NotImplementedError("invalid message cannot be handled" +
+                f" - implement _handle_invalid_message in {self.__class__} to handle invalid messages.")
             
 
     def handle_timeout(self, original_client_message : typing.List[bytes]) -> None:
@@ -461,8 +469,7 @@ class BaseZMQServer(BaseZMQ):
 
     def _handle_timeout(self, original_client_message : typing.List[bytes]) -> None:
         raise NotImplementedError("timeouts cannot be handled ",
-                "- implement _handle_timeout in {} to handle timeout.".format(
-                self.__class__))
+                f"- implement _handle_timeout in {self.__class__} to handle timeout.")
 
 
 
@@ -475,11 +482,10 @@ class BaseAsyncZMQServer(BaseZMQServer):
         """
         Inner method that handles handshake. scheduled by ``handshake()`` method, signature same as ``handshake()``.
         """
-        self.logger.info("sending handshake to client '{}'".format(original_client_message[CM_INDEX_ADDRESS]))
         await self.socket.send_multipart(self.craft_reply_from_arguments(original_client_message[CM_INDEX_ADDRESS], 
                 original_client_message[CM_INDEX_CLIENT_TYPE], HANDSHAKE, original_client_message[CM_INDEX_MESSAGE_ID],
                 EMPTY_BYTE))
-        self.logger.info("sent handshake to client '{}'".format(original_client_message[CM_INDEX_ADDRESS]))
+        self.logger.info(f"sent handshake to client '{original_client_message[CM_INDEX_ADDRESS]}'")
 
 
     async def _handle_timeout(self, original_client_message : typing.List[bytes]) -> None:
@@ -488,6 +494,7 @@ class BaseAsyncZMQServer(BaseZMQServer):
         """
         await self.socket.send_multipart(self.craft_reply_from_arguments(original_client_message[CM_INDEX_ADDRESS], 
                 original_client_message[CM_INDEX_CLIENT_TYPE], TIMEOUT, original_client_message[CM_INDEX_MESSAGE_ID]))
+        self.logger.info(f"sent timeout to client '{original_client_message[CM_INDEX_ADDRESS]}'")
 
     
     async def _handle_invalid_message(self, original_client_message : typing.List[bytes], exception : Exception) -> None:
@@ -498,24 +505,22 @@ class BaseAsyncZMQServer(BaseZMQServer):
         await self.socket.send_multipart(self.craft_reply_from_arguments(original_client_message[CM_INDEX_ADDRESS], 
                                             original_client_message[CM_INDEX_CLIENT_TYPE], INVALID_MESSAGE, 
                                             original_client_message[CM_INDEX_MESSAGE_ID]), exception)         
-        self.logger.info("sent exception message to client '{}' : '{}'".format(original_client_message[CM_INDEX_ADDRESS], 
-                                                                               str(exception))) 	
+        self.logger.info(f"sent exception message to client '{original_client_message[CM_INDEX_ADDRESS]}'." +
+                            f" exception - {str(exception)}") 	
 
 
        
 class AsyncZMQServer(BaseAsyncZMQServer, BaseAsyncZMQ):
     """
-    Implements blocking (non-polled) async receive instructions and send replies.  
+    Implements blocking (non-polled) but async receive instructions and send replies.  
     """
 
-    def __init__(self, instance_name : str, server_type : Enum, context : typing.Union[zmq.asyncio.Context, None] = None, 
+    def __init__(self, *, instance_name : str, server_type : Enum, context : typing.Union[zmq.asyncio.Context, None] = None, 
                 protocol : ZMQ_PROTOCOLS = ZMQ_PROTOCOLS.IPC, socket_type : zmq.SocketType = zmq.ROUTER, **kwargs) -> None:
-        BaseAsyncZMQServer.__init__(self, server_type, json_serializer=kwargs.get('json_serializer', None), 
-                               rpc_serializer=kwargs.get('rpc_serializer', None))
+        BaseAsyncZMQServer.__init__(self, instance_name=instance_name, server_type=server_type, **kwargs)
         BaseAsyncZMQ.__init__(self)
-        self.instance_name = instance_name
-        self.create_socket(instance_name, context=context, identity=instance_name, bind=True, protocol=protocol, 
-                        socket_type=socket_type, socket_address=kwargs.get("socket_address", None)) 
+        self.create_socket(identity=instance_name, bind=True, context=context, protocol=protocol, 
+                        socket_type=socket_type, **kwargs) 
         self._terminate_context = context == None # terminate if it was created by instance
 
 
@@ -532,7 +537,7 @@ class AsyncZMQServer(BaseAsyncZMQServer, BaseAsyncZMQ):
         while True:
             instruction = self.parse_client_message(await self.socket.recv_multipart())
             if instruction:
-                self.logger.debug(f"received instruction from client {instruction[CM_INDEX_ADDRESS]} with msg-ID {instruction[CM_INDEX_MESSAGE_ID]}")
+                self.logger.debug(f"received instruction from client '{instruction[CM_INDEX_ADDRESS]}' with msg-ID {instruction[CM_INDEX_MESSAGE_ID]}")
                 return instruction
         
 
@@ -551,8 +556,7 @@ class AsyncZMQServer(BaseAsyncZMQServer, BaseAsyncZMQ):
             try:
                 instruction = self.parse_client_message(await self.socket.recv_multipart(zmq.NOBLOCK))
                 if instruction:
-                    self.logger.debug("received instruction from client '{}' with msg-ID '{}'".format(
-                                            instruction[CM_INDEX_ADDRESS], instruction[CM_INDEX_MESSAGE_ID]))
+                    self.logger.debug(f"received instruction from client '{instruction[CM_INDEX_ADDRESS]}' with msg-ID {instruction[CM_INDEX_MESSAGE_ID]}")
                     instructions.append(instruction)
             except zmq.Again: 
                 break 
@@ -575,8 +579,7 @@ class AsyncZMQServer(BaseAsyncZMQServer, BaseAsyncZMQ):
         None
         """
         await self.socket.send_multipart(self.craft_reply_from_client_message(original_client_message, data))
-        self.logger.debug("sent reply to client '{}' with msg-ID '{}'".format(original_client_message[CM_INDEX_ADDRESS], 
-                                                                    original_client_message[CM_INDEX_MESSAGE_ID]))
+        self.logger.debug(f"sent reply to client '{original_client_message[CM_INDEX_ADDRESS]}' with msg-ID {original_client_message[CM_INDEX_MESSAGE_ID]}")
         
     
     async def async_send_reply_with_message_type(self, original_client_message : typing.List[bytes], 
@@ -598,29 +601,27 @@ class AsyncZMQServer(BaseAsyncZMQServer, BaseAsyncZMQ):
         await self.socket.send_multipart(self.craft_reply_from_arguments(original_client_message[CM_INDEX_ADDRESS], 
                                                         original_client_message[CM_INDEX_CLIENT_TYPE], message_type, 
                                                         original_client_message[CM_INDEX_MESSAGE_ID], data))
-        self.logger.debug("sent reply to client '{}' with msg-ID '{}'".format(original_client_message[CM_INDEX_ADDRESS], 
-                                                                    original_client_message[CM_INDEX_MESSAGE_ID]))
+        self.logger.debug(f"sent reply to client '{original_client_message[CM_INDEX_ADDRESS]}' with msg-ID {original_client_message[CM_INDEX_MESSAGE_ID]}")
         
 
     def exit(self) -> None:
         """
         closes socket and context, warns if any error occurs. 
         """
-        if not hasattr(self, 'logger'):
-            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
+        super().exit()
         try:
             self.socket.close(0)
-            self.logger.info("terminated socket of server '{}' of type '{}'".format(self.identity, self.__class__))
-        except Exception as E:
-            self.logger.warn("could not properly terminate socket or attempted to terminate an already terminated socket '{}'of type '{}'. Exception message : {}".format(
-                self.identity, self.__class__, str(E)))
+            self.logger.info(f"terminated socket of server '{self.identity}' of type {self.__class__}")
+        except Exception as ex:
+            self.logger.warn("could not properly terminate socket or attempted to terminate an already terminated " +
+                            f" socket '{self.identity}' of type {self.__class__}. Exception message : {str(ex)}")
         try:
             if self._terminate_context:
                 self.context.term()
                 self.logger.info("terminated context of socket '{}' of type '{}'".format(self.identity, self.__class__))
-        except Exception as E:
-            self.logger.warn("could not properly terminate context or attempted to terminate an already terminated context '{}'. Exception message : {}".format(
-                self.identity, str(E)))
+        except Exception as ex:
+            self.logger.warn("could not properly terminate context or attempted to terminate an already terminated " +
+                            f" context '{self.identity}'. Exception message : {str(ex)}")
 
     
 
@@ -653,11 +654,11 @@ class AsyncPollingZMQServer(AsyncZMQServer):
             serializer used to send message to RPC clients
     """
 
-    def __init__(self, instance_name : str, *, server_type : Enum, context : typing.Union[zmq.asyncio.Context, None] = None, 
+    def __init__(self, *, instance_name : str, server_type : Enum, context : typing.Union[zmq.asyncio.Context, None] = None, 
                 socket_type : zmq.SocketType = zmq.ROUTER, protocol : ZMQ_PROTOCOLS = ZMQ_PROTOCOLS.IPC, 
                 poll_timeout = 25, **kwargs) -> None:
-        super().__init__(instance_name=instance_name, server_type=server_type, context=context, protocol=protocol,
-                        socket_type=socket_type, **kwargs)
+        super().__init__(instance_name=instance_name, server_type=server_type, context=context, 
+                        socket_type=socket_type, protocol=protocol, **kwargs)
         self.poller = zmq.asyncio.Poller()
         self.poller.register(self.socket, zmq.POLLIN)
         self.poll_timeout = poll_timeout
@@ -672,7 +673,7 @@ class AsyncPollingZMQServer(AsyncZMQServer):
     @poll_timeout.setter
     def poll_timeout(self, value) -> None:
         if not isinstance(value, int) or value < 0:
-            raise ValueError("polling period must be an integer greater than 0, not {}. Value is considered in milliseconds.".format(value))
+            raise ValueError(f"polling period must be an integer greater than 0, not {value}. Value is considered in milliseconds.")
         self._poll_timeout = value 
 
     async def poll_instructions(self) -> typing.List[typing.List[bytes]]:
@@ -697,8 +698,7 @@ class AsyncPollingZMQServer(AsyncZMQServer):
                         break
                     else:
                         if instruction:
-                            self.logger.debug("received instruction from client '{}' with msg-ID '{}'".format(instruction[0], 
-                                                                                                                instruction[4]))
+                            self.logger.debug(f"received instruction from client '{instruction[CM_INDEX_ADDRESS]}' with msg-ID {instruction[CM_INDEX_MESSAGE_ID]}")
                             instructions.append(instruction)
             if len(instructions) > 0:
                 break
@@ -714,12 +714,11 @@ class AsyncPollingZMQServer(AsyncZMQServer):
         """
         unregister socket from poller and terminate socket and context.
         """
-        if not hasattr(self, 'logger'):
-            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
         try:
+            BaseZMQ.exit(self)
             self.poller.unregister(self.socket)
         except Exception as ex:
-            self.logger.warn(f"suppressing exception while closing socket {self.identity} - {str(ex)}")
+            self.logger.warn(f"could not unregister socket {self.identity} from polling - {str(ex)}")
         return super().exit()
         
 
@@ -729,20 +728,32 @@ class ZMQServerPool(BaseZMQServer):
     Implements pool of async ZMQ servers (& their sockets)
     """
 
-    def __init__(self, instance_names : typing.Union[typing.List[str], None] = None, **kwargs) -> None:
+    def __init__(self, *, instance_names : typing.Union[typing.List[str], None] = None, **kwargs) -> None:
         self.context = zmq.asyncio.Context()
-        self.pool = dict() # type: typing.Dict[str, typing.Union[AsyncZMQServer, AsyncPollingZMQServer]]
         self.poller = zmq.asyncio.Poller()
+        self.pool = dict() # type: typing.Dict[str, typing.Union[AsyncZMQServer, AsyncPollingZMQServer]]
         if instance_names:
             for instance_name in instance_names:
-                self.pool[instance_name] = AsyncZMQServer(instance_name, ServerTypes.UNKNOWN_TYPE, self.context, 
-                                                        **kwargs)
+                self.pool[instance_name] = AsyncZMQServer(instance_name=instance_name, 
+                                    server_type=ServerTypes.UNKNOWN_TYPE, context=self.context, **kwargs)
             for server in self.pool.values():
                 self.poller.register(server.socket, zmq.POLLIN)
-        super().__init__(server_type = ServerTypes.POOL, json_serializer = kwargs.get('json_serializer'), 
-                    rpc_serializer = kwargs.get('rpc_serializer', None))
+        super().__init__(instance_name="pool", server_type=ServerTypes.POOL, **kwargs)
+        self.identity = "pool"
+        if self.logger is None:
+            self.logger = get_default_logger("pool|polling", kwargs.get('log_level',logging.INFO))
+
+    def create_socket(self, *, identity : str, bind: bool, context : typing.Union[zmq.asyncio.Context, zmq.Context], 
+                protocol : ZMQ_PROTOCOLS = ZMQ_PROTOCOLS.IPC, socket_type : zmq.SocketType = zmq.ROUTER, **kwargs) -> None:
+        raise NotImplementedError("create socket not supported by ZMQServerPool")
+        # we override this method to prevent socket creation. instance_name set to pool is simply a filler 
+        return super().create_socket(identity=identity, bind=bind, context=context, protocol=protocol, 
+                                    socket_type=socket_type, **kwargs)
 
     def register_server(self, server : typing.Union[AsyncZMQServer, AsyncPollingZMQServer]) -> None:
+        if not isinstance(server, (AsyncZMQServer, AsyncPollingZMQServer)):
+            raise TypeError("registration possible for servers only subclass of AsyncZMQServer or AsyncPollingZMQServer." +
+                           f" Given type {type(server)}")
         self.pool[server.instance_name] = server 
         self.poller.register(server.socket, zmq.POLLIN)
 
@@ -785,7 +796,7 @@ class ZMQServerPool(BaseZMQServer):
         """
         return await self.pool[instance_name].async_recv_instructions()
    
-    async def async_send_reply(self, instance_name : str, original_client_message : typing.List[bytes],  
+    async def async_send_reply(self, *, instance_name : str, original_client_message : typing.List[bytes],  
                                data : typing.Any) -> None:
         """
         send reply for instance name
@@ -818,6 +829,7 @@ class ZMQServerPool(BaseZMQServer):
                         break
                     else:
                         if instruction:
+                            self.logger.debug(f"received instruction from client '{instruction[CM_INDEX_ADDRESS]}' with msg-ID {instruction[CM_INDEX_MESSAGE_ID]}")
                             instructions.append(instruction)
         return instructions
         
@@ -826,19 +838,6 @@ class ZMQServerPool(BaseZMQServer):
         stop polling method ``poll()``
         """
         self.stop_poll = True 
-    
-    def exit(self) -> None:
-        if not hasattr(self, 'logger'):
-            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
-        for server in self.pool.values():
-            self.poller.unregister(server.socket)
-            server.exit()
-        try:
-            self.context.term()
-            self.logger.info("context terminated for {}".format(self.__class__))
-        except Exception as E:
-            self.logger.warn("could not properly terminate context or attempted to terminate an already terminated context '{}'. Exception message : {}".format(
-                self.identity, str(E)))
 
     def __getitem__(self, key) -> typing.Union[AsyncZMQServer, AsyncPollingZMQServer]:
         return self.pool[key]
@@ -849,8 +848,22 @@ class ZMQServerPool(BaseZMQServer):
     def __contains__(self, name : str) -> bool:
         return name in self.pool.keys()
     
+    def exit(self) -> None:
+        for server in self.pool.values():       
+            try:
+                self.poller.unregister(server.socket)
+                server.exit()
+            except Exception as ex:
+                self.logger.warn(f"could not unregister poller and exit server {server.identity} - {str(ex)}")
+        try:
+            self.context.term()
+            self.logger.info("context terminated for {}".format(self.__class__))
+        except Exception as ex:
+            self.logger.warn("could not properly terminate context or attempted to terminate an already terminated context " +
+                             f"'{self.identity}'. Exception message : {str(ex)}")
 
-
+    
+    
 class RPCServer(BaseZMQServer):
     """
     Top level ZMQ RPC server used by ``RemoteObject`` and ``Eventloop``. 
@@ -872,15 +885,29 @@ class RPCServer(BaseZMQServer):
     """
 
     def __init__(self, instance_name : str, *, server_type : Enum, context : typing.Union[zmq.asyncio.Context, None] = None, 
-                protocols : typing.List[ZMQ_PROTOCOLS] = [ZMQ_PROTOCOLS.TCP, ZMQ_PROTOCOLS.IPC, ZMQ_PROTOCOLS.INPROC], 
+                protocols : typing.Union[ZMQ_PROTOCOLS, str, typing.List[ZMQ_PROTOCOLS]] = ZMQ_PROTOCOLS.IPC, 
                 poll_timeout = 25, **kwargs) -> None:
-        super().__init__(server_type, kwargs.get('json_serializer', None), kwargs.get('rpc_serializer', None))
+        super().__init__(instance_name=instance_name, server_type=server_type, **kwargs)
+        
+        self.identity = f"{instance_name}/rpc-server"
+        if isinstance(protocols, list): 
+            protocols = protocols 
+        elif isinstance(protocols, str): 
+            protocols = [protocols]
+        else:
+            raise TypeError(f"unsupported protocols type : {type(protocols)}")
         kwargs["json_serializer"] = self.json_serializer
         kwargs["rpc_serializer"] = self.rpc_serializer
+        self.inproc_server = self.ipc_server = self.tcp_server = self.event_publisher = None
+        event_publisher_protocol = None 
+        if self.logger is None:
+            self.logger =  get_default_logger('{}|{}|{}|{}'.format(self.__class__.__name__, 
+                                                'RPC', 'MIXED', instance_name), kwargs.get('log_level', logging.INFO))
+        # contexts and poller
         self.context = context or zmq.asyncio.Context()
         self.poller = zmq.asyncio.Poller()
-        protocols = protocols if isinstance(protocols, list) else [protocols]
-        self.inproc_server = self.ipc_server = self.tcp_server = self.event_publisher = event_publisher_protocol = None
+        self.poll_timeout = poll_timeout
+        # initialise every externally visible protocol
         if ZMQ_PROTOCOLS.TCP in protocols or "TCP" in protocols:
             self.tcp_server = AsyncPollingZMQServer(instance_name=instance_name, server_type=server_type, 
                                     context=self.context, protocol=ZMQ_PROTOCOLS.TCP, poll_timeout=poll_timeout, **kwargs)
@@ -902,20 +929,31 @@ class RPCServer(BaseZMQServer):
                             rpc_serializer=self.rpc_serializer,
                             json_serializer=self.json_serializer
                         )        
-        self.poll_timeout = poll_timeout
-        self.inproc_client = AsyncZMQClient(server_instance_name=f'{instance_name}/inner', identity=f'{instance_name}/tunneler',
-                                client_type=TUNNELER, context=self.context, protocol=ZMQ_PROTOCOLS.INPROC, handshake=False)
-        self._instructions = deque() # type: typing.Iterable[typing.Tuple[typing.List[bytes], asyncio.Event, asyncio.Future, zmq.Socket]]
+        # instruction serializing broker
+        self.inner_inproc_client = AsyncZMQClient(
+                                        server_instance_name=f'{instance_name}/inner', 
+                                        identity=f'{instance_name}/tunneler',
+                                        client_type=TUNNELER, 
+                                        context=self.context, 
+                                        protocol=ZMQ_PROTOCOLS.INPROC, 
+                                        handshake=False # handshake manually done later when event loop is run
+                                    )
+        self.inner_inproc_server = AsyncZMQServer(
+                                        instance_name=f'{self.instance_name}/inner', # hardcoded be very careful
+                                        server_type=server_type,
+                                        context=context,
+                                        protocol=ZMQ_PROTOCOLS.INPROC, 
+                                        **kwargs
+                                    )       
+        self._instructions = deque() # type: deque[typing.Tuple[typing.List[bytes], asyncio.Event, asyncio.Future, zmq.Socket]]
         self._instructions_event = asyncio.Event()
-        self.identity = f"{instance_name}/rpc-server"
-        self.logger = self.get_logger(instance_name, 'RPC', 'MIXED')
-
+        
 
     async def handshake_complete(self):
         """
         handles inproc client's handshake with ``RemoteObject``'s inproc server
         """
-        await self.inproc_client.handshake_complete()
+        await self.inner_inproc_client.handshake_complete()
 
 
     def prepare(self):
@@ -961,8 +999,8 @@ class RPCServer(BaseZMQServer):
         """
         self.stop_poll = False
         eventloop = asyncio.get_event_loop()
-        self.inproc_client.handshake()
-        await self.inproc_client.handshake_complete()
+        self.inner_inproc_client.handshake()
+        await self.inner_inproc_client.handshake_complete()
         if self.inproc_server:
             eventloop.call_soon(lambda : asyncio.create_task(self.recv_instruction(self.inproc_server)))
         if self.tcp_server:
@@ -998,7 +1036,6 @@ class RPCServer(BaseZMQServer):
             else:
                 self._instructions.append((original_instruction, ready_to_process_event, 
                                                             timeout_task, socket))
-            
             self._instructions_event.set()
            
 
@@ -1015,9 +1052,9 @@ class RPCServer(BaseZMQServer):
                     timeout = await timeout_task
                 if ready_to_process_event is None or not timeout:
                     original_address = message[CM_INDEX_ADDRESS]
-                    message[CM_INDEX_ADDRESS] = self.inproc_client.server_address # replace address
-                    await self.inproc_client.socket.send_multipart(message)
-                    reply = await self.inproc_client.socket.recv_multipart()
+                    message[CM_INDEX_ADDRESS] = self.inner_inproc_client.server_address # replace address
+                    await self.inner_inproc_client.socket.send_multipart(message)
+                    reply = await self.inner_inproc_client.socket.recv_multipart()
                     reply[SM_INDEX_ADDRESS] = original_address
                     await origin_socket.send_multipart(reply)
             else:
@@ -1038,15 +1075,16 @@ class RPCServer(BaseZMQServer):
                 original_client_message[CM_INDEX_CLIENT_TYPE], TIMEOUT, original_client_message[CM_INDEX_MESSAGE_ID]))
             return True
 
-    async def _handle_invalid_message(self, original_client_message: builtins.list[builtins.bytes], exception: builtins.Exception,
-                                    originating_socket : zmq.Socket) -> None:
+    async def _handle_invalid_message(self, original_client_message: builtins.list[builtins.bytes], 
+                                exception: builtins.Exception, originating_socket : zmq.Socket) -> None:
         await originating_socket.send_multipart(self.craft_reply_from_arguments(
                             original_client_message[CM_INDEX_ADDRESS], original_client_message[CM_INDEX_CLIENT_TYPE], 
                             INVALID_MESSAGE, original_client_message[CM_INDEX_MESSAGE_ID], exception))
+        self.logger.info(f"sent exception message to client '{original_client_message[CM_INDEX_ADDRESS]}'." +
+                            f" exception - {str(exception)}") 	
     
     async def _handshake(self, original_client_message: builtins.list[builtins.bytes],
                                     originating_socket : zmq.Socket) -> None:
-        self.logger.info("sending handshake to client '{}'".format(original_client_message[CM_INDEX_ADDRESS]))
         await originating_socket.send_multipart(self.craft_reply_from_arguments(
                 original_client_message[CM_INDEX_ADDRESS], 
                 original_client_message[CM_INDEX_CLIENT_TYPE], HANDSHAKE, original_client_message[CM_INDEX_MESSAGE_ID],
@@ -1055,17 +1093,17 @@ class RPCServer(BaseZMQServer):
 
 
     def exit(self):
-        if not hasattr(self, 'logger'):
-            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, uuid4()))
         self.stop_poll = True
-        sockets = list(self.poller._map.keys())
-        for i in range(len(sockets)): # iterating over keys will cause dictionary size change during iteration
-            self.poller.unregister(sockets[i])
+        for socket in list(self.poller._map.keys()): # iterating over keys will cause dictionary size change during iteration
+            try:
+                self.poller.unregister(socket)
+            except Exception as ex:
+                self.logger.warn(f"could not unregister socket from polling - {str(ex)}") # does not give info about socket
         try:
             self.inproc_server.exit()
             self.ipc_server.exit()
             self.tcp_server.exit()
-            self.inproc_client.exit()
+            self.inner_inproc_client.exit()
         except:
             pass 
         self.context.term()
@@ -1239,6 +1277,7 @@ class BaseZMQClient(BaseZMQ):
             EMPTY_BYTE,
             EMPTY_BYTE
         ]
+
 
 
 class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
