@@ -87,7 +87,7 @@ def run_coro_sync(coro : typing.Coroutine):
 
 def run_callable_somehow(method : typing.Union[typing.Callable, typing.Coroutine]) -> typing.Any:
     """
-    either schedule a coroutine or run it until its complete
+    run method if synchronous, or when async, either schedule a coroutine or run it until its complete
     """
     if not (asyncio.iscoroutinefunction(method) or asyncio.iscoroutine(method)):
         return method()

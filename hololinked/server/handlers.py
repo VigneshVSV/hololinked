@@ -237,7 +237,7 @@ class EventHandler(BaseHandler):
             self.set_status(200)
             while True:
                 try:
-                    data = await event_consumer.receive(timeout=None, deserialize=False)
+                    data = await event_consumer.receive(timeout=10000, deserialize=False)
                     if data:
                         # already JSON serialized 
                         self.write(data_header % data)
@@ -248,7 +248,7 @@ class EventHandler(BaseHandler):
                 except StreamClosedError:
                     break 
                 except Exception as ex:
-                    self.logger.error(f"error while subscribing to event - {str(ex)}")
+                    self.logger.error(f"error while pushing event - {str(ex)}")
                     self.write(data_header % self.serializer.dumps(
                         {"exception" : format_exception_as_json(ex)}))
             try:
@@ -273,7 +273,7 @@ class ImageEventHandler(EventHandler):
             data_header = b'data:image/jpeg;base64,%s\n'
             while True:
                 try:
-                    data = await event_consumer.receive(deserialize=False)
+                    data = await event_consumer.receive(timeout=10000, deserialize=False)
                     if data:
                         # already serialized 
                         self.write(delimiter)
