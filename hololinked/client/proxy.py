@@ -75,12 +75,6 @@ class ObjectProxy:
         if load_remote_object:
             self.load_remote_object()
 
-    def __del__(self) -> None:
-        if hasattr(self, '_zmq_client') and self._zmq_client is not None:
-            self._zmq_client.exit()
-        if hasattr(self, '_async_zmq_client') and self._async_zmq_client is not None:
-            self._async_zmq_client.exit()
-
     def __getattribute__(self, __name: str) -> typing.Any:
         obj = super().__getattribute__(__name)
         if isinstance(obj, _RemoteParameter):
@@ -507,7 +501,7 @@ class ObjectProxy:
         Get exposed resources from server (methods, parameters, events) and remember them as attributes of the proxy.
         """
         fetch = _RemoteMethod(self._zmq_client, CommonRPC.rpc_resource_read(instance_name=self.instance_name), 
-                                    self._invokation_timeout) # type: _RemoteMethod
+                                    invokation_timeout=self._invokation_timeout) # type: _RemoteMethod
         reply = fetch() # type: typing.Dict[str, typing.Dict[str, typing.Any]]
 
         for name, data in reply.items():
@@ -536,6 +530,7 @@ class ObjectProxy:
                 _add_event(self, event, data)
                 self.__dict__[data.name] = event 
 
+    
 
 
 # SM = Server Message
@@ -544,6 +539,7 @@ SM_INDEX_SERVER_TYPE = ServerMessage.SERVER_TYPE.value
 SM_INDEX_MESSAGE_TYPE = ServerMessage.MESSAGE_TYPE.value
 SM_INDEX_MESSAGE_ID = ServerMessage.MESSAGE_ID.value
 SM_INDEX_DATA = ServerMessage.DATA.value
+SM_INDEX_ENCODED_DATA = ServerMessage.ENCODED_DATA.value
 
 class _RemoteMethod:
     
@@ -577,11 +573,24 @@ class _RemoteMethod:
         """
         cached return value of the last call to the method
         """
+        if len(self._last_return_value[SM_INDEX_ENCODED_DATA] > 0):
+            return self._last_return_value[SM_INDEX_ENCODED_DATA]
         return self._last_return_value[SM_INDEX_DATA]
     
     @property
     def last_zmq_message(self) -> typing.List:
         return self._last_return_value
+    
+    def __call__(self, *args, **kwargs) -> typing.Any:
+        """
+        execute method on server
+        """
+        if len(args) > 0: 
+            kwargs["__args__"] = args
+        self._last_return_value = self._zmq_client.execute(instruction=self._instruction, arguments=kwargs, 
+                                    invokation_timeout=self._invokation_timeout, execution_timeout=self._execution_timeout,
+                                    raise_client_side_exception=True, argument_schema=self._schema)
+        return self.last_return_value # note the missing underscore
     
     def oneway(self, *args, **kwargs) -> None:
         """
@@ -590,24 +599,26 @@ class _RemoteMethod:
         """
         if len(args) > 0: 
             kwargs["__args__"] = args
-        self._zmq_client.send_instruction(self._instruction, kwargs, None, None, self._schema)
+        self._zmq_client.send_instruction(instruction=self._instruction, arguments=kwargs, 
+                                        invokation_timeout=self._invokation_timeout, execution_timeout=None,
+                                        context=dict(oneway=True), argument_schema=self._schema)
 
     def noblock(self, *args, **kwargs) -> None:
-        raise NotImplementedError("no block calls are not yet implemented")
         if len(args) > 0: 
             kwargs["__args__"] = args
-        self._zmq_client.send_instruction(self._instruction, kwargs, None, None, self._schema)
-
-    def __call__(self, *args, **kwargs) -> typing.Any:
-        """
-        execute method on server
-        """
-        if len(args) > 0: 
-            kwargs["__args__"] = args
-        self._last_return_value = self._zmq_client.execute(self._instruction, 
-                                        kwargs, self._invokation_timeout, raise_client_side_exception=True,
+        return self._zmq_client.send_instruction(instruction=self._instruction, arguments=kwargs, 
+                                        invokation_timeout=self._invokation_timeout, execution_timeout=self._execution_timeout,
                                         argument_schema=self._schema)
-        return self._last_return_value[SM_INDEX_DATA]
+    
+    def read_reply(self, message_id : bytes, timeout : typing.Optional[float] = 5000) -> typing.Any:
+        reply = self._zmq_client._reply_cache.get(message_id, None)
+        if not reply: 
+            reply = self._zmq_client.recv_reply(message_id=message_id, timeout=timeout,
+                                    raise_client_side_exception=True)
+        if not reply:
+            raise TimeoutError(f"could not fetch reply within timeout for message id '{message_id}'")
+        self._last_return_value = reply 
+        return self.last_return_value
     
     async def async_call(self, *args, **kwargs):
         """
@@ -618,9 +629,9 @@ class _RemoteMethod:
         if len(args) > 0: 
             kwargs["__args__"] = args
         self._last_return_value = await self._async_zmq_client.async_execute(self._instruction, 
-                                        kwargs, self._invokation_timeout, raise_client_side_exception=True,
+                                        kwargs, invokation_timeout=self._invokation_timeout, raise_client_side_exception=True,
                                         argument_schema=self._schema)
-        return self._last_return_value[SM_INDEX_DATA]
+        return self.last_return_value # note the missing underscore
 
     
 class _RemoteParameter:
@@ -659,17 +670,17 @@ class _RemoteParameter:
      
     def get(self) -> typing.Any:
         self._last_value = self._zmq_client.execute(self._read_instruction, 
-                                                timeout=self._invokation_timeout, 
+                                                invokation_timeout=self._invokation_timeout, 
                                                 raise_client_side_exception=True)
         return self._last_value[SM_INDEX_DATA]
     
     async def async_set(self, value : typing.Any) -> None:
         self._last_value = await self._async_zmq_client.async_execute(self._write_instruction, dict(value=value),
-                                                        self._invokation_timeout, raise_client_side_exception=True)
+                                                        invokation_timeout=self._invokation_timeout, raise_client_side_exception=True)
     
     async def async_get(self) -> typing.Any:
         self._last_value = await self._async_zmq_client.async_execute(self._read_instruction,
-                                                timeout=self._invokation_timeout, raise_client_side_exception=True)
+                                                invokation_timeout=self._invokation_timeout, raise_client_side_exception=True)
         return self._last_value[SM_INDEX_DATA]
     
     def oneway_set(self, value : typing.Any) -> None:

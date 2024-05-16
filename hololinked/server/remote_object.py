@@ -311,22 +311,25 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
 
 
     def __init__(self, *, instance_name : str, logger : typing.Optional[logging.Logger] = None, 
-                rpc_serializer : typing.Optional[BaseSerializer] = 'json', 
-                json_serializer : typing.Optional[JSONSerializer] = 'json',
+                serializer : typing.Optional[BaseSerializer] = None,
                 **params) -> None:
         if instance_name.startswith('/'):
             instance_name = instance_name[1:]
+        rpc_serializer = serializer or params.pop('rpc_serializer', 'json')
+        json_serializer = params.pop('json_serializer', 'json')
         rpc_serializer, json_serializer = _get_serializer_from_user_given_options(
                                                                     rpc_serializer=rpc_serializer,
                                                                     json_serializer=json_serializer
                                                                 )
-        
         super().__init__(instance_name=instance_name, logger=logger, 
                         rpc_serializer=rpc_serializer, json_serializer=json_serializer, **params)
 
-        self._prepare_logger(log_level=params.get('log_level', None), log_file=params.get('log_file', None),
-                    remote_access=params.get('logger_remote_access', self.__class__.logger_remote_access if hasattr(self.__class__, 
-                                                                                'logger_remote_access') else False))
+        self._prepare_logger(
+                    log_level=params.get('log_level', None), 
+                    log_file=params.get('log_file', None),
+                    remote_access=params.get('logger_remote_access', self.__class__.logger_remote_access if hasattr(
+                                                                self.__class__, 'logger_remote_access') else False)
+                )
         self._prepare_state_machine()  
         self._prepare_DB(params.get('use_default_db', False), params.get('db_config_file', None))   
 
@@ -339,8 +342,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
         self.message_broker : typing.Optional[AsyncPollingZMQServer]
         self._event_publisher : typing.Optional[EventPublisher]
         self._prepare_resources()
-        self.logger.info("initialialised RemoteObject class {} with instance name {}".format(
-            self.__class__.__name__, self.instance_name))  
+        self.logger.info(f"initialialised RemoteObject class {self.__class__.__name__} with instance name {self.instance_name}")
 
 
     def __setattr__(self, __name: str, __value: typing.Any) -> None:
@@ -350,9 +352,8 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
                 # allow setting of fixed attributes once
                 super().__setattr__(__name, __value)
             else:
-                print(__name, getattr(self, __name, None))
-                raise AttributeError(
-                    f"Attempted to set {__name} more than once. Cannot assign a value to this variable after creation.")
+                raise AttributeError(f"Attempted to set {__name} more than once. " +
+                                     "Cannot assign a value to this variable after creation.")
         else:
             super().__setattr__(__name, __value)
 
@@ -564,7 +565,6 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
     def run(self, 
             zmq_protocols : typing.Union[typing.List[ZMQ_PROTOCOLS], typing.Tuple[ZMQ_PROTOCOLS], 
                                          ZMQ_PROTOCOLS] = ZMQ_PROTOCOLS.IPC, 
-            
             expose_eventloop : bool = False,
             **kwargs 
         ):
@@ -574,15 +574,6 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
         self.load_parameters_from_DB()
 
         context = zmq.asyncio.Context()
-        self.message_broker = AsyncPollingZMQServer(
-                                instance_name=f'{self.instance_name}/inner', # hardcoded be very careful
-                                server_type=self.__server_type__.value,
-                                context=context,
-                                protocol=ZMQ_PROTOCOLS.INPROC, 
-                                rpc_serializer=self.rpc_serializer,
-                                json_serializer=self.json_serializer,
-                                log_level=self.logger.level
-                            )        
         self.rpc_server = RPCServer(
                                 instance_name=self.instance_name, 
                                 server_type=self.__server_type__.value, 
@@ -591,15 +582,16 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
                                 rpc_serializer=self.rpc_serializer, 
                                 json_serializer=self.json_serializer, 
                                 socket_address=kwargs.get('tcp_socket_address', None),
-                                log_level=self.logger.level
+                                logger=self.logger
                             ) 
+        self.message_broker = self.rpc_server.inner_inproc_server
         self.event_publisher = self.rpc_server.event_publisher 
 
         from .eventloop import EventLoop
         self.event_loop = EventLoop(
                     instance_name=f'{self.instance_name}/eventloop', 
                     remote_objects=[self], 
-                    log_level=self.logger.level,
+                    logger=self.logger,
                     rpc_serializer=self.rpc_serializer, 
                     json_serializer=self.json_serializer, 
                     expose=expose_eventloop
