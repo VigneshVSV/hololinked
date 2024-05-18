@@ -3,6 +3,7 @@
 ### Description
 
 For beginners - `hololinked` is a server side pythonic package suited for instrumentation control and data acquisition over network.
+<br/>
 For those familiar with RPC & web development - `hololinked` is a ZeroMQ-based Object Oriented RPC toolkit with customizable HTTP end-points. 
 The main goal is to develop a pythonic & pure python modern package for instrumentation control through network (SCADA), along with "reasonable" HTTP support for web development.  
 
@@ -11,13 +12,13 @@ This package can also be used for general RPC for other applications.
 ### Usage
 
 `hololinked` is compatible with the [Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software. Each device or thing can be controlled systematically when their design in software is segregated into properties, actions and events. In object oriented terms:
-- properties are get-set attributes of the class which may be used be used to model device settings, hold captured data etc.
+- properties are (optionally) validated get-set attributes of the class which may be used be used to model device settings, hold captured data etc.
 - actions are methods which issue commands to the device or run arbitrary python logic. 
 - events can asynchronously communicate/push data to a client, like alarm messages, streaming captured data etc. 
 
-The base class which enables this classification is the ``RemoteObject`` class in native ``hololinked`` terms, or the ``Thing`` class if one prefers to use terminology according to the Web of Things. Both classes are identical and differentiated only in the naming according the application domain one may be using. If one deploys a pure RPC application, one may chose the name ``RemoteObject``, and if one writes classes to control instrumentation (which is the main purpose of this package), one may use the ``Thing`` class (in future one of names may be dropped).
+The base class which enables this classification is the ``RemoteObject`` class in ``hololinked`` terms, or the ``Thing`` class if one prefers to use terminology according to the Web of Things. Both classes are identical and differentiated only in the naming according the application domain one may be using. If one deploys a pure RPC application, one may chose the name ``RemoteObject``, and if one writes classes to control instrumentation (which is the main purpose of this package), one may use the ``Thing`` class (in future one of names may be dropped).
 
-Any class that inherits the base class can instantiate properties, actions and events which become visible to a client in this segragated manner. For example, consider a spectrometer device, the following code is possible:
+Any class that inherits the base class can instantiate properties, actions and events which become visible to a client in this segragated manner. For example, consider an optical spectrometer device, the following code is possible:
 
 ###### Import Statements
 
@@ -115,9 +116,7 @@ class OceanOpticsSpectrometer(Thing):
         self._run = False 
 ```
 
-``hololinked``, although the very familiar & age-old RPC server, affords to directly specify HTTP methods and URL path for each property, action and event. A configurable HTTP Server is already available which redirects HTTP requests according to the specified HTTP API on the properties, actions and events to the object. The intention is to eliminate the need to implement a detailed HTTP server (& its API) which could interact with a hardware and stick to object oriented coding.
-The redirection is mediated by ZeroMQ which also implements a fully fledged RPC that serializes all the HTTP requests to execute them one-by-one on the hardware. Obviously, this is useful for hardware which demands that only one command be issued at a time. For other types hardware that may exist which supports multiple requests, one may not benefit from this.  
-
+Although the very familiar & age-old RPC server, one can directly specify HTTP methods and URL path for each property, action and event. A configurable HTTP Server is already available (``hololinked.server.HTTPServer``) which redirects HTTP requests to the object according to the specified HTTP API on the properties, actions and events.
 To plug in a HTTP server: 
 
 ```python
@@ -143,6 +142,10 @@ if __name__ == "__main__":
     ).run()
 
 ```
+
+The intention is to eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in serializing commands issued to instruments,
+or write a HTTP to RPC bridge, or find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events. One can instead stick to object oriented coding.
+Ultimately, as expected, the redirection is mediated by ZeroMQ which (also) implements a fully fledged RPC that serializes all the HTTP requests to execute them one-by-one on the hardware. 
 
 One may use the HTTP API according to one's beliefs although it is mainly intended for web development and cross platform clients like the interoperable [node-wot](https://github.com/eclipse-thingweb/node-wot) client.    
 To know more about client side scripting, please look into the documentation [How-To](https://hololinked.readthedocs.io/en/latest/howto/index.html) section.
