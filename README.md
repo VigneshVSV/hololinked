@@ -184,4 +184,8 @@ There is no release to pip available right now.
 
 Contributors welcome for all my projects related to hololinked including web apps. Please write to my contact email available at [website](https://hololinked.dev).
 
+### Disclaimer
+
+This package is in no way endorsed by Web of Things Community and is also not a reference implementation or intends to be one.
+
 
