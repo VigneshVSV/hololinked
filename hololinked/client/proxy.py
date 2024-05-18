@@ -52,7 +52,7 @@ class ObjectProxy:
         '__annotations__',
         '_zmq_client', '_async_zmq_client', '_allow_foreign_attributes',
         'identity', 'instance_name', 'logger', 'execution_timeout', 'invokation_timeout', 
-        '_execution_timeout', '_invokation_timeout', '_events', '_oneway_messages'
+        '_execution_timeout', '_invokation_timeout', '_events', '_noblock_messages'
     ])
 
     def __init__(self, instance_name : str, protocol : str = ZMQ_PROTOCOLS.IPC, invokation_timeout : float = 5, 
@@ -63,7 +63,7 @@ class ObjectProxy:
         self.execution_timeout = kwargs.get("execution_timeout", None)
         self.identity = f"{instance_name}|{uuid.uuid4()}"
         self.logger = kwargs.pop('logger', logging.Logger(self.identity, level=kwargs.get('log_level', logging.INFO)))
-        self._oneway_messages = dict()
+        self._noblock_messages = dict()
         # compose ZMQ client in Proxy client so that all sending and receiving is
         # done by the ZMQ client and not by the Proxy client directly. Proxy client only 
         # bothers mainly about __setattr__ and _getattr__
@@ -194,10 +194,11 @@ class ObjectProxy:
         if not isinstance(method, _RemoteMethod):
             raise AttributeError(f"No remote method named {method}")
         if oneway:
-            msg_id = method.oneway(*args, **kwargs)
-            self._oneway_messages[msg_id] = method
+            method.oneway(*args, **kwargs)
         elif noblock:
-            return method.noblock(*args, **kwargs)
+            msg_id = method.noblock(*args, **kwargs)
+            self._noblock_messages[msg_id] = method
+            return msg_id
         else:
             return method(*args, **kwargs)
 
@@ -258,7 +259,9 @@ class ObjectProxy:
         if not isinstance(parameter, _RemoteParameter):
             raise AttributeError(f"No remote parameter named {parameter}")
         if noblock:
-            return parameter.noblock_get()
+            msg_id = parameter.noblock_get()
+            self._noblock_messages[msg_id] = parameter
+            return msg_id
         else:
             return parameter.get()
 
@@ -293,7 +296,9 @@ class ObjectProxy:
         if oneway:
             parameter.oneway_set(value)
         elif noblock:
-            return parameter.noblock_set(value)
+            msg_id = parameter.noblock_set(value)
+            self._noblock_messages[msg_id] = parameter
+            return msg_id
         else:
             parameter.set(value)
 
@@ -365,7 +370,9 @@ class ObjectProxy:
         if not method:
             raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         if noblock:
-            return method.noblock(names=names)
+            msg_id = method.noblock(names=names)
+            self._noblock_messages[msg_id] = method
+            return msg_id
         else:
             return method(names=names)
         
@@ -398,9 +405,11 @@ class ObjectProxy:
         if not method:
             raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         if oneway:
-            msg_id = method.oneway(values=values)
+            method.oneway(values=values)
         elif noblock:
-            method.noblock(values=values)
+            msg_id = method.noblock(values=values)
+            self._noblock_messages[msg_id] = method
+            return msg_id
         else:
             return method(values=values)
         
@@ -535,8 +544,9 @@ class ObjectProxy:
                 _add_event(self, event, data)
                 self.__dict__[data.name] = event 
 
+
     def read_reply(self, message_id : bytes, timeout : typing.Optional[float] = 5000) -> typing.Any:
-        obj = self._oneway_messages.get(message_id, None) 
+        obj = self._noblock_messages.get(message_id, None) 
         if not obj:
             raise ValueError('given message id not a one way call or invalid.')
         reply = self._zmq_client._reply_cache.get(message_id, None)
@@ -619,7 +629,7 @@ class _RemoteMethod:
         """
         if len(args) > 0: 
             kwargs["__args__"] = args
-        return self._zmq_client.send_instruction(instruction=self._instruction, arguments=kwargs, 
+        self._zmq_client.send_instruction(instruction=self._instruction, arguments=kwargs, 
                                         invokation_timeout=self._invokation_timeout, execution_timeout=None,
                                         context=dict(oneway=True), argument_schema=self._schema)
 
@@ -703,16 +713,20 @@ class _RemoteParameter:
                                                 raise_client_side_exception=True)
         return self.last_read_value 
     
+    def noblock_get(self) -> None:
+        return self._zmq_client.send_instruction(self._read_instruction,
+                                            invokation_timeout=self._invokation_timeout, 
+                                            execution_timeout=self._execution_timeout)
+    
+    def noblock_set(self, value : typing.Any) -> None:
+        return self._zmq_client.send_instruction(self._write_instruction, dict(value=value), 
+                                            invokation_timeout=self._invokation_timeout, 
+                                            execution_timeout=self._execution_timeout)
+    
     def oneway_set(self, value : typing.Any) -> None:
         self._zmq_client.send_instruction(self._write_instruction, dict(value=value), 
                                             invokation_timeout=self._invokation_timeout, 
                                             execution_timeout=self._execution_timeout)
-
-    def noblock_set(self, value : typing.Any) -> None:
-        raise NotImplementedError("no block set not implemented for parameters")
-    
-    def noblock_get(self) -> None:
-        raise NotImplementedError("no block get not implemented for parameters")
   
 
 

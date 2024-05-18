@@ -30,6 +30,7 @@ INSTRUCTION = b'INSTRUCTION'
 REPLY       = b'REPLY'
 EXCEPTION   = b'EXCEPTION'
 INTERRUPT   = b'INTERRUPT'
+ONEWAY      = b'ONEWAY'
 SERVER_DISCONNECTED = 'EVENT_DISCONNECTED'
 
 EVENT       = b'EVENT'
@@ -1073,7 +1074,8 @@ class RPCServer(BaseZMQServer):
                     await self.inner_inproc_client.socket.send_multipart(message)
                     reply = await self.inner_inproc_client.socket.recv_multipart()
                     reply[SM_INDEX_ADDRESS] = original_address
-                    await origin_socket.send_multipart(reply)
+                    if reply[SM_INDEX_MESSAGE_TYPE] != ONEWAY:
+                        await origin_socket.send_multipart(reply)
             else:
                 await self._instructions_event.wait()
                 self._instructions_event.clear()

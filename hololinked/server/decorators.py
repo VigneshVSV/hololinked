@@ -92,18 +92,9 @@ def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_MET
     return inner 
 
 
-def rpc(state : typing.Optional[typing.Union[str, Enum]] = None, 
-        argument_schema : typing.Optional[JSON] = None) -> typing.Callable:
-    """
-    shortcut decorator that only exposes methods to RPC clients
-    """
-    return remote_method(URL_path=None, http_method=None, state=state, argument_schema=argument_schema)
-
-
 
 __all__ = [
     remote_method.__name__,
-    rpc.__name__
 ]
 
 

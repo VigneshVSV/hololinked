@@ -125,15 +125,16 @@ from multiprocessing import Process
 from hololinked.server import HTTPServer
 
 def start_http_server():
-    H = HTTPServer(['spectrometer'], port=8083,
-                      log_level=logging.DEBUG)  
-    H.listen()
+    HTTPServer(
+        remote_objects=['spectrometer'], 
+        port=8083,
+        log_level=logging.DEBUG
+    ).listen()
 
 
 if __name__ == "__main__":
    
-    P = Process(target=start_https_server) 
-    P.start()
+    Process(target=start_https_server).start()
   
     OceanOpticsSpectrometer(
         instance_name='spectrometer',
@@ -160,7 +161,7 @@ To know more about client side scripting, please look into the documentation [Ho
 ### Currently Supported
 
 - indicate HTTP verb & URL path directly on object's methods, properties and events.
-- auto-generate Thing Description for Web of Things applications (inaccurate but usable). 
+- auto-generate Thing Description for Web of Things applications (inaccurate, being continuously developed but usable). 
 - control method execution and property write with a custom finite state machine.
 - database (Postgres, MySQL, SQLite - based on SQLAlchemy) support for storing and loading properties  when object dies and restarts. 
 - use serializer of your choice (except for HTTP) - MessagePack, JSON, pickle etc. & extend serialization to suit your requirement (HTTP Server will support only JSON serializer). Default is JSON serializer based on msgspec.
