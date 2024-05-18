@@ -170,7 +170,7 @@ To know more about client side scripting, please look into the documentation [Ho
 - use serializer of your choice (except for HTTP) - MessagePack, JSON, pickle etc. & extend serialization to suit your requirement (HTTP Server will support only JSON serializer). Default is JSON serializer based on msgspec.
 - asyncio compatible - async RPC server event-loop and async HTTP Server - write methods in async 
 - have flexibility in process architecture - run HTTP Server & python object in separate processes or in the same process, combine multiple objects in same server etc. 
-- choose from multiple ZeroMQ Transport methods - TCP for direct network access (apart from HTTP), IPC for multi-process same-PC applications, INPROC for multi-threaded applications. 
+- choose from multiple ZeroMQ Transport methods - TCP for direct network access (apart from HTTP), IPC for multi-process same-PC applications (like shown in example above), INPROC for multi-threaded applications. 
 
 Again, please check examples or the code for explanations. Documentation is being activety improved. 
 
