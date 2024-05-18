@@ -236,6 +236,33 @@ class ObjectProxy:
         return await method.async_call(*args, **kwargs)
 
 
+    def get_parameter(self, name : str, noblock : bool = False) -> typing.Any:
+        """
+        get parameter specified by name on server. 
+
+        Parameters
+        ----------
+        name: str 
+            name of the parameter
+        noblock: bool, default False 
+            request the parameter get but collect the reply/value later using a reply id
+
+        Raises
+        ------
+        AttributeError: 
+            if no method with specified name found on the server
+        Exception:
+            server raised exception are propagated
+        """
+        parameter = self.__dict__.get(name, None) # type: _RemoteParameter
+        if not isinstance(parameter, _RemoteParameter):
+            raise AttributeError(f"No remote parameter named {parameter}")
+        if noblock:
+            return parameter.noblock_get()
+        else:
+            return parameter.get()
+
+
     def set_parameter(self, name : str, value : typing.Any, oneway : bool = False, 
                         noblock : bool = False) -> None:
         """
@@ -271,6 +298,28 @@ class ObjectProxy:
             parameter.set(value)
 
 
+    async def async_get_parameter(self, name : str) -> None:
+        """
+        async(io) get parameter specified by name on server. 
+
+        Parameters
+        ----------
+        name: Any 
+            name of the parameter to fetch 
+
+        Raises
+        ------
+        AttributeError: 
+            if no method with specified name found on the server
+        Exception:
+            server raised exception are propagated
+        """
+        parameter = self.__dict__.get(name, None) # type: _RemoteParameter
+        if not isinstance(parameter, _RemoteParameter):
+            raise AttributeError(f"No remote parameter named {parameter}")
+        return await parameter.async_get()
+    
+
     async def async_set_parameter(self, name : str, value : typing.Any) -> None:
         """
         async(io) set parameter specified by name on server with specified value.  
@@ -294,55 +343,6 @@ class ObjectProxy:
         if not isinstance(parameter, _RemoteParameter):
             raise AttributeError(f"No remote parameter named {parameter}")
         await parameter.async_set(value)
-    
-
-    def get_parameter(self, name : str, noblock : bool = False) -> typing.Any:
-        """
-        get parameter specified by name on server. 
-
-        Parameters
-        ----------
-        name: str 
-            name of the parameter
-        noblock: bool, default False 
-            request the parameter get but collect the reply/value later using a reply id
-
-        Raises
-        ------
-        AttributeError: 
-            if no method with specified name found on the server
-        Exception:
-            server raised exception are propagated
-        """
-        parameter = self.__dict__.get(name, None) # type: _RemoteParameter
-        if not isinstance(parameter, _RemoteParameter):
-            raise AttributeError(f"No remote parameter named {parameter}")
-        if noblock:
-            return parameter.noblock_get()
-        else:
-            return parameter.get()
-    
-
-    async def async_get_parameter(self, name : str) -> None:
-        """
-        async(io) get parameter specified by name on server. 
-
-        Parameters
-        ----------
-        name: Any 
-            name of the parameter to fetch 
-
-        Raises
-        ------
-        AttributeError: 
-            if no method with specified name found on the server
-        Exception:
-            server raised exception are propagated
-        """
-        parameter = self.__dict__.get(name, None) # type: _RemoteParameter
-        if not isinstance(parameter, _RemoteParameter):
-            raise AttributeError(f"No remote parameter named {parameter}")
-        return await parameter.async_get()
 
 
     def get_parameters(self, names : typing.List[str], noblock : bool = False) -> typing.Any:
@@ -370,26 +370,6 @@ class ObjectProxy:
             return method(names=names)
         
     
-    async def async_get_parameters(self, names) -> None:
-        """
-        async(io) get parameters specified by list of names. no block gets are not supported for asyncio.
-
-        Parameters
-        ----------
-        names: List[str]
-            names of parameters to be fetched 
- 
-        Returns
-        -------
-        Dict[str, Any]:
-            dictionary with parameter names as keys and values corresponding to those keys
-        """
-        method = getattr(self, '_get_parameters', None) # type: _RemoteMethod
-        if not method:
-            raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
-        return await method.async_call(names=names)
-
-
     def set_parameters(self, values : typing.Dict[str, typing.Any], oneway : bool = False, 
                             noblock : bool = False) -> None:
         """
@@ -423,6 +403,26 @@ class ObjectProxy:
             method.noblock(values=values)
         else:
             return method(values=values)
+        
+
+    async def async_get_parameters(self, names) -> None:
+        """
+        async(io) get parameters specified by list of names. no block gets are not supported for asyncio.
+
+        Parameters
+        ----------
+        names: List[str]
+            names of parameters to be fetched 
+ 
+        Returns
+        -------
+        Dict[str, Any]:
+            dictionary with parameter names as keys and values corresponding to those keys
+        """
+        method = getattr(self, '_get_parameters', None) # type: _RemoteMethod
+        if not method:
+            raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
+        return await method.async_call(names=names)
 
 
     async def async_set_parameters(self, **parameters) -> None:
@@ -476,6 +476,7 @@ class ObjectProxy:
         else: 
             event.subscribe(callbacks, thread_callbacks)
        
+
     def unsubscribe_event(self, name : str):
         """
         Unsubscribe to event specified by name. 
@@ -703,7 +704,9 @@ class _RemoteParameter:
         return self.last_read_value 
     
     def oneway_set(self, value : typing.Any) -> None:
-        self._zmq_client.send_instruction(self._write_instruction, dict(value=value))
+        self._zmq_client.send_instruction(self._write_instruction, dict(value=value), 
+                                            invokation_timeout=self._invokation_timeout, 
+                                            execution_timeout=self._execution_timeout)
 
     def noblock_set(self, value : typing.Any) -> None:
         raise NotImplementedError("no block set not implemented for parameters")

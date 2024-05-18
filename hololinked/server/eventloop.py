@@ -249,10 +249,13 @@ class EventLoop(RemoteObject):
                     list_handler.setLevel(logging.DEBUG)
                     list_handler.setFormatter(instance.logger.handlers[0].formatter)
                     instance.logger.addHandler(list_handler)
+                oneway = context.get('oneway', False)
                 try:
                     instance.logger.debug(f"client {client} of client type {client_type} issued instruction " +
                                 f"{instruction_str} with message id {msg_id}. starting execution.")
                     return_value = await cls.execute_once(instance_name, instance, instruction_str, arguments) #type: ignore 
+                    if oneway:
+                        return 
                     if fetch_execution_logs:
                         return_value = {
                             "returnValue" : return_value,
@@ -263,6 +266,8 @@ class EventLoop(RemoteObject):
                 except (BreakInnerLoop, BreakAllLoops):
                     instance.logger.info("Remote object {} with instance name {} exiting event loop.".format(
                                                             instance.__class__.__name__, instance_name))
+                    if oneway:
+                        return 
                     return_value = None
                     if fetch_execution_logs:
                         return_value = { 
@@ -273,9 +278,9 @@ class EventLoop(RemoteObject):
                 except Exception as ex:
                     instance.logger.error("RemoteObject {} with instance name {} produced error : {}.".format(
                                                             instance.__class__.__name__, instance_name, ex))
-                    return_value = {
-                        "exception" : format_exception_as_json(ex),  
-                    }
+                    if oneway:
+                        return 
+                    return_value = dict(exception= format_exception_as_json(ex))
                     if fetch_execution_logs:
                         return_value["execution_logs"] = list_handler.log_list
                     await instance.message_broker.async_send_reply_with_message_type(instruction, 
