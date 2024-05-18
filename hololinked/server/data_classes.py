@@ -558,11 +558,13 @@ def get_organised_resources(instance):
         rpc_resources[fullpath] = data_cls
     # Other objects
     for name, resource in inspect._getmembers(instance, lambda o : isinstance(o, RemoteObject), getattr_without_descriptor_read):
-        if name == '_owner':
-            continue
         assert isinstance(resource, RemoteObject), ("remote object children query from inspect.ismethod is not a RemoteObject",
                                     "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")
         # above assertion is only a typing convenience
+        if name == '_owner' or resource._owner is not None: 
+            # second condition allows sharing of RemoteObjects without adding once again to the list of exposed resources
+            # for example, a shared logger 
+            continue
         resource._owner = instance      
         httpserver_resources.update(resource.httpserver_resources)
         # rpc_resources.update(resource.rpc_resources)

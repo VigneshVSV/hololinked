@@ -1,13 +1,15 @@
+import asyncio
 import typing
 import logging
+import uuid
 from tornado.web import RequestHandler, StaticFileHandler
 from tornado.iostream import StreamClosedError
 
-from .webserver_utils import *
-from .utils import current_datetime_ms_str
+
 from .data_classes import HTTPResource, ServerSentEvent
 from .serializers import JSONSerializer
-from .zmq_message_brokers import  MessageMappedZMQClientPool, AsyncEventConsumer
+from .webserver_utils import *
+from .zmq_message_brokers import AsyncEventConsumer
 
 
 
@@ -16,21 +18,23 @@ class BaseHandler(RequestHandler):
     Base request handler for RPC operations
     """
 
-    def initialize(self, resource : typing.Union[HTTPResource, ServerSentEvent], 
-                    zmq_client_pool : MessageMappedZMQClientPool, json_serializer : JSONSerializer,
-                    logger : logging.Logger, allowed_clients : typing.List[str] = list()) -> None:
+    def initialize(self, resource : typing.Union[HTTPResource, ServerSentEvent],
+                                owner = None) -> None:
+        from .HTTPServer import HTTPServer
+        assert isinstance(owner, HTTPServer)
         self.resource = resource
-        self.zmq_client_pool = zmq_client_pool 
-        self.serializer = json_serializer
-        self.logger = logger
-        self.allowed_clients = allowed_clients
+        self.owner = owner
+        self.zmq_client_pool = self.owner.zmq_client_pool 
+        self.serializer = self.owner.serializer
+        self.logger = self.owner.logger
+        self.allowed_clients = self.owner.allowed_clients
        
     def set_headers(self):
         """
         override this to set custom headers without having to reimplement entire handler
         """
-        raise NotImplementedError("implement set headers in child class to call it",
-                            " before directing the request to RemoteObject")
+        raise NotImplementedError("implement set headers in child class to automatically call it" +
+                            " after directing the request to RemoteObject")
     
     def get_execution_parameters(self) -> typing.Tuple[typing.Dict[str, typing.Any], 
                                                 typing.Dict[str, typing.Any], typing.Union[float, int, None]]:
@@ -63,13 +67,13 @@ class BaseHandler(RequestHandler):
         For credential login, access control allow origin cannot be '*',
         See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
         """
-        self.set_header("Access-Control-Allow-Origin", "*")
-        return True
         if len(self.allowed_clients) == 0:
+            self.set_header("Access-Control-Allow-Origin", "*")
             return True
         origin = self.request.headers.get("Origin")
         if origin is not None and (origin in self.allowed_clients or origin + '/' in self.allowed_clients):
             self.set_header("Access-Control-Allow-Origin", origin)
+            return True
         return False
     
     def set_access_control_allow_headers(self) -> None:
@@ -139,7 +143,7 @@ class RPCHandler(BaseHandler):
             self.set_header("Access-Control-Allow-Credentials", "true")
             self.set_header("Access-Control-Allow-Methods", ', '.join(self.resource.instructions.supported_methods()))
         else:
-            self.set_status(403, "forbidden")
+            self.set_status(401, "forbidden")
         self.finish()
     
 
@@ -148,10 +152,11 @@ class RPCHandler(BaseHandler):
         handles the RPC call
         """
         if not self.has_access_control:
-            self.set_status(403, "forbidden")    
+            self.set_status(401, "forbidden")    
         elif http_method not in self.resource.instructions:
             self.set_status(404, "not found")
         else:
+            reply = None
             try:
                 arguments, context, timeout = self.get_execution_parameters()
                 reply = await self.zmq_client_pool.async_execute(
@@ -167,6 +172,15 @@ class RPCHandler(BaseHandler):
                 # message mapped client pool currently strips the data part from return message
                 # and provides that as reply directly 
                 self.set_status(200, "ok")
+            except ConnectionAbortedError as ex:
+                self.set_status(503, str(ex))
+                event_loop = asyncio.get_event_loop()
+                event_loop.call_soon(lambda : asyncio.create_task(self.owner.update_router_with_remote_object(
+                                                                    self.zmq_client_pool[self.resource.instance_name])))
+            except ConnectionError as ex:
+                await self.owner.update_router_with_remote_object(self.zmq_client_pool[self.resource.instance_name])
+                await self.handle_through_remote_object(http_method) # reschedule
+                return 
             except Exception as ex:
                 self.logger.error(f"error while scheduling RPC call - {str(ex)}")
                 self.logger.debug(f"traceback - {ex.__traceback__}")
@@ -177,6 +191,7 @@ class RPCHandler(BaseHandler):
                 self.write(reply)
         self.finish()
         
+    
         
 class EventHandler(BaseHandler):
     """
@@ -204,7 +219,7 @@ class EventHandler(BaseHandler):
             self.set_headers()
             await self.handle_datastream()
         else:
-            self.set_status(403, "forbidden")
+            self.set_status(401, "forbidden")
         self.finish()
 
     async def options(self):
@@ -217,7 +232,7 @@ class EventHandler(BaseHandler):
             self.set_header("Access-Control-Allow-Credentials", "true")
             self.set_header("Access-Control-Allow-Methods", 'GET')
         else:
-            self.set_status(403, "forbidden")
+            self.set_status(401, "forbidden")
         self.finish()
 
     async def handle_datastream(self) -> None:    
@@ -227,7 +242,8 @@ class EventHandler(BaseHandler):
         try:                        
             data_header = b'data: %s\n\n'
             event_consumer = AsyncEventConsumer(self.resource.unique_identifier, self.resource.socket_address, 
-                            f"{self.resource.unique_identifier}|HTTPEvent|{current_datetime_ms_str()}")
+                                                f"{self.resource.unique_identifier}|HTTPEvent|{uuid.uuid4()}",
+                                                logger=self.logger, json_serializer=self.serializer)
         except Exception as ex:
             self.logger.error(f"error while subscribing to event - {str(ex)}")
             self.set_status(500, "could not subscribe to event source from remote object")
@@ -264,10 +280,10 @@ class ImageEventHandler(EventHandler):
 
     async def handle_datastream(self) -> None:
         try:
-            self.set_header("Content-Type", "application/x-mpegURL")
             event_consumer = AsyncEventConsumer(self.resource.unique_identifier, self.resource.socket_address, 
-                            f"{self.resource.unique_identifier}|HTTPEvent|{current_datetime_ms_str()}", 
-                            json_serializer=self.serializer)         
+                            f"{self.resource.unique_identifier}|HTTPEvent|{uuid.uuid4()}", 
+                            json_serializer=self.serializer, logger=self.logger)         
+            self.set_header("Content-Type", "application/x-mpegURL")
             self.write("#EXTM3U\n")
             delimiter = "#EXTINF:{},\n"
             data_header = b'data:image/jpeg;base64,%s\n'
@@ -280,9 +296,12 @@ class ImageEventHandler(EventHandler):
                         self.write(data_header % data)
                         await self.flush()
                         self.logger.debug(f"new image sent - {self.resource.name}")
+                    else:
+                        self.logger.debug(f"found no new data")
                 except StreamClosedError:
                     break 
                 except Exception as ex:
+                    self.logger.error(f"error while pushing event - {str(ex)}")
                     self.write(data_header % self.serializer.dumps(
                         {"exception" : format_exception_as_json(ex)}))
             event_consumer.exit()
@@ -318,27 +337,18 @@ class RemoteObjectsHandler(BaseHandler):
     add or remove remote objects
     """
 
-    def initialize(self, resource: HTTPResource | ServerSentEvent, zmq_client_pool: MessageMappedZMQClientPool, 
-                json_serializer: JSONSerializer, logger: logging.Logger, allowed_clients: typing.List[str] = list(), 
-                request_handler : BaseHandler = RPCHandler, event_handler : EventHandler = EventHandler) -> None:
-        self.request_handler = request_handler
-        self.event_handler = event_handler
-        return super().initialize(resource, zmq_client_pool, json_serializer, logger, allowed_clients)
-
     async def get(self):
         self.set_status(404)
         self.finish()
     
     async def post(self):
         if not self.has_access_control:
-            self.set_status(403, 'forbidden')
+            self.set_status(401, 'forbidden')
         else:
-            from .HTTPServer import update_router_with_remote_objects
             try:
-                await update_router_with_remote_objects(application=self.application, zmq_client_pool=self.zmq_client_pool,
-                                            request_handler=self.request_handler, event_handler=self.event_handler,
-                                            json_serializer=self.serializer, logger=self.logger, 
-                                            allowed_clients=self.allowed_clients)
+                instance_name = ""
+                await self.zmq_client_pool.create_new(server_instance_name=instance_name)
+                await self.owner.update_router_with_remote_object(self.zmq_client_pool[instance_name])
                 self.set_status(204, "ok")
             except Exception as ex:
                 self.set_status(500, str(ex))
@@ -352,5 +362,8 @@ class RemoteObjectsHandler(BaseHandler):
             self.set_header("Access-Control-Allow-Credentials", "true")
             self.set_header("Access-Control-Allow-Methods", 'GET, POST')
         else:
-            self.set_status(403, "forbidden")
+            self.set_status(401, "forbidden")
         self.finish()
+
+
+

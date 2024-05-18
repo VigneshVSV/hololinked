@@ -3,6 +3,8 @@ import typing
 from types import FunctionType, MethodType
 from enum import StrEnum, IntEnum, Enum
 
+import zmq
+
 
 # types
 JSONSerializable = typing.Union[typing.Dict[str, typing.Any], list, str, int, float, None]
@@ -35,7 +37,7 @@ class CommonRPC(StrEnum):
     RPC_RESOURCES = '/resources/object-proxy'
     HTTP_RESOURCES = '/resources/http-server'
     OBJECT_INFO = '/object-info'
-
+    PING = '/ping'
 
     @classmethod
     def rpc_resource_read(cls, instance_name : str) -> str:
@@ -118,6 +120,7 @@ class ServerMessage(IntEnum):
     MESSAGE_TYPE = 3
     MESSAGE_ID = 4
     DATA = 5
+    ENCODED_DATA = 6
 
 
 class ServerTypes(Enum):
@@ -157,6 +160,31 @@ class Serializers(StrEnum):
     JSON = 'json'
     SERPENT = 'serpent'
     MSGPACK = 'msgpack'
+
+
+class ZMQSocketType(Enum):
+    PAIR = zmq.PAIR
+    PUB = zmq.PUB
+    SUB = zmq.SUB
+    REQ = zmq.REQ
+    REP = zmq.REP
+    DEALER = zmq.DEALER
+    ROUTER = zmq.ROUTER
+    PULL = zmq.PULL
+    PUSH = zmq.PUSH
+    XPUB = zmq.XPUB
+    XSUB = zmq.XSUB
+    STREAM = zmq.STREAM
+    # Add more socket types as needed
+
+
+ZMQ_EVENT_MAP = {}
+for name in dir(zmq):
+    if name.startswith('EVENT_'):
+        value = getattr(zmq, name)
+        ZMQ_EVENT_MAP[value] = name
+
+
 
 
 __all__ = [
