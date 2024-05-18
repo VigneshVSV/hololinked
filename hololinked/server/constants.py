@@ -37,7 +37,7 @@ class CommonRPC(StrEnum):
     RPC_RESOURCES = '/resources/object-proxy'
     HTTP_RESOURCES = '/resources/http-server'
     OBJECT_INFO = '/object-info'
-
+    PING = '/ping'
 
     @classmethod
     def rpc_resource_read(cls, instance_name : str) -> str:
@@ -184,12 +184,7 @@ for name in dir(zmq):
         value = getattr(zmq, name)
         ZMQ_EVENT_MAP[value] = name
 
-# Function to get the socket type name from the enum
-def get_socket_type_name(socket_type):
-    try:
-        return ZMQSocketType(socket_type).name
-    except ValueError:
-        return "UNKNOWN"
+
 
 
 __all__ = [

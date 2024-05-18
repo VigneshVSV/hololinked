@@ -1,3 +1,4 @@
+import zmq
 import asyncio
 import logging
 import socket
@@ -12,15 +13,14 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 
 from ..param import Parameterized
-from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector, 
-                    TypedList, String)
-from ..server.webserver_utils import get_IP_from_interface
-from .utils import get_default_logger, run_coro_sync
-from .constants import ResourceTypes, CommonRPC, HTTPServerTypes
+from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector, TypedList, String)
+from .constants import CommonRPC, HTTPServerTypes, ResourceTypes, ServerMessage
+from .webserver_utils import get_IP_from_interface
 from .data_classes import HTTPResource, ServerSentEvent
+from .utils import get_default_logger, run_coro_sync
 from .serializers import JSONSerializer
-from .database import RemoteObjectInformation 
-from .zmq_message_brokers import MessageMappedZMQClientPool
+from .database import RemoteObjectInformation
+from .zmq_message_brokers import  AsyncZMQClient, MessageMappedZMQClientPool
 from .handlers import RPCHandler, BaseHandler, EventHandler, RemoteObjectsHandler
 
 
@@ -88,10 +88,11 @@ class HTTPServer(Parameterized):
             network_interface=network_interface,
             request_handler=request_handler,
             event_handler=event_handler,
-            allowed_clients=allowed_clients
+            allowed_clients=allowed_clients if allowed_clients is not None else []
         )
         self._type = HTTPServerTypes.REMOTE_OBJECT_SERVER
-        
+        self._lost_remote_objects = dict() # see update_router_with_remote_object
+               
 
     @property
     def all_ok(self) -> bool:
@@ -102,30 +103,23 @@ class HTTPServer(Parameterized):
                                             self.log_level)
             
         self.app = Application(handlers=[
-            (r'/remote-objects', RemoteObjectsHandler, dict(request_handler=self.request_handler))
+            (r'/remote-objects', RemoteObjectsHandler, dict(request_handler=self.request_handler, 
+                                                        event_handler=self.event_handler))
         ])
         
         self.zmq_client_pool = MessageMappedZMQClientPool(self.remote_objects, identity=self._IP, 
                                                     deserialize_server_messages=False, json_serializer=self.serializer)
     
         event_loop = asyncio.get_event_loop()
-        event_loop.call_soon(lambda : asyncio.create_task(
-                            update_router_with_remote_objects(
-                    application=self.app, zmq_client_pool=self.zmq_client_pool,  
-                    request_handler=self.request_handler, event_handler=self.event_handler,
-                    json_serializer=self.serializer, logger=self.logger, 
-                    allowed_clients=self.allowed_clients if self.allowed_clients is not None else [],
-                    server_address="{}://{}".format("https" if self.ssl_context is not None else "http", self._IP)
-                )))
+        event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_remote_objects()))
         event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
         event_loop.call_soon(lambda : asyncio.create_task(self.zmq_client_pool.poll()) )
         
         if self.protocol_version == 2:
             raise NotImplementedError("Current HTTP2 is not implemented.")
-            self.server = TornadoHTTP2Server(router, ssl_options=self.ssl_context)
+            self.server = TornadoHTTP2Server(self.app, ssl_options=self.ssl_context)
         else:
             self.server = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)
-
         return True
     
 
@@ -176,99 +170,100 @@ class HTTPServer(Parameterized):
         self.event_loop.close()    
 
 
+    async def update_router_with_remote_objects(self)-> None:
+        """
+        updates HTTP router with paths from newly instantiated ``RemoteObject``s
+        """
+        await asyncio.gather(*[self.update_router_with_remote_object(client) for client in self.zmq_client_pool])
 
-async def update_router_with_remote_objects(application : Application, zmq_client_pool : MessageMappedZMQClientPool, 
-                        request_handler : BaseHandler, event_handler : BaseHandler, json_serializer : JSONSerializer, 
-                        logger : logging.Logger, allowed_clients : typing.List[str], server_address : str) -> None:
-    """
-    updates HTTP router with paths from newly instantiated ``RemoteObject`` 
-    
-    Parameters
-    ----------
-    application: tornado.web.Application
-        the application/router of the HTTP server 
-    zmq_client_pool: MessageMappedZMQClientPool
-        associated client pool where the instantiated ``RemoteObject`` client exists or has been created
-    request_handler: RPCHandler
-        web request handler for method execution and parameter read-write
-    event_handler: EventHandler
-        event handler listening to ZMQ events
-    json_serializer: JSONSerializer
-        JSON serializer
-    logger: logging.Logger
-        logger
-    allowed_clients: List[str] | None
-        list of allowed clients that can access the HTTP server
-    """
-    resources = dict() # type: typing.Dict[str, HTTPResource]
+        
+    async def update_router_with_remote_object(self, client : AsyncZMQClient):
+        if client.instance_name in self._lost_remote_objects:
+            # Just to avoid duplication of this call as we proceed at single client level and not message mapped level
+            return 
+        self._lost_remote_objects[client.instance_name] = client
+        self.logger.info(f"attempting to update router with remote object {client.instance_name}.")
+        while True:
+            try:
+                await client.handshake_complete()
+                resources = dict() # type: typing.Dict[str, HTTPResource]
+                reply = (await client.async_execute(
+                                instruction=CommonRPC.http_resource_read(client.instance_name), 
+                                raise_client_side_exception=True
+                            ))[ServerMessage.DATA]
+                resources.update(reply)
 
+                handlers = []
+                for instruction, http_resource in resources.items():
+                    if http_resource["what"] in [ResourceTypes.PARAMETER, ResourceTypes.CALLABLE] :
+                        resource = HTTPResource(**http_resource)
+                        handlers.append((resource.fullpath, self.request_handler, dict(
+                                                                resource=resource, 
+                                                                owner=self                                                     
+                                                            )))
+                    elif http_resource["what"] == ResourceTypes.EVENT:
+                        resource = ServerSentEvent(**http_resource)
+                        handlers.append((instruction, self.event_handler, dict(
+                                                                resource=resource,
+                                                                owner=self 
+                                                            )))
+                    """
+                    for handler based tornado rule matcher, the Rule object has following
+                    signature
+                    
+                    def __init__(
+                        self,
+                        matcher: "Matcher",
+                        target: Any,
+                        target_kwargs: Optional[Dict[str, Any]] = None,
+                        name: Optional[str] = None,
+                    ) -> None:
 
-    for client in zmq_client_pool:
-        await client.handshake_complete()
-        _, _, _, _, _, reply, _ = await client.async_execute(
-                    CommonRPC.http_resource_read(client.server_instance_name), 
-                    raise_client_side_exception=True)
-        resources.update(reply)
+                    matcher - based on route
+                    target - handler
+                    target_kwargs - given to handler's initialize
+                    name - ...
 
+                    len == 2 tuple is route + handler
+                    len == 3 tuple is route + handler + target kwargs
+                
+                    so we give (path, RPCHandler, {'resource' : HTTPResource})
+                    
+                    path is extracted from remote_method(URL_path='....')
+                    RPCHandler is the base handler of this package for RPC purposes
+                    resource goes into target kwargs as the HTTPResource generated by 
+                        remote_method and RemoteParamater contains all the info given 
+                        to make RPCHandler work
+                    """
+                self.app.wildcard_router.add_rules(handlers)
+                self.logger.info(f"updated router with remote object {client.instance_name}.")
+                break
+            except Exception as ex:
+                self.logger.error(f"error while trying to update router with remote object - {str(ex)}. " +
+                                  "Trying again in 5 seconds")
+                await asyncio.sleep(5)
        
-    handlers = []
-    for instruction, http_resource in resources.items():
-        if http_resource["what"] in [ResourceTypes.PARAMETER, ResourceTypes.CALLABLE] :
-            resource = HTTPResource(**http_resource)
-            handlers.append((resource.fullpath, request_handler, dict(
-                                                    resource=resource, 
-                                                    zmq_client_pool=zmq_client_pool, 
-                                                    json_serializer=json_serializer,
-                                                    logger=logger,
-                                                    allowed_clients=allowed_clients                                                     
-                                                )))
-        elif http_resource["what"] == ResourceTypes.EVENT:
-            resource = ServerSentEvent(**http_resource)
-            handlers.append((instruction, event_handler, dict(
-                                                    resource=resource,
-                                                    json_serializer=json_serializer,
-                                                    logger=logger,
-                                                    allowed_clients=allowed_clients          
-                                                )))
-        """
-        for handler based tornado rule matcher, the Rule object has following
-        signature
-        
-        def __init__(
-            self,
-            matcher: "Matcher",
-            target: Any,
-            target_kwargs: Optional[Dict[str, Any]] = None,
-            name: Optional[str] = None,
-        ) -> None:
-
-        matcher - based on route
-        target - handler
-        target_kwargs - given to handler's initialize
-        name - ...
-
-        len == 2 tuple is route + handler
-        len == 3 tuple is route + handler + target kwargs
+        try:
+            reply = (await client.async_execute(
+                        instruction=CommonRPC.object_info_read(client.instance_name), 
+                        raise_client_side_exception=True
+                    ))[ServerMessage.DATA]
+            object_info = RemoteObjectInformation(**reply)
+            object_info.http_server ="{}://{}:{}".format("https" if self.ssl_context is not None else "http", 
+                                                socket.gethostname(), self.port)
     
-        so we give (path, RPCHandler, {'resource' : HTTPResource})
-        
-        path is extracted from remote_method(URL_path='....')
-        RPCHandler is the base handler of this package for RPC purposes
-        resource goes into target kwargs as the HTTPResource generated by 
-            remote_method and RemoteParamater contains all the info given 
-            to make RPCHandler work
-        """
-    application.wildcard_router.add_rules(handlers)
-
-
-    for client in zmq_client_pool:
-        _, _, _, _, _, reply, _ = await client.async_execute(
-                    CommonRPC.object_info_read(client.server_instance_name), 
-                    raise_client_side_exception=True)
-        object_info = RemoteObjectInformation(**reply)
-        object_info.http_server = f"{server_address.split(':')[0]}://{socket.gethostname()}:{server_address.split(':')[-1]}"
-        await client.async_execute(CommonRPC.object_info_write(client.server_instance_name),
-                                arguments={ "value" : object_info }, raise_client_side_exception=True)
+            await client.async_execute(
+                        instruction=CommonRPC.object_info_write(client.instance_name),
+                        arguments=dict(value=object_info), 
+                        raise_client_side_exception=True
+                    )
+        except Exception as ex:
+            self.logger.error(f"error while trying to update remote object with HTTP server details - {str(ex)}. " +
+                                "Trying again in 5 seconds")
+        self.zmq_client_pool.poller.register(client.socket, zmq.POLLIN)
+        self._lost_remote_objects.pop(client.instance_name)
+               
+    
 
 
 __all__ = ['HTTPServer']

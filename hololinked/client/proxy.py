@@ -44,13 +44,15 @@ class ObjectProxy:
             logger instance
         log_level: int
             log level corresponding to logging.Logger when internally created
+        handshake_timeout: int
+            time in milliseconds to search & handshake server remote object. raises Timeout when expired
     """
 
     _own_attrs = frozenset([
         '__annotations__',
         '_zmq_client', '_async_zmq_client', '_allow_foreign_attributes',
         'identity', 'instance_name', 'logger', 'execution_timeout', 'invokation_timeout', 
-        '_execution_timeout', '_invokation_timeout', '_events'
+        '_execution_timeout', '_invokation_timeout', '_events', '_oneway_messages'
     ])
 
     def __init__(self, instance_name : str, protocol : str = ZMQ_PROTOCOLS.IPC, invokation_timeout : float = 5, 
@@ -60,18 +62,19 @@ class ObjectProxy:
         self.invokation_timeout = invokation_timeout
         self.execution_timeout = kwargs.get("execution_timeout", None)
         self.identity = f"{instance_name}|{uuid.uuid4()}"
-        self.logger = kwargs.get('logger', logging.Logger(self.identity, level=kwargs.get('log_level', logging.INFO)))
+        self.logger = kwargs.pop('logger', logging.Logger(self.identity, level=kwargs.get('log_level', logging.INFO)))
+        self._oneway_messages = dict()
         # compose ZMQ client in Proxy client so that all sending and receiving is
         # done by the ZMQ client and not by the Proxy client directly. Proxy client only 
         # bothers mainly about __setattr__ and _getattr__
         self._async_zmq_client = None    
         self._zmq_client = SyncZMQClient(instance_name, self.identity, client_type=PROXY, protocol=protocol, 
                                             rpc_serializer=kwargs.get('serializer', None), handshake=load_remote_object,
-                                            **kwargs)
+                                            logger=self.logger, **kwargs)
         if kwargs.get("async_mixin", False):
-            self._async_zmq_client = AsyncZMQClient(instance_name, self.identity, client_type=PROXY, protocol=protocol, 
+            self._async_zmq_client = AsyncZMQClient(instance_name, self.identity + '|async', client_type=PROXY, protocol=protocol, 
                                             rpc_serializer=kwargs.get('serializer', None), handshake=load_remote_object,
-                                            **kwargs)
+                                            logger=self.logger, **kwargs)
         if load_remote_object:
             self.load_remote_object()
 
@@ -191,7 +194,8 @@ class ObjectProxy:
         if not isinstance(method, _RemoteMethod):
             raise AttributeError(f"No remote method named {method}")
         if oneway:
-            method.oneway(*args, **kwargs)
+            msg_id = method.oneway(*args, **kwargs)
+            self._oneway_messages[msg_id] = method
         elif noblock:
             return method.noblock(*args, **kwargs)
         else:
@@ -383,7 +387,7 @@ class ObjectProxy:
         method = getattr(self, '_get_parameters', None) # type: _RemoteMethod
         if not method:
             raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
-        await method.async_call(names=names)
+        return await method.async_call(names=names)
 
 
     def set_parameters(self, values : typing.Dict[str, typing.Any], oneway : bool = False, 
@@ -414,7 +418,7 @@ class ObjectProxy:
         if not method:
             raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         if oneway:
-            method.oneway(values=values)
+            msg_id = method.oneway(values=values)
         elif noblock:
             method.noblock(values=values)
         else:
@@ -526,11 +530,26 @@ class ObjectProxy:
             elif data.what == ResourceTypes.EVENT:
                 assert isinstance(data, ServerSentEvent)
                 event = _Event(self._zmq_client, data.name, data.obj_name, data.unique_identifier, data.socket_address, 
-                            serializer=self._zmq_client.rpc_serializer)
+                            serializer=self._zmq_client.rpc_serializer, logger=self.logger)
                 _add_event(self, event, data)
                 self.__dict__[data.name] = event 
 
-    
+    def read_reply(self, message_id : bytes, timeout : typing.Optional[float] = 5000) -> typing.Any:
+        obj = self._oneway_messages.get(message_id, None) 
+        if not obj:
+            raise ValueError('given message id not a one way call or invalid.')
+        reply = self._zmq_client._reply_cache.get(message_id, None)
+        if not reply: 
+            reply = self._zmq_client.recv_reply(message_id=message_id, timeout=timeout,
+                                    raise_client_side_exception=True)
+        if not reply:
+            raise ReplyNotArrivedError(f"could not fetch reply within timeout for message id '{message_id}'")
+        if isinstance(obj, _RemoteMethod):
+            obj._last_return_value = reply 
+            return obj.last_return_value # note the missing underscore
+        elif isinstance(obj, _RemoteParameter):
+            obj._last_value = reply 
+            return obj.last_read_value
 
 
 # SM = Server Message
@@ -573,7 +592,7 @@ class _RemoteMethod:
         """
         cached return value of the last call to the method
         """
-        if len(self._last_return_value[SM_INDEX_ENCODED_DATA] > 0):
+        if len(self._last_return_value[SM_INDEX_ENCODED_DATA]) > 0:
             return self._last_return_value[SM_INDEX_ENCODED_DATA]
         return self._last_return_value[SM_INDEX_DATA]
     
@@ -599,7 +618,7 @@ class _RemoteMethod:
         """
         if len(args) > 0: 
             kwargs["__args__"] = args
-        self._zmq_client.send_instruction(instruction=self._instruction, arguments=kwargs, 
+        return self._zmq_client.send_instruction(instruction=self._instruction, arguments=kwargs, 
                                         invokation_timeout=self._invokation_timeout, execution_timeout=None,
                                         context=dict(oneway=True), argument_schema=self._schema)
 
@@ -607,19 +626,9 @@ class _RemoteMethod:
         if len(args) > 0: 
             kwargs["__args__"] = args
         return self._zmq_client.send_instruction(instruction=self._instruction, arguments=kwargs, 
-                                        invokation_timeout=self._invokation_timeout, execution_timeout=self._execution_timeout,
-                                        argument_schema=self._schema)
-    
-    def read_reply(self, message_id : bytes, timeout : typing.Optional[float] = 5000) -> typing.Any:
-        reply = self._zmq_client._reply_cache.get(message_id, None)
-        if not reply: 
-            reply = self._zmq_client.recv_reply(message_id=message_id, timeout=timeout,
-                                    raise_client_side_exception=True)
-        if not reply:
-            raise TimeoutError(f"could not fetch reply within timeout for message id '{message_id}'")
-        self._last_return_value = reply 
-        return self.last_return_value
-    
+                                invokation_timeout=self._invokation_timeout, execution_timeout=self._execution_timeout,
+                                argument_schema=self._schema)
+     
     async def async_call(self, *args, **kwargs):
         """
         async execute method on server
@@ -628,8 +637,8 @@ class _RemoteMethod:
             raise RuntimeError("async calls not possible as async_mixin was not set at __init__()")
         if len(args) > 0: 
             kwargs["__args__"] = args
-        self._last_return_value = await self._async_zmq_client.async_execute(self._instruction, 
-                                        kwargs, invokation_timeout=self._invokation_timeout, raise_client_side_exception=True,
+        self._last_return_value = await self._async_zmq_client.async_execute(instruction=self._instruction, 
+                                        arguments=kwargs, invokation_timeout=self._invokation_timeout, raise_client_side_exception=True,
                                         argument_schema=self._schema)
         return self.last_return_value # note the missing underscore
 
@@ -655,6 +664,8 @@ class _RemoteParameter:
         """
         cache of last read value
         """
+        if len(self._last_value[SM_INDEX_ENCODED_DATA]) > 0:
+            return self._last_value[SM_INDEX_ENCODED_DATA]
         return self._last_value[SM_INDEX_DATA]
     
     @property
@@ -672,16 +683,24 @@ class _RemoteParameter:
         self._last_value = self._zmq_client.execute(self._read_instruction, 
                                                 invokation_timeout=self._invokation_timeout, 
                                                 raise_client_side_exception=True)
-        return self._last_value[SM_INDEX_DATA]
+        return self.last_read_value 
     
     async def async_set(self, value : typing.Any) -> None:
+        if not self._async_zmq_client:
+            raise RuntimeError("async calls not possible as async_mixin was not set at __init__()")
         self._last_value = await self._async_zmq_client.async_execute(self._write_instruction, dict(value=value),
-                                                        invokation_timeout=self._invokation_timeout, raise_client_side_exception=True)
+                                                        invokation_timeout=self._invokation_timeout, 
+                                                        execution_timeout=self._execution_timeout,
+                                                        raise_client_side_exception=True)
     
     async def async_get(self) -> typing.Any:
+        if not self._async_zmq_client:
+            raise RuntimeError("async calls not possible as async_mixin was not set at __init__()")
         self._last_value = await self._async_zmq_client.async_execute(self._read_instruction,
-                                                invokation_timeout=self._invokation_timeout, raise_client_side_exception=True)
-        return self._last_value[SM_INDEX_DATA]
+                                                invokation_timeout=self._invokation_timeout, 
+                                                execution_timeout=self._execution_timeout,
+                                                raise_client_side_exception=True)
+        return self.last_read_value 
     
     def oneway_set(self, value : typing.Any) -> None:
         self._zmq_client.send_instruction(self._write_instruction, dict(value=value))
@@ -697,19 +716,19 @@ class _RemoteParameter:
 class _Event:
     
     __slots__ = ['_zmq_client', '_name', '_obj_name', '_unique_identifier', '_socket_address', '_callbacks',
-                    '_serializer', '_subscribed', '_thread', '_thread_callbacks', '_event_consumer']
+                    '_serializer', '_subscribed', '_thread', '_thread_callbacks', '_event_consumer', '_logger']
     # event subscription
     # Dont add class doc otherwise __doc__ in slots will conflict with class variable
 
     def __init__(self, client : SyncZMQClient, name : str, obj_name : str, unique_identifier : str, socket : str, 
-                    serializer : BaseSerializer = None) -> None:
-        self._zmq_client = client 
+                    serializer : BaseSerializer = None, logger : logging.Logger = None) -> None:
         self._name = name
         self._obj_name = obj_name
         self._unique_identifier = unique_identifier
         self._socket_address = socket
         self._callbacks = None 
         self._serializer = serializer
+        self._logger = logger 
 
     def add_callbacks(self, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable]) -> None:
         if not self._callbacks:
@@ -722,8 +741,8 @@ class _Event:
     def subscribe(self, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable], 
                     thread_callbacks : bool = False):
         self._event_consumer = EventConsumer(self._unique_identifier, self._socket_address, 
-                                f"{self._name}_RPCEvent@"+current_datetime_ms_str(), b'PROXY',
-                                rpc_serializer=self._serializer)
+                                f"{self._name}|RPCEvent|{uuid.uuid4()}", b'PROXY',
+                                rpc_serializer=self._serializer, logger=self._logger)
         self.add_callbacks(callbacks) 
         self._subscribed = True
         self._thread_callbacks = thread_callbacks
@@ -787,6 +806,11 @@ def _add_parameter(client_obj : ObjectProxy, parameter : _RemoteParameter, param
 def _add_event(client_obj : ObjectProxy, event : _Event, event_info : ServerSentEvent) -> None:
     setattr(client_obj, event_info.obj_name, event)
     
+
+
+class ReplyNotArrivedError(Exception):
+    pass 
+
 
 __all__ = ['ObjectProxy']
 

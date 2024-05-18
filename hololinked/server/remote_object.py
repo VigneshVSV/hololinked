@@ -316,7 +316,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
         if instance_name.startswith('/'):
             instance_name = instance_name[1:]
         rpc_serializer = serializer or params.pop('rpc_serializer', 'json')
-        json_serializer = params.pop('json_serializer', 'json')
+        json_serializer = serializer if isinstance(serializer, JSONSerializer) else params.pop('json_serializer', 'json')
         rpc_serializer, json_serializer = _get_serializer_from_user_given_options(
                                                                     rpc_serializer=rpc_serializer,
                                                                     json_serializer=json_serializer
@@ -459,7 +459,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
         return data 
     
     @remote_method(URL_path='/parameters', http_method=HTTP_METHODS.PATCH)
-    def _set_parameters(self, values : typing.Dict[str, typing.Any]) -> None:
+    def _set_parameters(self, **values : typing.Dict[str, typing.Any]) -> None:
         """ 
         set parameters whose name is specified by keys of a dictionary
         
