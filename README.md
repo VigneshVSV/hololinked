@@ -16,9 +16,9 @@ This package can also be used for general RPC for other applications.
 - actions are methods which issue commands to the device or run arbitrary python logic. 
 - events can asynchronously communicate/push data to a client, like alarm messages, streaming captured data etc. 
 
-In ``hololinked``, the base class which enables this classification is the ``RemoteObject`` class, or the ``Thing`` class if one prefers to use terminology according to the Web of Things. Both classes are identical and differentiated only in the naming according to the application domain one may be using. In future one of the names may be dropped. Nevertheless, any class that inherits the base class can instantiate properties, actions and events which become visible to a client in this segragated manner. For example, consider an optical spectrometer device, the following code is possible:
+In `hololinked`, the base class which enables this classification is the `RemoteObject` class, or the `Thing` class if one prefers to use terminology according to the Web of Things. Both classes are identical and differentiated only in the naming according to the application domain one may be using. In future one of the names may be dropped. Nevertheless, any class that inherits the base class can instantiate properties, actions and events which become visible to a client in this segragated manner. For example, consider an optical spectrometer device, the following code is possible:
 
-###### Import Statements
+##### Import Statements
 
 ```python
 from hololinked.wot import Thing
@@ -26,7 +26,7 @@ from hololinked.wot.actions import action
 from hololinked.wot.properties import String, Integer, Number, List
 from hololinked.wot.events import Event
 ```
-###### Definition of one's own hardware controlling class
+##### Definition of one's own hardware controlling class
 
 subclass from Thing class to "make a Thing":
 
@@ -39,9 +39,9 @@ class OceanOpticsSpectrometer(Thing):
     
 ```
 
-###### Instantiating properties
+##### Instantiating properties
 
-They are certain predefined properties available like ``String``, ``Number``, ``Boolean`` etc. 
+There are certain predefined properties available like `String`, `Number`, `Boolean` etc. 
 (or one may define one's own). To create properties:
 
 ```python
@@ -68,8 +68,7 @@ class OceanOpticsSpectrometer(Thing):
 ```
 
 For those unfamiliar with the above syntax, Properties look like class attributes however their data containers are instantiated at object instance level by default.
-For example, the ``integratime_time`` property defined above as ``Number``, whenever set, will be validated as a float or int, cropped to bounds and assigned as an attribute to each instance of the OceanOpticsSpectrometer class with an internally generated name. It is not necessary to know this internally generated name, as the property value can be accessed again by ``self.integration_time`` in any python logic. This is facilitated by the python descriptor protocol. Please do not confuse this with the ``property`` from python's own namespace although the functionality and purpose are identical. Python's built-in property are not given network access unlike the properties defined in 
-``hololinked``. 
+For example, the `integratime_time` property defined above as `Number`, whenever set, will be validated as a float or int, cropped to bounds and assigned as an attribute to each instance of the `OceanOpticsSpectrometer` class with an internally generated name. It is not necessary to know this internally generated name, as the property value can be accessed again by `self.integration_time` in any python logic. This is facilitated by the python descriptor protocol. Please do not confuse this with the `property` from python's own namespace although the functionality and purpose are identical. Python's built-in `property` are not given network access unlike the properties imported from `hololinked`. 
 
 To overload the get-set (or read-write) of properties, one may do the following:
 
@@ -94,13 +93,9 @@ class OceanOpticsSpectrometer(Thing):
 
 ```
 
-In this case, instead of generating an internal container, the setter method is called when ``integration_time`` property is set. 
-One might add the hardware commanding logic to apply the property onto the device here. 
+In this case, instead of generating an internal container, the setter method is called when `integration_time` property is set. One might add the hardware commanding logic to apply the property onto the device here. 
 
-Further, In Web of Things (WoT) terminology, these properties generate the property affordance schema to become accessible
-by the [node-wot](https://github.com/eclipse-thingweb/node-wot) client. It is recommended to strictly use JSON compliant types 
-for most non-speed critical applications, or register type replacements for converting non-JSON to JSON. 
-These possibilities are discussed in the docs. An example of generated property affordance for ``integration_time`` is as follows:`
+Further, those familiar with Web of Things (WoT) terminology may note that these properties generate the property affordance schema to become accessible by the [node-wot](https://github.com/eclipse-thingweb/node-wot) client. It is recommended to strictly use JSON compliant types for most non-speed critical applications, or register type replacements for converting non-JSON to JSON. These possibilities are discussed in the docs. An example of generated property affordance for `integration_time` is as follows:
 
 ```JSON
 "integration_time": {
@@ -111,12 +106,12 @@ These possibilities are discussed in the docs. An example of generated property 
     "writeOnly": false,
     "type": "number",
     "forms": [{
-            "href": "https://LAPTOP-F60CU35D:8083/spectrometer/ocean-optics/USB2000-plus/integration-time",
+            "href": "https://LAPTOP-F60CU35D:8083/spectrometer/integration-time",
             "op": "readproperty",
             "htv:methodName": "GET",
             "contentType": "application/json"
         },{
-            "href": "https://LAPTOP-F60CU35D:8083/spectrometer/ocean-optics/USB2000-plus/integration-time",
+            "href": "https://LAPTOP-F60CU35D:8083/spectrometer/integration-time",
             "op": "writeproperty",
             "htv:methodName": "PUT",
             "contentType": "application/json"
@@ -126,8 +121,10 @@ These possibilities are discussed in the docs. An example of generated property 
     "minimum": 0.001
 },
 ```
+The usage for Web of Things applications will be more systematically discussed in How-Tos for the beginner. The URL path 'spectrometer' in href field is taken from the `instance_name` which was specified in the `__init__`. This is a mandatory key word argument to the parent class `Thing` to generate a unique name for the instance. 
+One should use URI compatible strings. 
 
-###### Specify methods as actions
+##### Specify methods as actions
 
 decorate with `action` decorator on a python method to claim it as a network accessible method or action:
 
@@ -144,9 +141,9 @@ class OceanOpticsSpectrometer(Thing):
         self._wavelengths = self.device.wavelengths().tolist()
 ```
 
-Methods that are neither get-set of properties nor decorated with action decorator remain as plain python methods.
+Methods that are neither get-set of properties nor decorated with action decorator remain as plain python methods and are not accessible on the network.
 
-Again, in WoT Terminology, such a method becomes specified as an action affordance:
+In WoT Terminology, again, such a method becomes specified as an action affordance:
 
 ```JSON
 "connect": {
@@ -154,7 +151,7 @@ Again, in WoT Terminology, such a method becomes specified as an action affordan
     "description": "connect to spectrometer with given serial number",
     "forms": [
         {
-            "href": "https://LAPTOP-F60CU35D:8083/spectrometer/ocean-optics/USB2000-plus/connect",
+            "href": "https://LAPTOP-F60CU35D:8083/spectrometer/connect",
             "op": "invokeaction",
             "htv:methodName": "POST",
             "contentType": "application/json"
@@ -202,7 +199,7 @@ in WoT Terminology, such an event becomes specified as an event affordance with 
 "intensity_measurement_event": {
     "forms": [
         {
-            "href": "https://LAPTOP-F60CU35D:8083/spectrometer/ocean-optics/USB2000-plus/intensity/measurement-event",
+            "href": "https://LAPTOP-F60CU35D:8083/spectrometer/intensity/measurement-event",
             "subprotocol": "sse",
             "op": "subscribeevent",
             "htv:methodName": "GET",
@@ -213,8 +210,7 @@ in WoT Terminology, such an event becomes specified as an event affordance with 
 
 ```
 
-Although the very familiar & age-old RPC server style code, one can directly specify HTTP methods and URL path for each property, action and event. A configurable HTTP Server is already available (``hololinked.server.HTTPServer``) which redirects HTTP requests to the object according to the specified HTTP API on the properties, actions and events.
-To plug in a HTTP server: 
+Although the very familiar & age-old RPC server style code, one can directly specify HTTP methods and URL path for each property, action and event. A configurable HTTP Server is already available (from `hololinked.server.HTTPServer`) which redirects HTTP requests to the object according to the specified HTTP API on the properties, actions and events. To plug in a HTTP server: 
 
 ```python
 from multiprocessing import Process
@@ -239,6 +235,7 @@ if __name__ == "__main__":
     ).run()
 
 ```
+Here one can see the use of ``instance_name``.
 
 The intention of this feature is to eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in serializing commands issued to instruments, or write an additional bioler-plate HTTP to RPC bridge, or find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events, yet appeals deeply to the object oriented python world. See a list of currently supported features [below](#currently-supported). <br/>
 Ultimately, as expected, the redirection from the HTTP side to the object is mediated by ZeroMQ which implements the fully fledged RPC that queues all the HTTP requests to execute them one-by-one on the hardware/object. The HTTP server can also communicate with the RPC server over ZeroMQ's INPROC (intra-process) or IPC (inter-process) transport methods (which is used by default for the example above). There is no need for yet another TCP from HTTP to TCP to ZeroMQ transport athough this is also supported. <br/>
