@@ -28,7 +28,7 @@ from hololinked.wot.events import Event
 ```
 ###### Definition of one's own hardware controlling class
 
-subclass from Thing class:
+subclass from Thing class to "make a Thing":
 
 ```python 
 
@@ -40,6 +40,9 @@ class OceanOpticsSpectrometer(Thing):
 ```
 
 ###### Instantiating properties
+
+They are certain predefined properties available like ``String``, ``Number``, ``Boolean`` etc. 
+(or one may define one's own). To create properties:
 
 ```python
 
@@ -64,20 +67,17 @@ class OceanOpticsSpectrometer(Thing):
 
 ```
 
-###### Specify methods as actions & overload property get-set if necessary
+For those unfamiliar with the above syntax, Properties look like class attributes however their data containers are instantiated at object instance level by default.
+For example, the ``integratime_time`` property defined above as ``Number``, whenever set, will be complied to a float or int, cropped to bounds and assigned as an attribute to each instance of the OceanOpticsSpectrometer class with an internally generated name. It is not necessary to know this internally generated name, as the property can be accessed again by ``self.integration_time`` in any python logic. This is facilitated by the python descriptor protocol. Please do not confuse this with the ``property`` from python's own namespace although the functionality and purpose are identical. Python's built-in property are not given network access unlike the properties defined in 
+``hololinked``. 
 
-decorate with `action` decorator and getter-setter decorators:
+To overload the get-set (or read-write) of properties, one may do the following:
 
 ```python
 
-class OceanOpticsSpectrometer(Thing):
-
-    @action(URL_path='/connect', http_method="POST") # POST is default for actions
-    def connect(self, serial_number = None):
-        if serial_number is not None:
-            self.serial_number = serial_number
-        self.device = Spectrometer.from_serial_number(self.serial_number)
-        self._wavelengths = self.device.wavelengths().tolist()
+    integration_time = Number(default=1000, bounds=(0.001, None), crop_to_bounds=True, 
+                            URL_path='/integration-time', 
+                            doc="integration time of measurement in milliseconds")
 
     @integration_time.setter # by default called on http PUT method
     def apply_integration_time(self, value : float):
@@ -92,9 +92,83 @@ class OceanOpticsSpectrometer(Thing):
             return self.properties["integration_time"].default 
 
 ```
+
+In this case, instead of generating an internal container, the setter method is called when ``integration_time`` property is set. 
+One might add the hardware commanding logic to apply the property onto the device here. 
+
+Further, In Web of Things (WoT) terminology, these properties generate the property affordance schema to become accessible
+by the [node-wot](https://github.com/eclipse-thingweb/node-wot) client. It is recommended to strictly use JSON compliant types 
+for most non-speed critical applications, or register type replacements for converting non-JSON to JSON. 
+These possibilities are discussed in the docs. An example of generated property affordance for ``integration_time`` is as follows:`
+
+```JSON
+"integration_time": {
+    "title": "integration_time",
+    "description": "integration time of measurement in milliseconds",
+    "constant": false,
+    "readOnly": false,
+    "writeOnly": false,
+    "type": "number",
+    "forms": [{
+            "href": "https://LAPTOP-F60CU35D:8083/spectrometer/ocean-optics/USB2000-plus/integration-time",
+            "op": "readproperty",
+            "htv:methodName": "GET",
+            "contentType": "application/json"
+        },{
+            "href": "https://LAPTOP-F60CU35D:8083/spectrometer/ocean-optics/USB2000-plus/integration-time",
+            "op": "writeproperty",
+            "htv:methodName": "PUT",
+            "contentType": "application/json"
+        }
+    ],
+    "observable": false,
+    "minimum": 0.001
+},
+```
+
+###### Specify methods as actions
+
+decorate with `action` decorator on a python method to claim it as a network accessible method or action:
+
+```python
+
+class OceanOpticsSpectrometer(Thing):
+
+    @action(URL_path='/connect', http_method="POST") # POST is default for actions
+    def connect(self, serial_number = None):
+        """connect to spectrometer with given serial number"""
+        if serial_number is not None:
+            self.serial_number = serial_number
+        self.device = Spectrometer.from_serial_number(self.serial_number)
+        self._wavelengths = self.device.wavelengths().tolist()
+```
+
+Methods that are neither get-set of properties nor decorated with action decorator remain as plain python methods.
+
+Again, in WoT Terminology, such a method becomes specified as an action affordance:
+
+```JSON
+"connect": {
+    "title": "connect",
+    "description": "connect to spectrometer with given serial number",
+    "forms": [
+        {
+            "href": "https://LAPTOP-F60CU35D:8083/spectrometer/ocean-optics/USB2000-plus/connect",
+            "op": "invokeaction",
+            "htv:methodName": "POST",
+            "contentType": "application/json"
+        }
+    ],
+    "safe": true,
+    "idempotent": false,
+    "synchronous": true
+},
+
+```
+
 ###### Defining and pushing events
 
-create a named `Event` object that can push any arbitrary data:
+create a named using `Event` object that can push any arbitrary data:
 
 ```python
 
@@ -102,7 +176,7 @@ create a named `Event` object that can push any arbitrary data:
         super().__init__(instance_name=instance_name, serial_number=serial_number, **kwargs)
         self.measurement_event = Event(name='intensity-measurement', URL_path='/intensity/measurement-event')) # only GET HTTP method possible for events
 
-    def capture(self): # not an action
+    def capture(self): # not an action, but a plain python method
         self._run = True 
         while self._run:
             self._intensity = self.device.intensities(
@@ -119,6 +193,23 @@ create a named `Event` object that can push any arbitrary data:
     @action(URL_path='/acquisition/stop', http_method="POST")
     def stop_acquisition(self):
         self._run = False 
+```
+
+in WoT Terminology, such an event becomes specified as an event affordance with subprotocol 'SSE':
+
+```JSON
+"intensity_measurement_event": {
+    "forms": [
+        {
+            "href": "https://LAPTOP-F60CU35D:8083/spectrometer/ocean-optics/USB2000-plus/intensity/measurement-event",
+            "subprotocol": "sse",
+            "op": "subscribeevent",
+            "htv:methodName": "GET",
+            "contentType": "text/event-stream"
+        }
+    ]
+}
+
 ```
 
 Although the very familiar & age-old RPC server style code, one can directly specify HTTP methods and URL path for each property, action and event. A configurable HTTP Server is already available (``hololinked.server.HTTPServer``) which redirects HTTP requests to the object according to the specified HTTP API on the properties, actions and events.
@@ -148,11 +239,11 @@ if __name__ == "__main__":
 
 ```
 
-The intention of this feature is to eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in serializing commands issued to instruments, or write an additional bioler-plate HTTP to RPC bridge, or find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events, yet appeals deeply to the python world. See a list of currently supported features [below](#currently-supported). <br/>
-Ultimately, as expected, the redirection from the HTTP side to the object is mediated by ZeroMQ which implements the fully fledged RPC that queues all the HTTP requests to execute them one-by-one on the hardware/object. The HTTP server can also communicate with the RPC server over ZeroMQ's INPROC (intra-process) or IPC (inter-process) transport methods like seen in the example above. There is no need for yet another TCP from HTTP to TCP to ZeroMQ athough this is also supported. <br/>
+The intention of this feature is to eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in serializing commands issued to instruments, or write an additional bioler-plate HTTP to RPC bridge, or find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events, yet appeals deeply to the object oriented python world. See a list of currently supported features [below](#currently-supported). <br/>
+Ultimately, as expected, the redirection from the HTTP side to the object is mediated by ZeroMQ which implements the fully fledged RPC that queues all the HTTP requests to execute them one-by-one on the hardware/object. The HTTP server can also communicate with the RPC server over ZeroMQ's INPROC (intra-process) or IPC (inter-process) transport methods (which is used by default for the example above). There is no need for yet another TCP from HTTP to TCP to ZeroMQ transport athough this is also supported. <br/>
 Serialization-Deserilization overheads are already reduced. For example, when pushing an event from the object which gets automatically tunneled as a HTTP SSE or returning a reply for an action from the object, there is no JSON deserilization-serilization overhead when the message passes through the HTTP server. The message is serialized once on the object side but passes transparently through the HTTP server.     
 
-One may use the HTTP API according to one's beliefs (including letting the package auto-generate it as one may not care), although it is mainly intended for web development and cross platform clients like the interoperable [node-wot](https://github.com/eclipse-thingweb/node-wot) client. The node-wot client is the recommended Javascript client for this package as one can seamlessly plugin code developed from this package to the rest of the IoT tools, protocols & standardizations, or do scripting on the browser or nodeJS. Please check node-wot docs on how to consume [Thing Descriptions](https://www.w3.org/TR/wot-thing-description11) to call actions, read & write properties or subscribe to events. A Thing Description will be automatically generated if absent or can be supplied manually. 
+One may use the HTTP API according to one's beliefs (including letting the package auto-generate it as one may not care), although it is mainly intended for web development and cross platform clients like the interoperable [node-wot](https://github.com/eclipse-thingweb/node-wot) client. The node-wot client is the recommended Javascript client for this package as one can seamlessly plugin code developed from this package to the rest of the IoT tools, protocols & standardizations, or do scripting on the browser or nodeJS. Please check node-wot docs on how to consume [Thing Descriptions](https://www.w3.org/TR/wot-thing-description11) to call actions, read & write properties or subscribe to events. A Thing Description will be automatically generated if absent as shown in JSON examples above or can be supplied manually. 
 To know more about client side scripting, please look into the documentation [How-To](https://hololinked.readthedocs.io/en/latest/howto/index.html) section.
 
 ##### NOTE - The package is under development. Contributors welcome. 
@@ -200,9 +291,7 @@ There is no release to pip available right now.
 
 Contributors welcome for all my projects related to hololinked including web apps. Please write to my contact email available at [website](https://hololinked.dev).
 
-### Disclaimer
 
-- This package is in no way endorsed by Web of Things Community and is also not a reference implementation or intends to be one.
 
 
 
