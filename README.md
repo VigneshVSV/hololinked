@@ -68,12 +68,13 @@ class OceanOpticsSpectrometer(Thing):
 ```
 
 For those unfamiliar with the above syntax, Properties look like class attributes however their data containers are instantiated at object instance level by default.
-For example, the ``integratime_time`` property defined above as ``Number``, whenever set, will be complied to a float or int, cropped to bounds and assigned as an attribute to each instance of the OceanOpticsSpectrometer class with an internally generated name. It is not necessary to know this internally generated name, as the property can be accessed again by ``self.integration_time`` in any python logic. This is facilitated by the python descriptor protocol. Please do not confuse this with the ``property`` from python's own namespace although the functionality and purpose are identical. Python's built-in property are not given network access unlike the properties defined in 
+For example, the ``integratime_time`` property defined above as ``Number``, whenever set, will be validated as a float or int, cropped to bounds and assigned as an attribute to each instance of the OceanOpticsSpectrometer class with an internally generated name. It is not necessary to know this internally generated name, as the property value can be accessed again by ``self.integration_time`` in any python logic. This is facilitated by the python descriptor protocol. Please do not confuse this with the ``property`` from python's own namespace although the functionality and purpose are identical. Python's built-in property are not given network access unlike the properties defined in 
 ``hololinked``. 
 
 To overload the get-set (or read-write) of properties, one may do the following:
 
 ```python
+class OceanOpticsSpectrometer(Thing):
 
     integration_time = Number(default=1000, bounds=(0.001, None), crop_to_bounds=True, 
                             URL_path='/integration-time', 
