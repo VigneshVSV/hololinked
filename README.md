@@ -9,10 +9,10 @@ The main goal is to develop a pythonic & pure python modern package for instrume
 
 This package can also be used for general RPC for other applications.  
 
-### Usage
+### Usage/Quickstart
 
 `hololinked` is compatible with the [Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software. Each device or thing can be controlled systematically when their design in software is segregated into properties, actions and events. In object oriented terms for data acquisition:
-- properties are validated get-set attributes of the class which may be used be used to model device settings, hold captured/computed data etc.
+- properties are validated get-set attributes of the class which may be used to model device settings, hold captured/computed data etc.
 - actions are methods which issue commands to the device or run arbitrary python logic. 
 - events can asynchronously communicate/push data to a client, like alarm messages, streaming captured data etc. 
 
@@ -28,13 +28,13 @@ from hololinked.wot.events import Event
 ```
 ##### Definition of one's own hardware controlling class
 
-subclass from Thing class to "make a Thing":
+subclass from Thing class to "make a network accessible Thing":
 
 ```python 
 
 class OceanOpticsSpectrometer(Thing):
     """
-    OceanOptics spectrometers using seabreeze library. Device is identified with specifying serial number. 
+    OceanOptics spectrometers using seabreeze library. Device is identified by serial number. 
     """
     
 ```
@@ -52,7 +52,8 @@ class OceanOpticsSpectrometer(Thing):
     serial_number = String(default=None, allow_None=True, URL_path='/serial-number', 
                         doc="serial number of the spectrometer to connect/or connected",
                         http_method=("GET", "PUT"))
-    # GET and PUT is for read and write the property respectively & default. Use other HTTP methods if necessary.  
+    # GET and PUT is default for reading and writing the property respectively. 
+    # Use other HTTP methods if necessary.  
 
     integration_time = Number(default=1000, bounds=(0.001, None), crop_to_bounds=True, 
                             URL_path='/integration-time', 
@@ -67,8 +68,8 @@ class OceanOpticsSpectrometer(Thing):
 
 ```
 
-For those unfamiliar with the above syntax, Properties look like class attributes however their data containers are instantiated at object instance level by default.
-For example, the `integratime_time` property defined above as `Number`, whenever set, will be validated as a float or int, cropped to bounds and assigned as an attribute to each instance of the `OceanOpticsSpectrometer` class with an internally generated name. It is not necessary to know this internally generated name, as the property value can be accessed again by `self.integration_time` in any python logic. This is facilitated by the python descriptor protocol. Please do not confuse this with the `property` from python's own namespace although the functionality and purpose are identical. Python's built-in `property` are not given network access unlike the properties imported from `hololinked`. 
+In non-expert terms, properties look like class attributes however their data containers are instantiated at object instance level by default.
+For example, the `integratime_time` property defined above as `Number`, whenever set, will be validated as a float or int, cropped to bounds and assigned as an attribute to each instance of the `OceanOpticsSpectrometer` class with an internally generated name. It is not necessary to know this internally generated name as the property value can be accessed again by `self.integration_time` in any python logic. This is facilitated by the python descriptor protocol. Please do not confuse this with the `property` from python's own namespace although the functionality and purpose are identical. Python's built-in `property` are not given network access unlike the properties imported from `hololinked` due to some python limitations. 
 
 To overload the get-set (or read-write) of properties, one may do the following:
 
@@ -93,9 +94,9 @@ class OceanOpticsSpectrometer(Thing):
 
 ```
 
-In this case, instead of generating an internal container, the setter method is called when `integration_time` property is set. One might add the hardware commanding logic to apply the property onto the device here. 
+In this case, instead of generating an internal container, the setter method is called when `integration_time` property is set. One might add the hardware device driver logic to apply the property onto the device here. 
 
-Further, those familiar with Web of Things (WoT) terminology may note that these properties generate the property affordance schema to become accessible by the [node-wot](https://github.com/eclipse-thingweb/node-wot) client. It is recommended to strictly use JSON compliant types for most non-speed critical applications, or register type replacements for converting non-JSON to JSON. These possibilities are discussed in the docs. An example of generated property affordance for `integration_time` is as follows:
+Further, those familiar with Web of Things (WoT) terminology, please note that these properties generate the property affordance schema to become accessible by the [node-wot](https://github.com/eclipse-thingweb/node-wot) client. It is recommended to strictly use JSON compliant types for most non-speed critical applications, or register type replacements for converting non-JSON to JSON. These possibilities are (or will be) discussed in the docs. An example of autogenerated property affordance for `integration_time` is as follows:
 
 ```JSON
 "integration_time": {
@@ -121,12 +122,11 @@ Further, those familiar with Web of Things (WoT) terminology may note that these
     "minimum": 0.001
 },
 ```
-The usage for Web of Things applications will be more systematically discussed in How-Tos for the beginner. The URL path 'spectrometer' in href field is taken from the `instance_name` which was specified in the `__init__`. This is a mandatory key word argument to the parent class `Thing` to generate a unique name for the instance. 
-One should use URI compatible strings. 
+The URL path `../spectrometer/..` in href field is taken from the `instance_name` which was specified in the `__init__`. This is a mandatory key word argument to the parent class `Thing` to generate a unique name for the instance. One should use URI compatible strings. The usage for Web of Things applications will be more systematically discussed in How-Tos for the beginner.  
 
 ##### Specify methods as actions
 
-decorate with `action` decorator on a python method to claim it as a network accessible method or action:
+decorate with `action` decorator on a python method to claim it as a network accessible method:
 
 ```python
 
@@ -141,7 +141,7 @@ class OceanOpticsSpectrometer(Thing):
         self._wavelengths = self.device.wavelengths().tolist()
 ```
 
-Methods that are neither get-set of properties nor decorated with action decorator remain as plain python methods and are not accessible on the network.
+Methods that are neither decorated with action decorator nor acting as get-set of properties remain as plain python methods and are **not** accessible on the network.
 
 In WoT Terminology, again, such a method becomes specified as an action affordance:
 
@@ -164,9 +164,9 @@ In WoT Terminology, again, such a method becomes specified as an action affordan
 
 ```
 
-###### Defining and pushing events
+##### Defining and pushing events
 
-create a named using `Event` object that can push any arbitrary data:
+create a named event using `Event` object that can push any arbitrary data:
 
 ```python
 
@@ -210,7 +210,7 @@ in WoT Terminology, such an event becomes specified as an event affordance with 
 
 ```
 
-Although the very familiar & age-old RPC server style code, one can directly specify HTTP methods and URL path for each property, action and event. A configurable HTTP Server is already available (from `hololinked.server.HTTPServer`) which redirects HTTP requests to the object according to the specified HTTP API on the properties, actions and events. To plug in a HTTP server: 
+Although the code is the very familiar & age-old RPC server style, one can directly specify HTTP methods and URL path for each property, action and event. A configurable HTTP Server is already available (from `hololinked.server.HTTPServer`) which redirects HTTP requests to the object according to the specified HTTP API on the properties, actions and events. To plug in a HTTP server: 
 
 ```python
 from multiprocessing import Process
@@ -235,13 +235,13 @@ if __name__ == "__main__":
     ).run()
 
 ```
-Here one can see the use of ``instance_name``.
+Here one can see the use of `instance_name`.
 
-The intention of this feature is to eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in serializing commands issued to instruments, or write an additional bioler-plate HTTP to RPC bridge, or find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events, yet appeals deeply to the object oriented python world. See a list of currently supported features [below](#currently-supported). <br/>
-Ultimately, as expected, the redirection from the HTTP side to the object is mediated by ZeroMQ which implements the fully fledged RPC that queues all the HTTP requests to execute them one-by-one on the hardware/object. The HTTP server can also communicate with the RPC server over ZeroMQ's INPROC (intra-process) or IPC (inter-process) transport methods (which is used by default for the example above). There is no need for yet another TCP from HTTP to TCP to ZeroMQ transport athough this is also supported. <br/>
-Serialization-Deserilization overheads are already reduced. For example, when pushing an event from the object which gets automatically tunneled as a HTTP SSE or returning a reply for an action from the object, there is no JSON deserilization-serilization overhead when the message passes through the HTTP server. The message is serialized once on the object side but passes transparently through the HTTP server.     
+The intention behind specifying HTTP URL paths and methods is to eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in serializing commands issued to instruments, or write an additional bioler-plate HTTP to RPC bridge, or find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events, yet appeals deeply to the object oriented python world. See a list of currently supported features [below](#currently-supported). <br/>
+Ultimately, as expected, the redirection from the HTTP side to the object is mediated by ZeroMQ which implements the fully fledged RPC that queues all the HTTP requests to execute them one-by-one on the hardware/object. The HTTP server can also communicate with the RPC server over ZeroMQ's INPROC (intra-process - for the non-expert = multithreaded applications) or IPC (inter-process - for the non-expert = multiprocess applications) transport methods. In the example above, IPC is used by default. There is no need for yet another TCP from HTTP to TCP to ZeroMQ transport athough this is also supported. <br/>
+Serialization-Deserilization overheads are also already reduced. For example, when pushing an event from the object which gets automatically tunneled as a HTTP SSE or returning a reply for an action from the object, there is no JSON deserilization-serilization overhead when the message passes through the HTTP server. The message is serialized once on the object side but passes transparently through the HTTP server.     
 
-One may use the HTTP API according to one's beliefs (including letting the package auto-generate it as one may not care), although it is mainly intended for web development and cross platform clients like the interoperable [node-wot](https://github.com/eclipse-thingweb/node-wot) client. The node-wot client is the recommended Javascript client for this package as one can seamlessly plugin code developed from this package to the rest of the IoT tools, protocols & standardizations, or do scripting on the browser or nodeJS. Please check node-wot docs on how to consume [Thing Descriptions](https://www.w3.org/TR/wot-thing-description11) to call actions, read & write properties or subscribe to events. A Thing Description will be automatically generated if absent as shown in JSON examples above or can be supplied manually. 
+One may use the HTTP API according to one's beliefs (including letting the package auto-generate it), although it is mainly intended for web development and cross platform clients like the interoperable [node-wot](https://github.com/eclipse-thingweb/node-wot) client. The node-wot client is the recommended Javascript client for this package as one can seamlessly plugin code developed from this package to the rest of the IoT tools, protocols & standardizations, or do scripting on the browser or nodeJS. Please check node-wot docs on how to consume [Thing Descriptions](https://www.w3.org/TR/wot-thing-description11) to call actions, read & write properties or subscribe to events. A Thing Description will be automatically generated if absent as shown in JSON examples above or can be supplied manually. 
 To know more about client side scripting, please look into the documentation [How-To](https://hololinked.readthedocs.io/en/latest/howto/index.html) section.
 
 ##### NOTE - The package is under development. Contributors welcome. 
@@ -251,9 +251,13 @@ To know more about client side scripting, please look into the documentation [Ho
 
 [![Maintainability](https://api.codeclimate.com/v1/badges/913f4daa2960b711670a/maintainability)](https://codeclimate.com/github/VigneshVSV/hololinked/maintainability)
 
-- [example repository](https://github.com/VigneshVSV/hololinked-examples)
+- [example repository](https://github.com/VigneshVSV/hololinked-examples) - details examples for both clients and servers
 - [helper GUI](https://github.com/VigneshVSV/hololinked-portal) - view & interact with your object's methods, properties and events. 
-- [web development examples](https://hololinked.dev/docs/category/spectrometer-gui)
+
+### To Install
+
+clone the repository and install in develop mode `pip install -e .` for convenience. The conda env hololinked.yml can also help. There is no release to pip available right now.  
+
 
 ### Currently Supported
 
@@ -267,11 +271,6 @@ To know more about client side scripting, please look into the documentation [Ho
 - choose from multiple ZeroMQ transport methods - TCP for direct network access (apart from HTTP), IPC for multi-process same-PC applications (like shown in example above), INPROC for multi-threaded applications. 
 
 Again, please check examples or the code for explanations. Documentation is being activety improved. 
-
-### To Install
-
-clone the repository and install in develop mode `pip install -e .` for convenience. The conda env hololinked.yml can also help. 
-There is no release to pip available right now.  
 
 ### Currently being worked
 
@@ -287,7 +286,7 @@ There is no release to pip available right now.
 
 ### Contact
 
-Contributors welcome for all my projects related to hololinked including web apps. Please write to my contact email available at [website](https://hololinked.dev).
+Contributors welcome for all my projects related to hololinked including web apps. Please write to my contact email available at [website](https://hololinked.dev). The contribuing file is currently only boilerplate and need not be adhered. 
 
 
 
