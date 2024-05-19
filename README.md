@@ -122,7 +122,7 @@ Further, those familiar with Web of Things (WoT) terminology, please note that t
     "minimum": 0.001
 },
 ```
-The URL path `../spectrometer/..` in href field is taken from the `instance_name` which was specified in the `__init__`. This is a mandatory key word argument to the parent class `Thing` to generate a unique name for the instance. One should use URI compatible strings. The usage for Web of Things applications will be more systematically discussed in How-Tos for the beginner.  
+The URL path segment `../spectrometer/..` in href field is taken from the `instance_name` which was specified in the `__init__`. This is a mandatory key word argument to the parent class `Thing` to generate a unique name for the instance. One should use URI compatible strings. The usage for Web of Things applications will be more systematically discussed in How-Tos for the beginner.  
 
 ##### Specify methods as actions
 
@@ -235,7 +235,7 @@ if __name__ == "__main__":
     ).run()
 
 ```
-Here one can see the use of `instance_name`.
+Here one can see the use of `instance_name` and why it turns up in the URL path.
 
 The intention behind specifying HTTP URL paths and methods is to eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in serializing commands issued to instruments, or write an additional bioler-plate HTTP to RPC bridge, or find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events, yet appeals deeply to the object oriented python world. See a list of currently supported features [below](#currently-supported). <br/>
 Ultimately, as expected, the redirection from the HTTP side to the object is mediated by ZeroMQ which implements the fully fledged RPC that queues all the HTTP requests to execute them one-by-one on the hardware/object. The HTTP server can also communicate with the RPC server over ZeroMQ's INPROC (intra-process - for the non-expert = multithreaded applications) or IPC (inter-process - for the non-expert = multiprocess applications) transport methods. In the example above, IPC is used by default. There is no need for yet another TCP from HTTP to TCP to ZeroMQ transport athough this is also supported. <br/>
