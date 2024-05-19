@@ -184,13 +184,11 @@ There is no release to pip available right now.
 - argument schema validation for actions (you can specify one but its not used)
 - credentials for authentication 
 - improving accuracy of Thing Descriptions 
-- mongo DB support for DB operations
-
 
 ### Some Day In Future
 
+- mongo DB support for DB operations
 - HTTP 2.0 
-
 
 ### Contact
 
@@ -198,6 +196,9 @@ Contributors welcome for all my projects related to hololinked including web app
 
 ### Disclaimer
 
-This package is in no way endorsed by Web of Things Community and is also not a reference implementation or intends to be one.
+- This package is in no way endorsed by Web of Things Community and is also not a reference implementation or intends to be one.
+
+
+
 
 
