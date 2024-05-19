@@ -11,7 +11,7 @@ This package can also be used for general RPC for other applications.
 
 ### Usage
 
-`hololinked` is compatible with the [Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software. Each device or thing can be controlled systematically when their design in software is segregated into properties, actions and events. In object oriented terms:
+`hololinked` is compatible with the [Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software. Each device or thing can be controlled systematically when their design in software is segregated into properties, actions and events. In object oriented terms for data acquisition:
 - properties are validated get-set attributes of the class which may be used be used to model device settings, hold captured/computed data etc.
 - actions are methods which issue commands to the device or run arbitrary python logic. 
 - events can asynchronously communicate/push data to a client, like alarm messages, streaming captured data etc. 
@@ -47,7 +47,7 @@ class OceanOpticsSpectrometer(Thing):
     serial_number = String(default=None, allow_None=True, URL_path='/serial-number', 
                         doc="serial number of the spectrometer to connect/or connected",
                         http_method=("GET", "PUT"))
-    # GET and PUT is for read and write respectively & default
+    # GET and PUT is for read and write the property respectively & default. Use other HTTP methods if necessary.  
 
     integration_time = Number(default=1000, bounds=(0.001, None), crop_to_bounds=True, 
                             URL_path='/integration-time', 
@@ -75,12 +75,12 @@ class OceanOpticsSpectrometer(Thing):
         self.device = Spectrometer.from_serial_number(self.serial_number)
         self._wavelengths = self.device.wavelengths().tolist()
 
-    @integration_time.setter 
+    @integration_time.setter # by default called on http PUT method
     def apply_integration_time(self, value : float):
         self.device.integration_time_micros(int(value*1000))
         self._integration_time = int(value) 
       
-    @integration_time.getter 
+    @integration_time.getter # by default called on http GET method
     def get_integration_time(self) -> float:
         try:
             return self._integration_time
@@ -96,7 +96,7 @@ class OceanOpticsSpectrometer(Thing):
         super().__init__(instance_name=instance_name, serial_number=serial_number, **kwargs)
         self.measurement_event = Event(name='intensity-measurement', URL_path='/intensity/measurement-event')) # only GET possible for events
 
-    def capture(self):
+    def capture(self): # not an action
         self._run = True 
         while self._run:
             self._intensity = self.device.intensities(
@@ -142,10 +142,11 @@ if __name__ == "__main__":
 
 ```
 
-The intention of this feature is to eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in serializing commands issued to instruments, or write an additional bioler-plate HTTP to RPC bridge, or find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events, yet appeals deeply to the python world. ``hololinked`` precisely solves this problem, its very flexible but suited for instrumentation control RPCs and embraces python fully - see a list of currently supported features [below](#currently-supported).
-Ultimately, as expected, the redirection from the HTTP side to RPC is mediated by ZeroMQ which implements the fully fledged RPC that queues all the HTTP requests to execute them one-by-one on the hardware/object. Serialization-Deserilization overheads are already reduced. For example, when pushing an event or returning a reply for an action from the object, there is no JSON deserilization-serilization overhead when the message passes through the HTTP server. The message is serialized once on the object side but passes transparently through the HTTP server.   
+The intention of this feature is to eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in serializing commands issued to instruments, or write an additional bioler-plate HTTP to RPC bridge, or find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events, yet appeals deeply to the python world. ``hololinked`` precisely solves this problem, its very flexible but suited for instrumentation control RPCs and embraces python fully - see a list of currently supported features [below](#currently-supported). <br/>
+Ultimately, as expected, the redirection from the HTTP side to the object is mediated by ZeroMQ which implements the fully fledged RPC that queues all the HTTP requests to execute them one-by-one on the hardware/object. The HTTP server can also communicate with the RPC server over ZeroMQ's INPROC (intra-process) or IPC (inter-process) transport methods like seen in the example above. There is no need for yet another TCP (from HTTP)  to TCP (from ZeroMQ) athough this is also supported. <br/>
+Serialization-Deserilization overheads are already reduced. For example, when pushing an event which gets automatically tunneled as a HTTP SSE or returning a reply for an action from the object, there is no JSON deserilization-serilization overhead when the message passes through the HTTP server. The message is serialized once on the object side but passes transparently through the HTTP server.     
 
-One may use the HTTP API according to one's beliefs although it is mainly intended for web development and cross platform clients like the interoperable [node-wot](https://github.com/eclipse-thingweb/node-wot) client. Please check node-wot docs on how to consume thing descriptions to call actions, read & write properties or subscribe to events. A Thing Description will be automatically generated if absent or can be supplied manually. 
+One may use the HTTP API according to one's beliefs although it is mainly intended for web development and cross platform clients like the interoperable [node-wot](https://github.com/eclipse-thingweb/node-wot) client. Please check node-wot docs on how to consume [Thing Descriptions](https://www.w3.org/TR/wot-thing-description11) to call actions, read & write properties or subscribe to events. A Thing Description will be automatically generated if absent or can be supplied manually. 
 To know more about client side scripting, please look into the documentation [How-To](https://hololinked.readthedocs.io/en/latest/howto/index.html) section.
 
 ##### NOTE - The package is under development. Contributors welcome. 
@@ -162,9 +163,9 @@ To know more about client side scripting, please look into the documentation [Ho
 ### Currently Supported
 
 - indicate HTTP verb & URL path directly on object's methods, properties and events.
-- auto-generate Thing Description for Web of Things applications (inaccurate, being continuously developed but usable). 
 - control method execution and property write with a custom finite state machine.
 - database (Postgres, MySQL, SQLite - based on SQLAlchemy) support for storing and loading properties  when object dies and restarts. 
+- auto-generate Thing Description for Web of Things applications (inaccurate, being continuously developed but usable). 
 - use serializer of your choice (except for HTTP) - MessagePack, JSON, pickle etc. & extend serialization to suit your requirement (HTTP Server will support only JSON serializer). Default is JSON serializer based on msgspec.
 - asyncio compatible - async RPC server event-loop and async HTTP Server - write methods in async 
 - have flexibility in process architecture - run HTTP Server & python object in separate processes or in the same process, combine multiple objects in same server etc. 
@@ -177,8 +178,15 @@ Again, please check examples or the code for explanations. Documentation is bein
 clone the repository and install in develop mode `pip install -e .` for convenience. The conda env hololinked.yml can also help. 
 There is no release to pip available right now.  
 
+### Currently being worked
+
+- observable properties and read/write multiple properties through node-wot client
+- argument schema validation for actions (you can specify one but its not used)
+- credentials for authentication 
+
 ### Some Day In Future
 
+- mongo DB support for DB operations
 - HTTP 2.0 
 
 
