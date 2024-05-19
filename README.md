@@ -12,13 +12,11 @@ This package can also be used for general RPC for other applications.
 ### Usage
 
 `hololinked` is compatible with the [Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software. Each device or thing can be controlled systematically when their design in software is segregated into properties, actions and events. In object oriented terms:
-- properties are (optionally) validated get-set attributes of the class which may be used be used to model device settings, hold captured data etc.
+- properties are validated get-set attributes of the class which may be used be used to model device settings, hold captured/computed data etc.
 - actions are methods which issue commands to the device or run arbitrary python logic. 
 - events can asynchronously communicate/push data to a client, like alarm messages, streaming captured data etc. 
 
-The base class which enables this classification is the ``RemoteObject`` class in ``hololinked`` terms, or the ``Thing`` class if one prefers to use terminology according to the Web of Things. Both classes are identical and differentiated only in the naming according the application domain one may be using. If one deploys a pure RPC application, one may chose the name ``RemoteObject``, and if one writes classes to control instrumentation (which is the main purpose of this package), one may use the ``Thing`` class (in future one of names may be dropped).
-
-Any class that inherits the base class can instantiate properties, actions and events which become visible to a client in this segragated manner. For example, consider an optical spectrometer device, the following code is possible:
+In ``hololinked``, the base class which enables this classification is the ``RemoteObject`` class, or the ``Thing`` class if one prefers to use terminology according to the Web of Things. Both classes are identical and differentiated only in the naming according to the application domain one may be using. In future one of the names may be dropped. Nevertheless, any class that inherits the base class can instantiate properties, actions and events which become visible to a client in this segragated manner. For example, consider an optical spectrometer device, the following code is possible:
 
 ###### Import Statements
 
@@ -44,10 +42,8 @@ class OceanOpticsSpectrometer(Thing):
 ```python
 
 class OceanOpticsSpectrometer(Thing):
-
-    def __init__(self, instance_name, serial_number, **kwargs):
-        super().__init__(instance_name=instance_name, serial_number=serial_number, **kwargs)
-
+    """class doc"""
+    
     serial_number = String(default=None, allow_None=True, URL_path='/serial-number', 
                         doc="serial number of the spectrometer to connect/or connected",
                         http_method=("GET", "PUT"))
@@ -60,6 +56,9 @@ class OceanOpticsSpectrometer(Thing):
     intensity = List(default=None, allow_None=True, 
                     doc="captured intensity", readonly=True, 
                     fget=lambda self: self._intensity)     
+
+    def __init__(self, instance_name, serial_number, **kwargs):
+        super().__init__(instance_name=instance_name, serial_number=serial_number, **kwargs)
 
 ```
 
@@ -108,7 +107,7 @@ class OceanOpticsSpectrometer(Thing):
 
     @action(URL_path='/acquisition/start', http_method="POST")
     def start_acquisition(self):
-        self._acquisition_thread = threading.Thread(target=self.measure) 
+        self._acquisition_thread = threading.Thread(target=self.capture) 
         self._acquisition_thread.start()
 
     @action(URL_path='/acquisition/stop', http_method="POST")
@@ -116,7 +115,7 @@ class OceanOpticsSpectrometer(Thing):
         self._run = False 
 ```
 
-Although the very familiar & age-old RPC server, one can directly specify HTTP methods and URL path for each property, action and event. A configurable HTTP Server is already available (``hololinked.server.HTTPServer``) which redirects HTTP requests to the object according to the specified HTTP API on the properties, actions and events.
+Although the very familiar & age-old RPC server style code, one can directly specify HTTP methods and URL path for each property, action and event. A configurable HTTP Server is already available (``hololinked.server.HTTPServer``) which redirects HTTP requests to the object according to the specified HTTP API on the properties, actions and events.
 To plug in a HTTP server: 
 
 ```python
@@ -143,11 +142,10 @@ if __name__ == "__main__":
 
 ```
 
-The intention is to eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in serializing commands issued to instruments,
-or write a HTTP to RPC bridge, or find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events. One can instead stick to object oriented coding.
-Ultimately, as expected, the redirection is mediated by ZeroMQ which (also) implements a fully fledged RPC that serializes all the HTTP requests to execute them one-by-one on the hardware. 
+The intention of this feature is to eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in serializing commands issued to instruments, or write an additional bioler-plate HTTP to RPC bridge, or find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events, yet appeals deeply to the python world. ``hololinked`` precisely solves this problem, its very flexible but suited for instrumentation control RPCs and embraces python fully - see a list of currently supported features [below](#currently-supported).
+Ultimately, as expected, the redirection from the HTTP side to RPC is mediated by ZeroMQ which implements the fully fledged RPC that queues all the HTTP requests to execute them one-by-one on the hardware/object. Serialization-Deserilization overheads are already reduced. For example, when pushing an event or returning a reply for an action from the object, there is no JSON deserilization-serilization overhead when the message passes through the HTTP server. The message is serialized once on the object side but passes transparently through the HTTP server.   
 
-One may use the HTTP API according to one's beliefs although it is mainly intended for web development and cross platform clients like the interoperable [node-wot](https://github.com/eclipse-thingweb/node-wot) client.    
+One may use the HTTP API according to one's beliefs although it is mainly intended for web development and cross platform clients like the interoperable [node-wot](https://github.com/eclipse-thingweb/node-wot) client. Please check node-wot docs on how to consume thing descriptions to call actions, read & write properties or subscribe to events. A Thing Description will be automatically generated if absent or can be supplied manually. 
 To know more about client side scripting, please look into the documentation [How-To](https://hololinked.readthedocs.io/en/latest/howto/index.html) section.
 
 ##### NOTE - The package is under development. Contributors welcome. 
