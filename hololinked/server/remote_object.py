@@ -338,6 +338,36 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
             setattr(self, name, value)
 
 
+    @property
+    def event_publisher(self) -> EventPublisher:
+        """
+        event publishing PUB socket owning object
+        """
+        try:
+            return self._event_publisher 
+        except AttributeError:
+            raise AttributeError("event publisher not yet created.") from None
+                
+    @event_publisher.setter
+    def event_publisher(self, value : EventPublisher) -> None:
+        if hasattr(self, '_event_publisher'):
+            raise AttributeError("Can set event publisher only once.")
+        
+        def recusively_set_events_publisher(obj : RemoteObject, publisher : EventPublisher) -> None:
+            for name, evt in inspect._getmembers(obj, lambda o: isinstance(o, Event), getattr_without_descriptor_read):
+                assert isinstance(evt, Event), "object is not an event"
+                # above is type definition
+                evt.publisher = publisher 
+                evt._remote_info.socket_address = publisher.socket_address
+            for name, obj in inspect._getmembers(obj, lambda o: isinstance(o, RemoteObject), getattr_without_descriptor_read):
+                if name == '_owner':
+                    continue 
+                recusively_set_events_publisher(obj, publisher)
+            obj._event_publisher = publisher
+            
+        recusively_set_events_publisher(self, value)
+
+
     @remote_method(URL_path='/parameters/db-reload', http_method=HTTP_METHODS.POST)
     def load_parameters_from_DB(self):
         """
@@ -404,36 +434,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
         return ThingDescription().build(self, authority or self._object_info.http_server,
                                             allow_loose_schema=False) #allow_loose_schema)
     
-    @property
-    def event_publisher(self) -> EventPublisher:
-        """
-        event publishing PUB socket owning object
-        """
-        try:
-            return self._event_publisher 
-        except AttributeError:
-            raise AttributeError("event publisher not yet created.") from None
-                
-    @event_publisher.setter
-    def event_publisher(self, value : EventPublisher) -> None:
-        if hasattr(self, '_event_publisher'):
-            raise AttributeError("Can set event publisher only once.")
-        
-        def recusively_set_events_publisher(obj : RemoteObject, publisher : EventPublisher) -> None:
-            for name, evt in inspect._getmembers(obj, lambda o: isinstance(o, Event), getattr_without_descriptor_read):
-                assert isinstance(evt, Event), "object is not an event"
-                # above is type definition
-                evt.publisher = publisher 
-                evt._remote_info.socket_address = publisher.socket_address
-            for name, obj in inspect._getmembers(obj, lambda o: isinstance(o, RemoteObject), getattr_without_descriptor_read):
-                if name == '_owner':
-                    continue 
-                recusively_set_events_publisher(obj, publisher)
-            obj._event_publisher = publisher
-            
-        recusively_set_events_publisher(self, value)
     
-
     @remote_method(URL_path='/exit', http_method=HTTP_METHODS.POST)                                                                                                                                          
     def exit(self) -> None:
         """
