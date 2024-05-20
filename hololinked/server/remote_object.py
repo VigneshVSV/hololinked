@@ -1,14 +1,17 @@
 import logging 
 import inspect
 import os
+import ssl
+import threading
 import typing
 import warnings
 import zmq
-from enum import EnumMeta, Enum, StrEnum
+
+
 
 
 from ..param.parameterized import Parameterized, ParameterizedMetaclass 
-from .constants import (CallableType, LOGLEVEL, ZMQ_PROTOCOLS, HTTP_METHODS)
+from .constants import (LOGLEVEL, ZMQ_PROTOCOLS, HTTP_METHODS)
 from .database import RemoteObjectDB, RemoteObjectInformation
 from .stubs import ReactApp
 from .serializers import _get_serializer_from_user_given_options, BaseSerializer, JSONSerializer
@@ -17,188 +20,12 @@ from .decorators import remote_method
 from .data_classes import (GUIResources,  HTTPResource, RPCResource, RemoteResourceInfoValidator,
                         get_organised_resources)
 from .utils import get_default_logger, getattr_without_descriptor_read
-
 from .remote_parameter import RemoteParameter, RemoteClassParameters
 from .remote_parameters import (String, ClassSelector, TypedDict, Boolean, 
                                 Selector, TypedKeyMappingsConstrainedDict )
 from .zmq_message_brokers import RPCServer, ServerTypes, AsyncPollingZMQServer, EventPublisher
+from .state_machine import StateMachine
 from .events import Event
-
-
-
-class StateMachine:
-    """
-    A container class for state machine related logic. 
-
-    Parameters
-    ----------
-    states: Enum
-        enumeration of states 
-    initial_state: str 
-        initial state of machine 
-    on_enter: Dict[str, Callable | RemoteParameter] 
-        callbacks to be invoked when a certain state is entered. It is to be specified 
-        as a dictionary with the states being the keys
-    on_exit: Dict[str, Callable | RemoteParameter]
-        callbacks to be invoked when a certain state is exited. 
-        It is to be specified as a dictionary with the states being the keys
-    **machine:
-        state name: List[Callable, RemoteParamater]
-            directly pass the state name as an argument along with the methods/parameters which are allowed to execute 
-            in that state
-            
-    Attributes
-    ----------
-    exists: bool
-        internally computed, True if states and initial_states are valid 
-    """
-    initial_state = ClassSelector(default=None, allow_None=True, constant=True, class_=(Enum, str), 
-                        doc="initial state of the machine") # type: typing.Union[Enum, str]
-    states = ClassSelector(default=None, allow_None=True, constant=True, class_=(EnumMeta, tuple, list),
-                        doc="list/enum of allowed states") # type: typing.Union[EnumMeta, tuple, list]
-    on_enter = TypedDict(default=None, allow_None=True, key_type=str,
-                        doc="""callbacks to execute when a certain state is entered; 
-                        specfied as map with state as keys and callbacks as list""") # typing.Dict[str, typing.List[typing.Callable]]
-    on_exit = TypedDict(default=None, allow_None=True, key_type=str,
-                        doc="""callbacks to execute when certain state is exited; 
-                        specfied as map with state as keys and callbacks as list""") # typing.Dict[str, typing.List[typing.Callable]]
-    machine = TypedDict(default=None, allow_None=True, key_type=str, item_type=(list, tuple),
-                        doc="the machine specification with state as key and objects as list") # typing.Dict[str, typing.List[typing.Callable, RemoteParameter]]
-
-    def __init__(self, 
-            states : typing.Union[EnumMeta, typing.List[str], typing.Tuple[str]], *, 
-            initial_state : typing.Union[StrEnum, str], 
-            on_enter : typing.Dict[str, typing.Union[typing.List[typing.Callable], typing.Callable]] = {}, 
-            on_exit  : typing.Dict[str, typing.Union[typing.List[typing.Callable], typing.Callable]] = {}, 
-            push_state_change_event : bool = False,
-            **machine : typing.Iterable[typing.Union[typing.Callable, RemoteParameter]]
-        ) -> None:
-        self.on_enter = on_enter
-        self.on_exit  = on_exit
-        # None cannot be passed in, but constant is necessary. 
-        self.states   = states
-        self.initial_state = initial_state
-        self.machine = machine
-        self.push_state_change_event = push_state_change_event
-        if push_state_change_event:
-            pass
-            # self.state_change_event = Event('state-change') 
-
-    def _prepare(self, owner : 'RemoteObject') -> None:
-        if self.states is None and self.initial_state is None:    
-            self.exists = False 
-            self._state = None
-            return
-        elif self.initial_state not in self.states: # type: ignore
-            raise AttributeError("specified initial state {} not in Enum of states {}".format(self.initial_state, 
-                                                                                              self.states))
-
-        self._state = self.initial_state
-        self.owner = owner
-        owner_parameters = owner.parameters.descriptors.values()
-        owner_methods = [obj[0] for obj in inspect.getmembers(owner, inspect.ismethod)]
-        
-        if isinstance(self.states, list):
-            self.states = tuple(self.states)
-        if hasattr(self, 'state_change_event'):
-            self.state_change_event.publisher = owner.event_publisher
-
-        # first validate machine
-        for state, objects in self.machine.items():
-            if state in self:
-                for resource in objects:
-                    if hasattr(resource, '_remote_info'):
-                        assert isinstance(resource._remote_info, RemoteResourceInfoValidator)
-                        if resource._remote_info.iscallable and resource._remote_info.obj_name not in owner_methods: # type: ignore
-                            raise AttributeError("Given object {} for state machine does not belong to class {}".format(
-                                                                                                resource, owner))
-                        if resource._remote_info.isparameter and resource not in owner_parameters: # type: ignore
-                            raise AttributeError("Given object {} - {} for state machine does not belong to class {}".format(
-                                                                                                resource.name, resource, owner))
-                        if resource._remote_info.state is None: # type: ignore
-                            resource._remote_info.state = self._machine_compliant_state(state) # type: ignore
-                        else: 
-                            resource._remote_info.state = resource._remote_info.state + (self._machine_compliant_state(state), ) # type: ignore
-                    else: 
-                        raise AttributeError(f"Object {resource} not made remotely accessible,",
-                                    " Use state machine with remote parameters and remote methods only")
-            else:
-                raise AttributeError("Given state {} not in states Enum {}".format(state, self.states.__members__))
-            
-        # then the callbacks 
-        for state, objects in self.on_enter.items():
-            if isinstance(objects, list):
-                self.on_enter[state] = tuple(objects) # type: ignore
-            elif not isinstance(objects, (list, tuple)):
-                self.on_enter[state] = (objects, ) # type: ignore
-            for obj in self.on_enter[state]: # type: ignore
-                if not isinstance(obj, CallableType):
-                    raise TypeError(f"on_enter accept only methods. Given type {type(obj)}.")
-
-        for state, objects in self.on_exit.items():
-            if isinstance(objects, list):
-                self.on_exit[state] = tuple(objects) # type: ignore
-            elif not isinstance(objects, (list, tuple)):
-                self.on_exit[state] = (objects, ) # type: ignore
-            for obj in self.on_exit[state]: # type: ignore
-                if not isinstance(obj, CallableType):
-                    raise TypeError(f"on_enter accept only methods. Given type {type(obj)}.")     
-        self.exists = True
-        
-    def __contains__(self, state : typing.Union[str, StrEnum]):
-        if isinstance(self.states, EnumMeta) and state not in self.states.__members__ and state not in self.states: # type: ignore
-            return False 
-        elif isinstance(self.states, tuple) and state not in self.states:
-            return False 
-        return True
-        # TODO It might be better to return True's instead of False's and return False at the last, may take care of edge-cases better 
-        
-    def _machine_compliant_state(self, state) -> typing.Union[StrEnum, str]:
-        if isinstance(self.states, EnumMeta):
-            return self.states.__members__[state] # type: ignore
-        return state 
-    
-    def get_state(self) -> typing.Union[str, StrEnum, None]:
-        """
-        return the current state. one can also access the property `current state`.
-        
-        Returns
-        -------
-        current state: str
-        """
-        return self._state
-        
-    def set_state(self, value, push_event : bool = True, skip_callbacks : bool = False) -> None:
-        """ set state of state machine. Also triggers state change callbacks
-        if any. One can also set using '=' operator of `current_state` property.
-        """
-        if value in self.states:
-            previous_state = self._state
-            self._state = value
-            if push_event and self.push_state_change_event:
-                self.state_change_event.push({self.owner.instance_name : value})
-            if isinstance(previous_state, Enum):
-                previous_state = previous_state.name
-            if previous_state in self.on_exit:
-                for func in self.on_exit[previous_state]: # type: ignore
-                    func(self.owner)
-            if isinstance(value, Enum):
-                value = value.name  
-            if value in self.on_enter:
-                for func in self.on_enter[value]: # type: ignore
-                    func(self.owner)
-        else:   
-            raise ValueError("given state '{}' not in set of allowed states : {}.".format(value, self.states))
-                
-    current_state = property(get_state, set_state, None, 
-        doc = """read and write current state of the state machine""")
-
-    def has_object(self, object : typing.Union[RemoteParameter, typing.Callable]) -> bool:
-        for state, objects in self.machine.items():
-            if object in objects:
-                return True 
-        return False
-    
 
 
 
@@ -273,7 +100,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
                         in the HTTP Server - (http(s)://{domain and sub domain}/{instance name}). 
                         If creating a big system, instance names are recommended to be unique.""") # type: str
     logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, remote=False, 
-                        doc="""Logger object to print log messages, should be instance of ``logging.Logger()``. Default 
+                        doc="""Logger object to print log messages, should be instance of ``logging.Logger``. Default 
                             logger with a stream handler and streamable log messages over network is created 
                             if none supplied.""") # type: logging.Logger
     rpc_serializer = ClassSelector(class_=(BaseSerializer, str), 
@@ -290,7 +117,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
     # remote paramerters
     state = String(default=None, allow_None=True, URL_path='/state', readonly=True,
                 fget= lambda self : self.state_machine.current_state if hasattr(self, 'state_machine') else None,  
-                doc='current state machine state if state machine present') #type: type.Optional[str]
+                doc='current state machine state if state machine present') #type: typing.Optional[str]
     
     httpserver_resources = RemoteParameter(readonly=True, URL_path='/resources/http-server', 
                         doc="object's resources exposed to HTTP client (through ``hololinked.server.HTTPServer``)", 
@@ -333,25 +160,26 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
             (http(s)://{domain and sub domain}/{instance name}). 
             If creating a big system, instance names are recommended to be unique.
         logger: logging.Logger, Optional
-            Logger object to print log messages, should be instance of ``logging.Logger()``. Default 
+            Logger object to print log messages, should be instance of ``logging.Logger``. Default 
             logger with a stream handler and streamable log messages over network is created 
             if none supplied.
         serializer: JSONSerializer, Optional
             JSON serializer. To use separate serializer for python clients and cross-platform 
             HTTP clients, use keyword arguments rpc_serializer and json_serializer
         **kwargs:
-            rpc_serializer: BaseSerializer | str 
+            rpc_serializer: BaseSerializer | str, Optional 
                 serializer for object proxy from hololinked.client. Some other serializers like 
                 MessagePack improve performance many times over and can be useful for data intensive
                 applications within python. if string values are supplied, supported are 'msgpack', 'pickle',
                 'serpent', 'json'
-            json_serializer: JSONSerializer
+            json_serializer: JSONSerializer, Optional
                 serializer used for cross platform HTTP clients. 
+            use_default_db
         """
         if instance_name.startswith('/'):
             instance_name = instance_name[1:]
-        if not isinstance(serializer, JSONSerializer) or serializer == 'json':
-            raise TypeError("serializer key word argument must be JSONSerializer. If you wish to use separate serializers " +
+        if not isinstance(serializer, JSONSerializer) and serializer != 'json' and serializer is not None:
+            raise TypeError("serializer key word argument must be JSONSerializer. If one wishes to use separate serializers " +
                             "for python clients and HTTP clients, use rpc_serializer and json_serializer keyword arguments.")
         rpc_serializer = serializer or params.pop('rpc_serializer', 'json')
         json_serializer = serializer if isinstance(serializer, JSONSerializer) else params.pop('json_serializer', 'json')
@@ -548,17 +376,33 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
                     domain_prefix=domain_prefix if domain_prefix is not None else self._object_info.http_server)
     
     @remote_method(URL_path='/resources/wot-td', http_method=HTTP_METHODS.GET)
-    def get_thing_description(self, authority : typing.Optional[str] = None, 
-                            allow_loose_schema : typing.Optional[bool] = False): 
+    def get_thing_description(self, authority : typing.Optional[str] = None): 
+                            # allow_loose_schema : typing.Optional[bool] = False): 
         """
         generate thing description schema of Web of Things https://www.w3.org/TR/wot-thing-description11/.
         one can use the node-wot as a client for the object with the generated schema 
         (https://github.com/eclipse-thingweb/node-wot). Other WoT related tools based on TD will be compatible. 
         Composed RemoteObjects that are not the top level object is currently not supported.
+        
+        Parameters
+        ----------
+        authority: str, Optional
+            protocol with DNS or protocol with hostname+port, for example 'https://my-pc:8080' or 
+            'http://my-pc:9090' or 'https://IT-given-domain-name'. If absent, a value will be automatically
+            given using ``socket.gethostname()`` and the port at which the last HTTPServer (``hololinked.server.HTTPServer``) 
+            attached to this object was running.
+
+        Returns:
+        hololinked.wot.td.ThingDescription
+            represented as an object in python, gets automatically serialized to JSON when pushed out of the socket. 
         """
+        # allow_loose_schema: bool, Optional, Default False 
+        #     Experimental properties, actions or events for which schema was not given will be supplied with a suitable 
+        #     value for node-wot to ignore validation or claim the accessed value for complaint with the schema.
+        #     In other words, schema validation will always pass.  
         from ..wot import ThingDescription
         return ThingDescription().build(self, authority or self._object_info.http_server,
-                                            allow_loose_schema=allow_loose_schema)
+                                            allow_loose_schema=False) #allow_loose_schema)
     
     @property
     def event_publisher(self) -> EventPublisher:
@@ -610,24 +454,30 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
             **kwargs 
         ) -> None:
         """
-        Quick-start ``RemoteObject`` server by creating a default eventloop & servers. This 
+        Quick-start ``RemoteObject`` server by creating a default eventloop & ZMQ servers. This 
         method is blocking until exit() is called.
 
         Parameters
         ----------
         zmq_protocols: Sequence[ZMQ_PROTOCOLS] | ZMQ_Protocools, Default ZMQ_PROTOCOLS.IPC or "IPC"
             zmq transport layers at which the object is exposed. 
-            TCP - provides network access apart from HTTP. Supply a socket address additionally.  
-            IPC - inter process communication. Connection can be made from other processes running 
-            locally within same computer. No client on the network will be able to contact the object. 
-            INPROC - one main python process which spawns several threads in one of which the ``RemoteObject``
-            the running. The object can be contacted by a client on another thread but not from other objects.
-            One may use more than one form of transport.  All requests made will be anyway queued internally. 
+            TCP - provides network access apart from HTTP - please supply a socket address additionally.  
+            IPC - inter process communication - connection can be made from other processes running 
+            locally within same computer. No client on the network will be able to contact the object using
+            this transport. INPROC - one main python process spawns several threads in one of which the ``RemoteObject``
+            the running. The object can be contacted by a client on another thread but neither from other processes 
+            or the network. One may use more than one form of transport.  All requests made will be anyway queued internally
+            irrespective of origin. 
+        
+        **kwargs
+            socket_address: str, Optional
+                socket_address for TCP access, for example: tcp://0.0.0.0:61234
         """
         # expose_eventloop: bool, False
         #     expose the associated Eventloop which executes the object. This is generally useful for remotely 
         #     adding more objects to the same event loop.
-        
+        # dont specify http server as a kwarg, as the other method run_with_http_server has to be used
+
         self.load_parameters_from_DB()
 
         context = zmq.asyncio.Context()
@@ -653,7 +503,70 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
                     json_serializer=self.json_serializer, 
                     expose=False, # expose_eventloop
                 )
+        
+        if kwargs.get('http_server', None):
+            from .HTTPServer import HTTPServer
+            httpserver = kwargs.pop('http_server')
+            assert isinstance(httpserver, HTTPServer)
+            httpserver._zmq_socket_context = context
+            httpserver._zmq_event_context = self.event_publisher.context
+            assert httpserver.all_ok
+            httpserver.tornado_instance.listen(port=httpserver.port, address=httpserver.address)
         self.event_loop.run()
+
+
+    def run_with_http_server(self, port : int = 8080, address : str = '0.0.0.0', 
+                # host : str = None, 
+                allowed_clients : typing.Union[str, typing.Iterable[str]] = None,   
+                ssl_context : ssl.SSLContext = None, # protocol_version : int = 1, 
+                network_interface : str = 'Ethernet', **kwargs):
+        """
+        Quick-start ``RemoteObject`` server by creating a default eventloop & servers. This 
+        method is fully blocking.
+
+        Parameters
+        ----------
+        port: int
+            the port at which the HTTP server should be run (unique)
+        address: str
+            set custom IP address, default is localhost (0.0.0.0)
+        ssl_context: ssl.SSLContext | None
+            use it for highly customized SSL context to provide encrypted communication
+        network_interface: str
+            Currently there is no logic to detect the IP addresss (as externally visible) correctly, therefore please 
+            send the network interface name to retrieve the IP. If a DNS server is present, you may leave this field
+        allowed_clients
+            serves request and sets CORS only from these clients, other clients are rejected with 403. Unlike pure CORS
+            feature, the server resource is not even executed if the client is not an allowed client.
+        **kwargs,
+            certfile: str
+                alternative to SSL context, provide certificate file & key file to allow the server to create a SSL connection on its own
+            keyfile: str
+                alternative to SSL context, provide certificate file & key file to allow the server to create a SSL connection on its own
+            request_handler: RPCHandler
+                custom web request handler of your choice
+            event_handler: BaseHandler | EventHandler
+                custom event handler of your choice for handling events
+        """
+        # host: str
+        #     Host Server to subscribe to coordinate starting sequence of remote objects & web GUI
+        
+        from .HTTPServer import HTTPServer
+        
+        http_server = HTTPServer(
+            [self.instance_name], logger=self.logger, serializer=self.json_serializer, 
+            port=port, address=address, ssl_context=ssl_context,
+            network_interface=network_interface, allowed_clients=allowed_clients,
+            zmq_protocol=ZMQ_PROTOCOLS.INPROC,
+            **kwargs,
+        )
+        
+        self.run(
+            zmq_protocols=ZMQ_PROTOCOLS.INPROC,
+            http_server=http_server
+        )
+
        
+
 
 

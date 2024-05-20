@@ -1,4 +1,5 @@
 import asyncio
+import zmq.asyncio
 import typing
 import logging
 import uuid
@@ -9,8 +10,7 @@ from tornado.iostream import StreamClosedError
 from .data_classes import HTTPResource, ServerSentEvent
 from .serializers import JSONSerializer
 from .webserver_utils import *
-from .zmq_message_brokers import AsyncEventConsumer
-
+from .zmq_message_brokers import AsyncEventConsumer, EventConsumer
 
 
 class BaseHandler(RequestHandler):
@@ -197,13 +197,15 @@ class EventHandler(BaseHandler):
     """
     handles events based on PUB-SUB
     """
-
-    def initialize(self, resource : ServerSentEvent, json_serializer : JSONSerializer,
-                logger : logging.Logger, allowed_clients : typing.List[str] = []) -> None:
+ 
+    def initialize(self, resource : ServerSentEvent, owner = None) -> None:
+        from .HTTPServer import HTTPServer
+        assert isinstance(owner, HTTPServer)
         self.resource = resource
-        self.serializer = json_serializer
-        self.logger = logger
-        self.allowed_clients = allowed_clients 
+        self.owner = owner
+        self.serializer = self.owner.serializer
+        self.logger = self.owner.logger
+        self.allowed_clients = self.owner.allowed_clients
 
     def set_headers(self) -> None:
         self.set_header("Content-Type", "text/event-stream")
@@ -235,42 +237,52 @@ class EventHandler(BaseHandler):
             self.set_status(401, "forbidden")
         self.finish()
 
+    def receive_blocking_event(self):
+        return self.event_consumer.receive(timeout=10000, deserialize=False)
+
     async def handle_datastream(self) -> None:    
         """
         handles the event
         """
         try:                        
             data_header = b'data: %s\n\n'
-            event_consumer = AsyncEventConsumer(self.resource.unique_identifier, self.resource.socket_address, 
-                                                f"{self.resource.unique_identifier}|HTTPEvent|{uuid.uuid4()}",
-                                                logger=self.logger, json_serializer=self.serializer)
+            event_consumer_cls = AsyncEventConsumer if isinstance(self.owner._zmq_event_context, zmq.asyncio.Context) else EventConsumer
+            self.event_consumer = event_consumer_cls(self.resource.unique_identifier, self.resource.socket_address, 
+                                            identity=f"{self.resource.unique_identifier}|HTTPEvent|{uuid.uuid4()}",
+                                            logger=self.logger, json_serializer=self.serializer, 
+                                            context=self.owner._zmq_event_context if self.resource.socket_address.startswith('inproc') else None)
         except Exception as ex:
             self.logger.error(f"error while subscribing to event - {str(ex)}")
             self.set_status(500, "could not subscribe to event source from remote object")
-            self.write(data_header % self.serializer.dumps(
-                       {"exception" : format_exception_as_json(ex)}))
-        else:
-            self.set_status(200)
-            while True:
-                try:
-                    data = await event_consumer.receive(timeout=10000, deserialize=False)
-                    if data:
-                        # already JSON serialized 
-                        self.write(data_header % data)
-                        await self.flush()
-                        self.logger.debug(f"new data sent - {self.resource.name}")
-                    else:
-                        self.logger.debug(f"found no new data")
-                except StreamClosedError:
-                    break 
-                except Exception as ex:
-                    self.logger.error(f"error while pushing event - {str(ex)}")
-                    self.write(data_header % self.serializer.dumps(
-                        {"exception" : format_exception_as_json(ex)}))
+            self.write(data_header % self.serializer.dumps({"exception" : format_exception_as_json(ex)}))
+            return
+        self.set_status(200)
+        event_loop = asyncio.get_event_loop()
+        while True:
             try:
-                event_consumer.exit()
+                if isinstance(self.owner, zmq.asyncio.Context):
+                    data = await self.event_consumer.receive(timeout=10000, deserialize=False)
+                else:
+                    data = await event_loop.run_in_executor(None, self.receive_blocking_event)
+                if data:
+                    # already JSON serialized 
+                    self.write(data_header % data)
+                    await self.flush()
+                    self.logger.debug(f"new data sent - {self.resource.name}")
+                else:
+                    self.logger.debug(f"found no new data")
+            except StreamClosedError:
+                break 
             except Exception as ex:
-                self.logger.error(f"error while closing event consumer - {str(ex)}" )
+                self.logger.error(f"error while pushing event - {str(ex)}")
+                self.write(data_header % self.serializer.dumps(
+                    {"exception" : format_exception_as_json(ex)}))
+        try:
+            if isinstance(self.owner._zmq_event_context, zmq.asyncio.Context):
+                self.event_consumer.exit()
+            self.event_consumer = None
+        except Exception as ex:
+            self.logger.error(f"error while closing event consumer - {str(ex)}" )
 
 
 class ImageEventHandler(EventHandler):
@@ -282,7 +294,8 @@ class ImageEventHandler(EventHandler):
         try:
             event_consumer = AsyncEventConsumer(self.resource.unique_identifier, self.resource.socket_address, 
                             f"{self.resource.unique_identifier}|HTTPEvent|{uuid.uuid4()}", 
-                            json_serializer=self.serializer, logger=self.logger)         
+                            json_serializer=self.serializer, logger=self.logger,
+                            context=self.owner._zmq_event_context if self.resource.socket_address.startswith('inproc') else None)         
             self.set_header("Content-Type", "application/x-mpegURL")
             self.write("#EXTM3U\n")
             delimiter = "#EXTINF:{},\n"

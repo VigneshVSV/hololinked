@@ -97,7 +97,7 @@ class ZMQ_PROTOCOLS(StrEnum):
 
 class ClientMessage(IntEnum):
     """
-    ZNQ client sent message indexing for accessing message indices with names 
+    ZMQ client sent message indexing for accessing message indices with names 
     instead of numbers
     """
     ADDRESS = 0

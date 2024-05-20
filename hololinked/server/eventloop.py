@@ -24,15 +24,18 @@ from .remote_parameter import RemoteParameter
 from .remote_parameters import ClassSelector, TypedList, List, Boolean 
 
 
-if sys.platform.lower().startswith('win'):
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+def set_event_loop_policy():
+    if sys.platform.lower().startswith('win'):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-if global_config.USE_UVLOOP:
-    if sys.platform.lower() in ['linux', 'darwin', 'linux2']:
-        import uvloop
-        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-    else:
-        warnings.warn("uvloop not supported for windows, using default windows selector loop.", RuntimeWarning)
+    if global_config.USE_UVLOOP:
+        if sys.platform.lower() in ['linux', 'darwin', 'linux2']:
+            import uvloop
+            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+        else:
+            warnings.warn("uvloop not supported for windows, using default windows selector loop.", RuntimeWarning)
+
+set_event_loop_policy()
 
 
 class Consumer:
@@ -92,7 +95,8 @@ class EventLoop(RemoteObject):
                     remote_objects.append(instance) 
         self.remote_objects = remote_objects # re-assign the instantiated objects as well
         self.uninstantiated_remote_objects = dict()
-      
+        self._message_listener_methods = []
+
     def __post_init__(self):
         super().__post_init__()
         self.logger.info("Event loop with name '{}' can be started using EventLoop.run().".format(self.instance_name))   
@@ -197,6 +201,7 @@ class EventLoop(RemoteObject):
             loop = asyncio.get_event_loop()
         except RuntimeError:
             loop = asyncio.new_event_loop()
+            # set_event_loop_policy() - why not?
             asyncio.set_event_loop(loop)
         return loop
         
@@ -209,12 +214,11 @@ class EventLoop(RemoteObject):
         """
         self.request_listener_loop = self.get_async_loop()
         rpc_servers = [remote_object.rpc_server for remote_object in self.remote_objects]
-        methods = [] #type: typing.List[asyncio.Future]
         for rpc_server in rpc_servers:
-            methods.append(rpc_server.poll())
-            methods.append(rpc_server.tunnel_message_to_remote_objects())
+            self.request_listener_loop.call_soon(lambda : asyncio.create_task(rpc_server.poll()))
+            self.request_listener_loop.call_soon(lambda : asyncio.create_task(rpc_server.tunnel_message_to_remote_objects()))
         self.logger.info("starting external message listener thread")
-        self.request_listener_loop.run_until_complete(asyncio.gather(*methods))
+        self.request_listener_loop.run_forever()
         self.logger.info("exiting external listener event loop {}".format(self.instance_name))
         self.request_listener_loop.close()
     

@@ -259,7 +259,7 @@ To know more about client side scripting, please look into the documentation [Ho
 
 [![Maintainability](https://api.codeclimate.com/v1/badges/913f4daa2960b711670a/maintainability)](https://codeclimate.com/github/VigneshVSV/hololinked/maintainability)
 
-- [example repository](https://github.com/VigneshVSV/hololinked-examples) - details examples for both clients and servers
+- [example repository](https://github.com/VigneshVSV/hololinked-examples) - detailed examples for both clients and servers
 - [helper GUI](https://github.com/VigneshVSV/hololinked-portal) - view & interact with your object's methods, properties and events. 
 
 ### To Install

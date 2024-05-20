@@ -8,6 +8,7 @@ from tornado import ioloop
 from tornado.web import Application
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+import zmq.asyncio
 
 # from tornado_http2.server import Server as TornadoHTTP2Server 
 
@@ -72,7 +73,8 @@ class HTTPServer(Parameterized):
                 allowed_clients : typing.Union[str, typing.Iterable[str]] = None,   
                 ssl_context : ssl.SSLContext = None, protocol_version : int = 1, 
                 network_interface : str = 'Ethernet', request_handler : RPCHandler = RPCHandler, 
-                event_handler : typing.Union[BaseHandler, EventHandler] = EventHandler) -> None:
+                event_handler : typing.Union[BaseHandler, EventHandler] = EventHandler,
+                zmq_protocol : str = 'IPC', context : zmq.asyncio.Context = None) -> None:
         super().__init__(
             remote_objects=remote_objects,
             port=port, 
@@ -92,8 +94,10 @@ class HTTPServer(Parameterized):
         )
         self._type = HTTPServerTypes.REMOTE_OBJECT_SERVER
         self._lost_remote_objects = dict() # see update_router_with_remote_object
-               
-
+        self._zmq_protocol = zmq_protocol
+        self._zmq_socket_context = context
+        self._zmq_event_context = context
+ 
     @property
     def all_ok(self) -> bool:
         self._IP = f"{self.address}:{self.port}"
@@ -108,18 +112,22 @@ class HTTPServer(Parameterized):
         ])
         
         self.zmq_client_pool = MessageMappedZMQClientPool(self.remote_objects, identity=self._IP, 
-                                                    deserialize_server_messages=False, json_serializer=self.serializer)
+                                                    deserialize_server_messages=False, handshake=False,
+                                                    json_serializer=self.serializer, context=self._zmq_socket_context,
+                                                    protocol=self._zmq_protocol)
     
         event_loop = asyncio.get_event_loop()
         event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_remote_objects()))
         event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
         event_loop.call_soon(lambda : asyncio.create_task(self.zmq_client_pool.poll()) )
+        for client in self.zmq_client_pool:
+            event_loop.call_soon(lambda : asyncio.create_task(client._handshake(timeout=60000)))
         
         if self.protocol_version == 2:
             raise NotImplementedError("Current HTTP2 is not implemented.")
-            self.server = TornadoHTTP2Server(self.app, ssl_options=self.ssl_context)
+            self.tornado_instance = TornadoHTTP2Server(self.app, ssl_options=self.ssl_context)
         else:
-            self.server = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)
+            self.tornado_instance = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)
         return True
     
 
@@ -160,13 +168,13 @@ class HTTPServer(Parameterized):
     def listen(self) -> None:
         assert self.all_ok, 'HTTPServer all is not ok before starting' # Will always be True or cause some other exception   
         self.event_loop = ioloop.IOLoop.current()
-        self.server.listen(port=self.port, address=self.address)    
+        self.tornado_instance.listen(port=self.port, address=self.address)    
         self.logger.info(f'started webserver at {self._IP}, ready to receive requests.')
         self.event_loop.start()
 
     def stop(self) -> None:
-        self.server.stop()
-        run_coro_sync(self.server.close_all_connections())
+        self.tornado_instance.stop()
+        run_coro_sync(self.tornado_instance.close_all_connections())
         self.event_loop.close()    
 
 

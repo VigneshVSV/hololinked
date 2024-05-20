@@ -959,7 +959,7 @@ class RPCServer(BaseZMQServer):
         self.inner_inproc_server = AsyncZMQServer(
                                         instance_name=f'{self.instance_name}/inner', # hardcoded be very careful
                                         server_type=server_type,
-                                        context=context,
+                                        context=self.context,
                                         protocol=ZMQ_PROTOCOLS.INPROC, 
                                         **kwargs
                                     )       
@@ -1540,6 +1540,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         self.poller.register(self.socket, zmq.POLLIN)
         self._terminate_context = context == None
         self._handshake_event = asyncio.Event()
+        self._handshake_event.clear()
         if handshake:
             self.handshake(kwargs.pop("handshake_timeout", 60000))
     
@@ -1554,7 +1555,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         """
         hanshake with server before sending first message
         """
-        if self._monitor_socket is not None:
+        if self._monitor_socket is not None and self._monitor_socket in self.poller:
             self.poller.unregister(self._monitor_socket)
         self._handshake_event.clear()
         start_time = time.time_ns()    
@@ -1695,19 +1696,20 @@ class MessageMappedZMQClientPool(BaseZMQClient):
     Pool of clients where message ID can track the replies irrespective of order of arrival. 
     """
 
-    def __init__(self, server_instance_names: typing.List[str], identity: str, poll_timeout = 25, 
-                protocol : str = 'IPC', client_type = HTTP_SERVER, deserialize_server_messages : bool= True, 
+    def __init__(self, server_instance_names: typing.List[str], identity: str, client_type = HTTP_SERVER,
+                handshake : bool = True, poll_timeout = 25, protocol : str = 'IPC',  
+                context : zmq.asyncio.Context = None, deserialize_server_messages : bool= True, 
                 **kwargs) -> None:
         super().__init__(server_instance_name='pool', client_type=client_type, **kwargs)
         self.identity = identity 
         self.logger = kwargs.get('logger', get_default_logger('{}|{}'.format(identity, 'pooled'), logging.INFO))
         # this class does not call create_socket method
-        self.context = zmq.asyncio.Context()
+        self.context = context or zmq.asyncio.Context()
         self.pool = dict() # type: typing.Dict[str, AsyncZMQClient]
         self.poller = zmq.asyncio.Poller()
         for instance_name in server_instance_names:
             client = AsyncZMQClient(server_instance_name=instance_name,
-                identity=identity, client_type=client_type, handshake=True, protocol=protocol, 
+                identity=identity, client_type=client_type, handshake=handshake, protocol=protocol, 
                 context=self.context, rpc_serializer=self.rpc_serializer, json_serializer=self.json_serializer,
                 logger=self.logger)
             client._monitor_socket = client.socket.get_monitor_socket()
@@ -2198,6 +2200,7 @@ class BaseEventConsumer(BaseZMQClient):
     def __init__(self, unique_identifier : str, socket_address : str, 
                     identity : str, client_type = b'HTTP_SERVER', 
                         **kwargs) -> None:
+        self._terminate_context : bool 
         protocol = socket_address.split('://', 1)[0].upper()
         super().__init__(server_instance_name=kwargs.get('server_instance_name', None), 
                     client_type=client_type, **kwargs)
@@ -2214,8 +2217,7 @@ class BaseEventConsumer(BaseZMQClient):
         self.interrupting_peer.connect(f'inproc://{self.identity}/interruption')
         self.poller.register(self.socket, zmq.POLLIN)
         self.poller.register(self.interruptor, zmq.POLLIN)
-        self.logger.info("connected event consuming socket to address {}".format(self.socket_address))
-
+        
 
     def exit(self):
         if not hasattr(self, 'logger'):
@@ -2236,8 +2238,9 @@ class BaseEventConsumer(BaseZMQClient):
             self.logger.warn("could not terminate sockets")
 
         try:
-            self.context.term()
-            self.logger.info("terminated context of event consuming socket with address '{}'".format(self.socket_address)) 
+            if self._terminate_context:
+                self.context.term()
+                self.logger.info("terminated context of event consuming socket with address '{}'".format(self.socket_address)) 
         except Exception as E: 
             self.logger.warn("could not properly terminate context or attempted to terminate an already terminated context at address '{}'. Exception message : {}".format(
                 self.socket_address, str(E)))
@@ -2270,8 +2273,9 @@ class AsyncEventConsumer(BaseEventConsumer):
     """
 
     def __init__(self, unique_identifier : str, socket_address : str, identity : str, client_type = b'HTTP_SERVER', 
-                        **kwargs) -> None:
-        self.context = kwargs.get('context', zmq.asyncio.Context())
+                    context : typing.Optional[zmq.asyncio.Context] = None, **kwargs) -> None:
+        self._terminate_context = context == None
+        self.context = context or zmq.asyncio.Context()
         self.poller = zmq.asyncio.Poller()
         super().__init__(unique_identifier=unique_identifier, socket_address=socket_address, 
                         identity=identity, client_type=client_type, **kwargs)
@@ -2348,8 +2352,9 @@ class EventConsumer(BaseEventConsumer):
     """
 
     def __init__(self, unique_identifier : str, socket_address : str, identity : str, client_type = b'HTTP_SERVER', 
-                        **kwargs) -> None:
-        self.context = kwargs.get('context', zmq.Context())
+                    context : typing.Optional[zmq.Context] = None, **kwargs) -> None:
+        self._terminate_context = context == None
+        self.context = context or zmq.Context()
         self.poller = zmq.Poller()
         super().__init__(unique_identifier=unique_identifier, socket_address=socket_address,
                         identity=identity, client_type=client_type, **kwargs)
@@ -2365,6 +2370,7 @@ class EventConsumer(BaseEventConsumer):
         deserialize: bool, default True
             deseriliaze the data, use False for HTTP server sent event to simply bypass
         """
+        contents = None
         sockets = self.poller.poll(timeout) # typing.List[typing.Tuple[zmq.Socket, int]]
         if len(sockets) > 1:
             if socket[0] == self.interrupting_peer:
