@@ -7,7 +7,7 @@ from .constants import USE_OBJECT_NAME, HTTP_METHODS
 
 
 
-class RemoteParameter(Parameter):
+class Property(Parameter):
     """
     Initialize a new Parameter object and store the supplied attributes:
 
@@ -196,14 +196,11 @@ __parameter_info__ = [
             ]
 
    
-class RemoteClassParameters(ClassParameters):
+class ClassProperties(ClassParameters):
     """
-    Object that holds the namespace and implementation of Parameterized
-    methods as well as any state that is not in __slots__ or the
-    Parameters themselves.
-
-    Exists at metaclass level (instantiated by the metaclass). Contains state specific to the
-    class.
+    Object that holds the namespace and implementation of Parameterized methods as well as any state that is not 
+    in __slots__ or the Parameters themselves.
+    Exists at metaclass level (instantiated by the metaclass). Contains state specific to the class.
     """
 
     @property
@@ -220,7 +217,7 @@ class RemoteClassParameters(ClassParameters):
         return getattr(self.owner_cls, f'_{self.owner_cls.__name__}_db_persisting_remote_params')
 
     @property
-    def db_init_objects(self) -> typing.Dict[str, RemoteParameter]:
+    def db_init_objects(self) -> typing.Dict[str, Property]:
         try:
             return getattr(self.owner_cls, f'_{self.owner_cls.__name__}_db_init_remote_params')
         except AttributeError: 
@@ -233,23 +230,23 @@ class RemoteClassParameters(ClassParameters):
         return getattr(self.owner_cls, f'_{self.owner_cls.__name__}_db_init_remote_params')
         
     @property
-    def remote_objects(self) -> typing.Dict[str, RemoteParameter]:
+    def remote_objects(self) -> typing.Dict[str, Property]:
         try:
             return getattr(self.owner_cls, f'_{self.owner_cls.__name__}_remote_params')
         except AttributeError: 
             paramdict = super().descriptors
             remote_params = {}
             for name, desc in paramdict.items():
-                if isinstance(desc, RemoteParameter):
+                if isinstance(desc, Property):
                     remote_params[name] = desc
             setattr(self.owner_cls, f'_{self.owner_cls.__name__}_remote_params', remote_params)
         return getattr(self.owner_cls, f'_{self.owner_cls.__name__}_remote_params')
 
-    def webgui_info(self, for_remote_params : typing.Union[RemoteParameter, typing.Dict[str, RemoteParameter], None] = None):
+    def webgui_info(self, for_remote_params : typing.Union[Property, typing.Dict[str, Property], None] = None):
         info = {}
         if isinstance(for_remote_params, dict):
             objects = for_remote_params 
-        elif isinstance(for_remote_params, RemoteParameter):
+        elif isinstance(for_remote_params, Property):
             objects = { for_remote_params.name : for_remote_params } 
         else:
             objects = self.remote_objects
@@ -280,4 +277,6 @@ class RemoteClassParameters(ClassParameters):
 
 
   
-__all__ = ['RemoteParameter']
+__all__ = [
+    Property.__name__
+]

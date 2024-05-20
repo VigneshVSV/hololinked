@@ -4,8 +4,8 @@ from types import FunctionType, MethodType
 from enum import EnumMeta, Enum, StrEnum
 
 from ..param.parameterized import ParameterizedMetaclass
-from .remote_parameters import ClassSelector, TypedDict, Boolean
-from .remote_parameter import RemoteParameter
+from .properties import ClassSelector, TypedDict, Boolean
+from .property import Property
 from .utils import getattr_without_descriptor_read
 from .data_classes import RemoteResourceInfoValidator
 
@@ -21,14 +21,14 @@ class StateMachine:
         enumeration of states 
     initial_state: str 
         initial state of machine 
-    on_enter: Dict[str, Callable | RemoteParameter] 
+    on_enter: Dict[str, Callable | Property] 
         callbacks to be invoked when a certain state is entered. It is to be specified 
         as a dictionary with the states being the keys
-    on_exit: Dict[str, Callable | RemoteParameter]
+    on_exit: Dict[str, Callable | Property]
         callbacks to be invoked when a certain state is exited. 
         It is to be specified as a dictionary with the states being the keys
     **machine:
-        state name: List[Callable, RemoteParameter]
+        state name: List[Callable, Property]
             directly pass the state name as an argument along with the methods/parameters which are allowed to execute 
             in that state
     """
@@ -43,7 +43,7 @@ class StateMachine:
                         doc="""callbacks to execute when certain state is exited; 
                         specfied as map with state as keys and callbacks as list""") # typing.Dict[str, typing.List[typing.Callable]]
     machine = TypedDict(default=None, allow_None=True, key_type=str, item_type=(list, tuple),
-                        doc="the machine specification with state as key and objects as list") # typing.Dict[str, typing.List[typing.Callable, RemoteParameter]]
+                        doc="the machine specification with state as key and objects as list") # typing.Dict[str, typing.List[typing.Callable, Property]]
     exists = Boolean(default=False, readonly=True, fget=lambda self: self._exists, 
                         doc="internally computed, True if states, initial_states and the machine is valid")
     
@@ -53,7 +53,7 @@ class StateMachine:
             on_enter : typing.Dict[str, typing.Union[typing.List[typing.Callable], typing.Callable]] = {}, 
             on_exit  : typing.Dict[str, typing.Union[typing.List[typing.Callable], typing.Callable]] = {}, 
             # push_state_change_event : bool = False,
-            **machine : typing.Dict[str, typing.Union[typing.Callable, RemoteParameter]]
+            **machine : typing.Dict[str, typing.Union[typing.Callable, Property]]
         ) -> None:
         self._exists = False
         self.on_enter = on_enter
@@ -193,7 +193,7 @@ class StateMachine:
     current_state = property(get_state, set_state, None, 
         doc = """read and write current state of the state machine""")
 
-    def has_object(self, object : typing.Union[RemoteParameter, typing.Callable]) -> bool:
+    def has_object(self, object : typing.Union[Property, typing.Callable]) -> bool:
         """
         returns True if specified object is found in any of the states of state machine. 
         Supply unbound method for checking methods as state machine is specified at class level

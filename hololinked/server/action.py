@@ -4,13 +4,13 @@ from types import FunctionType
 from inspect import iscoroutinefunction, getfullargspec
 
 from .data_classes import RemoteResourceInfoValidator
-from .constants import (USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, JSON)
+from .constants import USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, JSON
 
 
    
-def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.POST, 
-            state : typing.Optional[typing.Union[str, Enum]] = None, argument_schema : typing.Optional[JSON] = None,
-            return_value_schema : typing.Optional[JSON] = None) -> typing.Callable:
+def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.POST, 
+            state : typing.Optional[typing.Union[str, Enum]] = None, input_schema : typing.Optional[JSON] = None,
+            output_schema : typing.Optional[JSON] = None, create_task : bool = False) -> typing.Callable:
     """
     Use this function to decorate your methods to be accessible remotely.  
     
@@ -23,9 +23,9 @@ def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_MET
     state: str | Tuple[str], optional 
         state under which the object can executed or written. When not provided,
         its accessible or can be executed under any state.
-    argument_schema: JSON 
+    input_schema: JSON 
         schema for arguments to validate them.
-    return_value_schema : JSON 
+    output_schema : JSON 
         schema for return value, currently only used to inform clients. 
         
     Returns
@@ -79,13 +79,13 @@ def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_MET
                 obj._remote_info.request_as_argument = True
             obj._remote_info.iscallable = True
             obj._remote_info.iscoroutine = iscoroutinefunction(obj)
-            obj._remote_info.argument_schema = argument_schema
-            obj._remote_info.return_value_schema = return_value_schema
+            obj._remote_info.argument_schema = input_schema
+            obj._remote_info.return_value_schema = output_schema
             obj._remote_info.obj = original
             return original
         else:
             raise TypeError(
-                "target for get()/post()/remote_method() or http method decorator is not a function/method. ",
+                "target for action or is not a function/method. " +
                 f"Given type {type(obj)}"
             )
             
@@ -94,7 +94,7 @@ def remote_method(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_MET
 
 
 __all__ = [
-    remote_method.__name__,
+    action.__name__
 ]
 
 

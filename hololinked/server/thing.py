@@ -2,41 +2,34 @@ import logging
 import inspect
 import os
 import ssl
-import threading
 import typing
 import warnings
 import zmq
 
-
-
-
 from ..param.parameterized import Parameterized, ParameterizedMetaclass 
 from .constants import (LOGLEVEL, ZMQ_PROTOCOLS, HTTP_METHODS)
-from .database import RemoteObjectDB, RemoteObjectInformation
-from .stubs import ReactApp
+from .database import ThingDB, ThingInformation
 from .serializers import _get_serializer_from_user_given_options, BaseSerializer, JSONSerializer
 from .exceptions import BreakInnerLoop
-from .decorators import remote_method
-from .data_classes import (GUIResources,  HTTPResource, RPCResource, RemoteResourceInfoValidator,
-                        get_organised_resources)
+from .action import action
+from .data_classes import GUIResources, HTTPResource, RPCResource, get_organised_resources
 from .utils import get_default_logger, getattr_without_descriptor_read
-from .remote_parameter import RemoteParameter, RemoteClassParameters
-from .remote_parameters import (String, ClassSelector, TypedDict, Boolean, 
-                                Selector, TypedKeyMappingsConstrainedDict )
+from .property import Property, ClassProperties
+from .properties import String, ClassSelector, Selector, TypedKeyMappingsConstrainedDict
 from .zmq_message_brokers import RPCServer, ServerTypes, AsyncPollingZMQServer, EventPublisher
 from .state_machine import StateMachine
 from .events import Event
 
 
 
-class RemoteObjectMeta(ParameterizedMetaclass):
+class ThingMeta(ParameterizedMetaclass):
     """
-    Metaclass for remote object, implements a ``__post_init__()`` call & ``RemoteClassParameters`` instantiation for 
-    ``RemoteObject``. During instantiation of ``RemoteObject``, first the message brokers are created (``_prepare_message_brokers()``),
-    then ``_prepare_logger()``, then ``_prepare_DB()`` & ``_prepare_state_machine()`` in the ``__init__()``. In the 
-    ``__post_init__()``, the resources of the RemoteObject are segregated and database operations like writing parameter 
-    values are carried out. Between ``__post_init__()`` and ``__init__()``, package user's ``__init__()`` will run where user can run 
-    custom logic after preparation of message brokers and database engine and before using database operations. 
+    Metaclass for Thing, implements a ``__post_init__()`` call and instantiation of a container for properties' descriptor 
+    objects. During instantiation of ``Thing``, first serializers, loggers and database connection are created, after which
+    the user ``__init__`` is called. In ``__post_init__()`` the exposed resources are segregated while accounting for 
+    any ``Event`` objects or instance specific properties created during init. Message brokers creation
+    and loading of properties from database happen while calling ``run()``. Properties can also be explicity loaded from 
+    database before calling ``run()`` during or after init. 
     """
     
     @classmethod
@@ -49,7 +42,7 @@ class RemoteObjectMeta(ParameterizedMetaclass):
                 logger = ClassSelector,
                 logfile = String,
                 db_config_file = String,
-                object_info = RemoteParameter, # it should not be set by the user
+                object_info = Property, # it should not be set by the user
             ),
             allow_unspecified_keys = True
         )
@@ -64,29 +57,23 @@ class RemoteObjectMeta(ParameterizedMetaclass):
     
     def _create_param_container(mcs, mcs_members : dict) -> None:
         """
-        creates ``RemoteClassParameters`` instead of ``param``'s own ``Parameters``
-        as the default container for descriptors. See code of ``param``.
+        creates ``ClassProperties`` instead of ``param``'s own ``Parameters`` 
+        as the default container for descriptors. All properties have definitions 
+        copied from ``param``.
         """
-        mcs._param_container = RemoteClassParameters(mcs, mcs_members)
+        mcs._param_container = ClassProperties(mcs, mcs_members)
 
     @property
-    def parameters(mcs) -> RemoteClassParameters:
+    def properties(mcs) -> ClassProperties:
         """
-        returns ``RemoteClassParameters`` instance instead of ``param``'s own 
-        ``Parameters`` instance. See code of ``param``.
-        """
-        return mcs._param_container
-    
-    @property
-    def properties(mcs) -> RemoteClassParameters:
-        """
-        returns ``RemoteClassParameters`` instance instead of ``param``'s own 
+        returns ``ClassProperties`` instance instead of ``param``'s own 
         ``Parameters`` instance. See code of ``param``.
         """
         return mcs._param_container
 
 
-class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
+
+class Thing(Parameterized, metaclass=ThingMeta):
     """
     Subclass from here to expose python objects on the network
     """
@@ -119,22 +106,22 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
                 fget= lambda self : self.state_machine.current_state if hasattr(self, 'state_machine') else None,  
                 doc='current state machine state if state machine present') #type: typing.Optional[str]
     
-    httpserver_resources = RemoteParameter(readonly=True, URL_path='/resources/http-server', 
+    httpserver_resources = Property(readonly=True, URL_path='/resources/http-server', 
                         doc="object's resources exposed to HTTP client (through ``hololinked.server.HTTPServer``)", 
                         fget=lambda self: self._httpserver_resources ) # type: typing.Dict[str, HTTPResource]
-    rpc_resources = RemoteParameter(readonly=True, URL_path='/resources/object-proxy', 
+    rpc_resources = Property(readonly=True, URL_path='/resources/object-proxy', 
                         doc="object's resources exposed to RPC client, similar to HTTP resources but differs in details.", 
                         fget=lambda self: self._rpc_resources) # type: typing.Dict[str, RPCResource]
-    gui_resources = RemoteParameter(readonly=True, URL_path='/resources/portal-app', 
+    gui_resources = Property(readonly=True, URL_path='/resources/portal-app', 
                         doc="""object's data read by hololinked-portal GUI client, similar to http_resources but differs 
                         in details.""",
                         fget=lambda self: GUIResources().build(self)) # type: typing.Dict[str, typing.Any]
-    GUI = ClassSelector(class_=ReactApp, default=None, allow_None=True, URL_path='/resources/web-gui',
+    GUI = Property(default=None, allow_None=True, URL_path='/resources/web-gui', fget = lambda self : self._gui,
                         doc="GUI specified here will become visible at GUI tab of hololinked-portal dashboard tool") # type: typing.Optional[ReactApp]
     
-    object_info = RemoteParameter(doc="contains information about this object like the class name, script location etc.",
-                        URL_path='/object-info') # type: RemoteObjectInformation
-    events = RemoteParameter(readonly=True, URL_path='/events', 
+    object_info = Property(doc="contains information about this object like the class name, script location etc.",
+                        URL_path='/object-info') # type: ThingInformation
+    events = Property(readonly=True, URL_path='/events', 
                         doc="returns a dictionary with two fields containing event name and event information") # type: typing.Dict[str, typing.Any]
     
 
@@ -150,7 +137,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
 
     def __init__(self, *, instance_name : str, logger : typing.Optional[logging.Logger] = None, 
                 serializer : typing.Optional[JSONSerializer] = None,
-                **params) -> None:
+                **kwargs) -> None:
         """
         Parameters
         ----------
@@ -181,34 +168,35 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
         if not isinstance(serializer, JSONSerializer) and serializer != 'json' and serializer is not None:
             raise TypeError("serializer key word argument must be JSONSerializer. If one wishes to use separate serializers " +
                             "for python clients and HTTP clients, use rpc_serializer and json_serializer keyword arguments.")
-        rpc_serializer = serializer or params.pop('rpc_serializer', 'json')
-        json_serializer = serializer if isinstance(serializer, JSONSerializer) else params.pop('json_serializer', 'json')
+        rpc_serializer = serializer or kwargs.pop('rpc_serializer', 'json')
+        json_serializer = serializer if isinstance(serializer, JSONSerializer) else kwargs.pop('json_serializer', 'json')
         rpc_serializer, json_serializer = _get_serializer_from_user_given_options(
                                                                     rpc_serializer=rpc_serializer,
                                                                     json_serializer=json_serializer
                                                                 )
         super().__init__(instance_name=instance_name, logger=logger, 
-                        rpc_serializer=rpc_serializer, json_serializer=json_serializer, **params)
+                        rpc_serializer=rpc_serializer, json_serializer=json_serializer, **kwargs)
 
         self._prepare_logger(
-                    log_level=params.get('log_level', None), 
-                    log_file=params.get('log_file', None),
-                    remote_access=params.get('logger_remote_access', self.__class__.logger_remote_access if hasattr(
+                    log_level=kwargs.get('log_level', None), 
+                    log_file=kwargs.get('log_file', None),
+                    remote_access=kwargs.get('logger_remote_access', self.__class__.logger_remote_access if hasattr(
                                                                 self.__class__, 'logger_remote_access') else False)
                 )
         self._prepare_state_machine()  
-        self._prepare_DB(params.get('use_default_db', False), params.get('db_config_file', None))   
+        self._prepare_DB(kwargs.get('use_default_db', False), kwargs.get('db_config_file', None))   
 
 
     def __post_init__(self):
-        self._owner : typing.Optional[RemoteObject] = None 
+        self._owner : typing.Optional[Thing] = None 
         self._internal_fixed_attributes : typing.List[str]
         self._full_URL_path_prefix : str
         self.rpc_server : typing.Optional[RPCServer]
         self.message_broker : typing.Optional[AsyncPollingZMQServer]
         self._event_publisher : typing.Optional[EventPublisher]
+        self._gui = None # filler for a future feature
         self._prepare_resources()
-        self.logger.info(f"initialialised RemoteObject class {self.__class__.__name__} with instance name {self.instance_name}")
+        self.logger.info(f"initialialised Thing class {self.__class__.__name__} with instance name {self.instance_name}")
 
 
     def __setattr__(self, __name: str, __value: typing.Any) -> None:
@@ -265,8 +253,8 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
             self.object_info
             return 
         # 1. create engine 
-        self.db_engine = RemoteObjectDB(instance=self, config_file=None if default_db else config_file, 
-                                    serializer=self.rpc_serializer) # type: RemoteObjectDB 
+        self.db_engine = ThingDB(instance=self, config_file=None if default_db else config_file, 
+                                    serializer=self.rpc_serializer) # type: ThingDB 
         # 2. create an object metadata to be used by different types of clients
         object_info = self.db_engine.fetch_own_info()
         if object_info is not None:
@@ -274,7 +262,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
         # 3. enter parameters to DB if not already present 
         if self.object_info.class_name != self.__class__.__name__:
             raise ValueError("Fetched instance name and class name from database not matching with the ", 
-                " current RemoteObject class/subclass. You might be reusing an instance name of another subclass ", 
+                " current Thing class/subclass. You might be reusing an instance name of another subclass ", 
                 "and did not remove the old data from database. Please clean the database using database tools to ", 
                 "start fresh.")
 
@@ -282,7 +270,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
     @object_info.getter
     def _get_object_info(self):
         if not hasattr(self, '_object_info'):
-            self._object_info = RemoteObjectInformation(
+            self._object_info = ThingInformation(
                     instance_name  = self.instance_name, 
                     class_name     = self.__class__.__name__,
                     script         = os.path.dirname(os.path.abspath(inspect.getfile(self.__class__))),
@@ -296,10 +284,10 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
     
     @object_info.setter
     def _set_object_info(self, value):
-        self._object_info = RemoteObjectInformation(**value)  
+        self._object_info = ThingInformation(**value)  
       
     
-    @remote_method(URL_path='/parameters', http_method=HTTP_METHODS.GET)
+    @action(URL_path='/parameters', http_method=HTTP_METHODS.GET)
     def _get_parameters(self, **kwargs) -> typing.Dict[str, typing.Any]:
         """
         """
@@ -324,7 +312,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
                 data[parameter] = self.parameters[parameter].__get__(self, type(self))
         return data 
     
-    @remote_method(URL_path='/parameters', http_method=HTTP_METHODS.PATCH)
+    @action(URL_path='/parameters', http_method=HTTP_METHODS.PATCH)
     def _set_parameters(self, **values : typing.Dict[str, typing.Any]) -> None:
         """ 
         set parameters whose name is specified by keys of a dictionary
@@ -353,13 +341,13 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
         if hasattr(self, '_event_publisher'):
             raise AttributeError("Can set event publisher only once.")
         
-        def recusively_set_events_publisher(obj : RemoteObject, publisher : EventPublisher) -> None:
+        def recusively_set_events_publisher(obj : Thing, publisher : EventPublisher) -> None:
             for name, evt in inspect._getmembers(obj, lambda o: isinstance(o, Event), getattr_without_descriptor_read):
                 assert isinstance(evt, Event), "object is not an event"
                 # above is type definition
                 evt.publisher = publisher 
                 evt._remote_info.socket_address = publisher.socket_address
-            for name, obj in inspect._getmembers(obj, lambda o: isinstance(o, RemoteObject), getattr_without_descriptor_read):
+            for name, obj in inspect._getmembers(obj, lambda o: isinstance(o, Thing), getattr_without_descriptor_read):
                 if name == '_owner':
                     continue 
                 recusively_set_events_publisher(obj, publisher)
@@ -368,7 +356,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
         recusively_set_events_publisher(self, value)
 
 
-    @remote_method(URL_path='/parameters/db-reload', http_method=HTTP_METHODS.POST)
+    @action(URL_path='/parameters/db-reload', http_method=HTTP_METHODS.POST)
     def load_parameters_from_DB(self):
         """
         Load and apply parameter values which have ``db_init`` or ``db_persist``
@@ -377,9 +365,9 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
         if not hasattr(self, 'db_engine'):
             return
         
-        def recursively_load_parameters_from_DB(obj : RemoteObject) -> None:
+        def recursively_load_parameters_from_DB(obj : Thing) -> None:
             nonlocal self
-            for name, resource in inspect._getmembers(obj, lambda o : isinstance(o, RemoteObject), getattr_without_descriptor_read): 
+            for name, resource in inspect._getmembers(obj, lambda o : isinstance(o, Thing), getattr_without_descriptor_read): 
                 if name == '_owner':
                     continue
                 recursively_load_parameters_from_DB(resource) # load from the lower up
@@ -396,7 +384,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
         recursively_load_parameters_from_DB(self)
 
    
-    @remote_method(URL_path='/resources/postman-collection', http_method=HTTP_METHODS.GET)
+    @action(URL_path='/resources/postman-collection', http_method=HTTP_METHODS.GET)
     def get_postman_collection(self, domain_prefix : str = None):
         """
         organised postman collection for this object
@@ -405,14 +393,14 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
         return postman_collection.build(instance=self, 
                     domain_prefix=domain_prefix if domain_prefix is not None else self._object_info.http_server)
     
-    @remote_method(URL_path='/resources/wot-td', http_method=HTTP_METHODS.GET)
+    @action(URL_path='/resources/wot-td', http_method=HTTP_METHODS.GET)
     def get_thing_description(self, authority : typing.Optional[str] = None): 
                             # allow_loose_schema : typing.Optional[bool] = False): 
         """
         generate thing description schema of Web of Things https://www.w3.org/TR/wot-thing-description11/.
         one can use the node-wot as a client for the object with the generated schema 
         (https://github.com/eclipse-thingweb/node-wot). Other WoT related tools based on TD will be compatible. 
-        Composed RemoteObjects that are not the top level object is currently not supported.
+        Composed Things that are not the top level object is currently not supported.
         
         Parameters
         ----------
@@ -435,10 +423,10 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
                                             allow_loose_schema=False) #allow_loose_schema)
     
     
-    @remote_method(URL_path='/exit', http_method=HTTP_METHODS.POST)                                                                                                                                          
+    @action(URL_path='/exit', http_method=HTTP_METHODS.POST)                                                                                                                                          
     def exit(self) -> None:
         """
-        Exit the object without killing the eventloop that runs this object. If RemoteObject was 
+        Exit the object without killing the eventloop that runs this object. If Thing was 
         started using the run() method, the eventloop is also killed. This method can
         only be called remotely.
         """
@@ -455,7 +443,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
             **kwargs 
         ) -> None:
         """
-        Quick-start ``RemoteObject`` server by creating a default eventloop & ZMQ servers. This 
+        Quick-start ``Thing`` server by creating a default eventloop & ZMQ servers. This 
         method is blocking until exit() is called.
 
         Parameters
@@ -465,7 +453,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
             TCP - provides network access apart from HTTP - please supply a socket address additionally.  
             IPC - inter process communication - connection can be made from other processes running 
             locally within same computer. No client on the network will be able to contact the object using
-            this transport. INPROC - one main python process spawns several threads in one of which the ``RemoteObject``
+            this transport. INPROC - one main python process spawns several threads in one of which the ``Thing``
             the running. The object can be contacted by a client on another thread but neither from other processes 
             or the network. One may use more than one form of transport.  All requests made will be anyway queued internally
             irrespective of origin. 
@@ -522,7 +510,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
                 ssl_context : ssl.SSLContext = None, # protocol_version : int = 1, 
                 network_interface : str = 'Ethernet', **kwargs):
         """
-        Quick-start ``RemoteObject`` server by creating a default eventloop & servers. This 
+        Quick-start ``Thing`` server by creating a default eventloop & servers. This 
         method is fully blocking.
 
         Parameters

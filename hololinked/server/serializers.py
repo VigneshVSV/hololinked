@@ -34,12 +34,13 @@ import uuid
 import decimal
 import typing
 import warnings
-from enum import Enum, StrEnum
+from enum import Enum
 from collections import deque
 
 from ..param.parameters import TypeConstrainedList, TypeConstrainedDict, TypedKeyMappingsConstrainedDict
 from .constants import JSONSerializable, Serializers
-from .webserver_utils import format_exception_as_json
+from .utils import format_exception_as_json
+
 
 
 class BaseSerializer(object):

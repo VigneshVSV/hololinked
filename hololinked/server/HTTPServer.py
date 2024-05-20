@@ -16,7 +16,7 @@ import zmq.asyncio
 from ..param import Parameterized
 from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector, TypedList, String)
 from .constants import CommonRPC, HTTPServerTypes, ResourceTypes, ServerMessage
-from .webserver_utils import get_IP_from_interface
+from .utils import get_IP_from_interface
 from .data_classes import HTTPResource, ServerSentEvent
 from .utils import get_default_logger, run_coro_sync
 from .serializers import JSONSerializer

@@ -14,7 +14,7 @@ from ..param.parameterized import  Parameterized, dt_types, Parameter
 
 from ..param.parameters import (TypeConstrainedList, TypeConstrainedDict, abbreviate_paths,
                        TypedKeyMappingsConstrainedDict, resolve_path, concrete_descendents, named_objs)
-from .remote_parameter import RemoteParameter
+from .property import Property
 from .constants import USE_OBJECT_NAME, HTTP_METHODS
 
 GET = HTTP_METHODS.GET 
@@ -22,7 +22,7 @@ PUT = HTTP_METHODS.PUT
 
 
 
-class String(RemoteParameter):
+class String(Property):
     """
     A string parameter with a default value and optional regular expression (regex) matching.
     """
@@ -126,7 +126,7 @@ class Bytes(String):
     
 
 
-class IPAddress(RemoteParameter):
+class IPAddress(Property):
     
     __slots__ = ['allow_localhost', 'allow_ipv4', 'allow_ipv6']
 
@@ -321,7 +321,7 @@ class IPAddress(RemoteParameter):
 
 
 
-class Number(RemoteParameter):
+class Number(Property):
     """
     A numeric parameter with a default value and optional bounds.
 
@@ -520,7 +520,7 @@ class Integer(Number):
 
 
 
-class Boolean(RemoteParameter):
+class Boolean(Property):
     """Binary or tristate Boolean Parameter."""
 
     def __init__(self, default : typing.Optional[bool] = False, *, 
@@ -544,7 +544,7 @@ class Boolean(RemoteParameter):
 
 
 
-class Iterable(RemoteParameter):
+class Iterable(Property):
     """A tuple or list Parameter (e.g. ('a',7.6,[3,5])) with a fixed tuple length."""
 
     __slots__ = ['bounds', 'length', 'item_type', 'dtype']
@@ -697,7 +697,7 @@ class List(Iterable):
 
 
 
-class Callable(RemoteParameter):
+class Callable(Property):
     """
     Parameter holding a value that is a callable object, such as a function.
 
@@ -714,7 +714,7 @@ class Callable(RemoteParameter):
        
 
 
-class Composite(RemoteParameter):
+class Composite(Property):
     """
     A Parameter that is a composite of a set of other attributes of the class.
 
@@ -770,7 +770,7 @@ class Composite(RemoteParameter):
 
 
 
-class SelectorBase(RemoteParameter):
+class SelectorBase(Property):
     """
     Parameter whose value must be chosen from a list of possibilities.
 
@@ -987,7 +987,7 @@ class TupleSelector(Selector):
 #   - use resolve_path(path_to_file=False) for paths to existing folders to be read,
 #     and normalize_path() for paths to new files to be written.
 
-class Path(RemoteParameter):
+class Path(Property):
     """
     Parameter that can be set to a string specifying the path of a file or folder.
 
@@ -1263,7 +1263,7 @@ class CalendarDate(Number):
 
 
 
-class CSS3Color(RemoteParameter):
+class CSS3Color(Property):
     """
     Color parameter defined as a hex RGB string with an optional #
     prefix or (optionally) as a CSS3 color name.

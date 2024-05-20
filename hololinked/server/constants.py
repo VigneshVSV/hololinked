@@ -1,15 +1,12 @@
+import zmq
 import logging
 import typing
-from types import FunctionType, MethodType
 from enum import StrEnum, IntEnum, Enum
-
-import zmq
 
 
 # types
 JSONSerializable = typing.Union[typing.Dict[str, typing.Any], list, str, int, float, None]
 JSON = typing.Dict[str, JSONSerializable]
-CallableType = (FunctionType, MethodType)
 
 # decorator constants 
 # naming
@@ -23,12 +20,11 @@ UNSPECIFIED : str = "UNSPECIFIED"
 class ResourceTypes(StrEnum):
     "Exposed resource types"
 
-    PARAMETER = "PARAMETER"
-    CALLABLE = "CALLABLE"
+    PROPERTY = "PROPERTY"
+    ACTION = "ACTION"
     EVENT = "EVENT"
     IMAGE_STREAM = "IMAGE_STREAM"
     FILE = "FILE"
-
 
 
 class CommonRPC(StrEnum):
@@ -75,6 +71,7 @@ class HTTP_METHODS(StrEnum):
 
 http_methods = [member for member in HTTP_METHODS._member_map_]
 
+
 # Logging 
 class LOGLEVEL(IntEnum):
     "``logging.Logger`` log levels"
@@ -85,6 +82,7 @@ class LOGLEVEL(IntEnum):
     ERROR    = logging.ERROR
     WARN     = logging.WARN
     FATAL    = logging.FATAL
+
 
 # ZMQ
 class ZMQ_PROTOCOLS(StrEnum):
@@ -162,7 +160,7 @@ class Serializers(StrEnum):
     MSGPACK = 'msgpack'
 
 
-class ZMQSocketType(Enum):
+class ZMQSocketType(IntEnum):
     PAIR = zmq.PAIR
     PUB = zmq.PUB
     SUB = zmq.SUB

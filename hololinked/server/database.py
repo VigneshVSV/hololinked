@@ -1,5 +1,4 @@
 import os
-from sqlite3 import DatabaseError
 import threading
 import typing
 from sqlalchemy import create_engine, select, inspect as inspect_database
@@ -7,6 +6,7 @@ from sqlalchemy.ext import asyncio as asyncio_ext
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import Integer, String, JSON, LargeBinary
 from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, MappedAsDataclass
+from sqlite3 import DatabaseError
 from dataclasses import dataclass
 
 from ..param import Parameterized
@@ -14,15 +14,15 @@ from .constants import JSONSerializable
 from .config import global_config
 from .utils import pep8_to_dashed_URL
 from .serializers import PythonBuiltinJSONSerializer as JSONSerializer, BaseSerializer
-from .remote_parameter import RemoteParameter
+from .property import Property
 
 
 
-class RemoteObjectTableBase(DeclarativeBase):
+class ThingTableBase(DeclarativeBase):
     """SQLAlchemy base table for all remote object related tables"""
     pass 
     
-class SerializedParameter(MappedAsDataclass, RemoteObjectTableBase):
+class SerializedParameter(MappedAsDataclass, ThingTableBase):
     """
     Parameter value is serialized before storing in database, therefore providing unified version for 
     SQLite and other relational tables
@@ -34,7 +34,7 @@ class SerializedParameter(MappedAsDataclass, RemoteObjectTableBase):
     serialized_value : Mapped[bytes] = mapped_column(LargeBinary) 
 
 
-class RemoteObjectInformation(MappedAsDataclass, RemoteObjectTableBase):
+class ThingInformation(MappedAsDataclass, ThingTableBase):
     __tablename__ = "remote_objects"
 
     instance_name  : Mapped[str] = mapped_column(String, primary_key=True)
@@ -159,7 +159,7 @@ class BaseAsyncDB(BaseDB):
     serializer: BaseSerializer
         The serializer to use for serializing and deserializing data (for example
         parameter serializing before writing to database). Will be the same as
-        serializer supplied to ``RemoteObject``.
+        serializer supplied to ``Thing``.
     config_file: str
         absolute path to database server configuration file
     """
@@ -171,7 +171,7 @@ class BaseAsyncDB(BaseDB):
         self.engine = asyncio_ext.create_async_engine(self.URL, echo=True)
         self.async_session = sessionmaker(self.engine, expire_on_commit=True, 
                         class_=asyncio_ext.AsyncSession)
-        RemoteObjectTableBase.metadata.create_all(self.engine)
+        ThingTableBase.metadata.create_all(self.engine)
 
 
 
@@ -187,7 +187,7 @@ class BaseSyncDB(BaseDB):
     serializer: BaseSerializer
         The serializer to use for serializing and deserializing data (for example
         parameter serializing into database for storage). Will be the same as
-        serializer supplied to ``RemoteObject``.
+        serializer supplied to ``Thing``.
     config_file: str
         absolute path to database server configuration file
     """
@@ -198,40 +198,40 @@ class BaseSyncDB(BaseDB):
         super().__init__(instance=instance, serializer=serializer, config_file=config_file)
         self.engine = create_engine(self.URL, echo=True)
         self.sync_session = sessionmaker(self.engine, expire_on_commit=True)
-        RemoteObjectTableBase.metadata.create_all(self.engine)
+        ThingTableBase.metadata.create_all(self.engine)
         
         
 
-class RemoteObjectDB(BaseSyncDB):
+class ThingDB(BaseSyncDB):
     """
-    Database engine composed within ``RemoteObject``, carries out database 
+    Database engine composed within ``Thing``, carries out database 
     operations like storing object information, paramaters etc. 
 
     Parameters
     ----------
     instance_name: str
-        ``instance_name`` of the ``RemoteObject```
+        ``instance_name`` of the ``Thing```
     serializer: BaseSerializer
-        serializer used by the ``RemoteObject``. The serializer to use for 
+        serializer used by the ``Thing``. The serializer to use for 
         serializing and deserializing data (for example parameter serializing 
         into database for storage).
     config_file: str
         configuration file of the database server
     """
 
-    def fetch_own_info(self): # -> RemoteObjectInformation:
+    def fetch_own_info(self): # -> ThingInformation:
         """
-        fetch ``RemoteObject`` instance's own information, for schema see 
-        ``RemoteObjectInformation``.
+        fetch ``Thing`` instance's own information, for schema see 
+        ``ThingInformation``.
 
         Returns
         -------
-        info: RemoteObject
+        info: Thing
         """
         if not inspect_database(self.engine).has_table("remote_objects"):
             return
         with self.sync_session() as session:
-            stmt = select(RemoteObjectInformation).filter_by(instance_name=self.instance_name)
+            stmt = select(ThingInformation).filter_by(instance_name=self.instance_name)
             data = session.execute(stmt)
             data = data.scalars().all()
             if len(data) == 0:
@@ -244,7 +244,7 @@ class RemoteObjectDB(BaseSyncDB):
     def get_all_parameters(self, deserialized : bool = True) -> typing.Sequence[
                             typing.Union[SerializedParameter, DeserializedParameter]]:
         """
-        read all paramaters of the ``RemoteObject`` instance.
+        read all paramaters of the ``Thing`` instance.
 
         Parameters
         ----------
@@ -266,10 +266,10 @@ class RemoteObjectDB(BaseSyncDB):
                 ))
             return params_data
         
-    def create_missing_parameters(self, parameters : typing.Dict[str, RemoteParameter],
+    def create_missing_parameters(self, parameters : typing.Dict[str, Property],
                             get_missing_parameters : bool = False) -> None:
         """
-        create any and all missing remote parameters of ``RemoteObject`` instance
+        create any and all missing remote parameters of ``Thing`` instance
         in database.
 
         Parameters
@@ -300,14 +300,14 @@ class RemoteObjectDB(BaseSyncDB):
         if get_missing_parameters:
             return missing_params
         
-    def get_parameter(self, parameter : typing.Union[str, RemoteParameter], 
+    def get_parameter(self, parameter : typing.Union[str, Property], 
                         deserialized : bool = True) -> typing.Sequence[typing.Union[SerializedParameter, DeserializedParameter]]:
         """
-        read a paramater of the ``RemoteObject`` instance.
+        read a paramater of the ``Thing`` instance.
 
         Parameters
         ----------
-        parameter: str | RemoteParameter
+        parameter: str | Property
             string name or descriptor object
         deserialized: bool, default True
             deserilize the parameters if True
@@ -329,13 +329,13 @@ class RemoteObjectDB(BaseSyncDB):
                     value = self.serializer.loads(param[0].serialized_value)
                 )
           
-    def set_parameter(self, parameter : typing.Union[str, RemoteParameter], value : typing.Any) -> None:
+    def set_parameter(self, parameter : typing.Union[str, Property], value : typing.Any) -> None:
         """
         change the value of an already existing parameter
 
         Parameters
         ----------
-        parameter: RemoteParameter
+        parameter: Property
             descriptor of the parameter
         value: Any
             value of the parameter
@@ -364,13 +364,13 @@ class RemoteObjectDB(BaseSyncDB):
             session.commit()
                 
 
-    def set_parameters(self, parameters : typing.Dict[typing.Union[str, RemoteParameter], typing.Any]) -> None:
+    def set_parameters(self, parameters : typing.Dict[typing.Union[str, Property], typing.Any]) -> None:
         """
         change the value of an already existing parameter
 
         Parameters
         ----------
-        parameter: RemoteParameter
+        parameter: Property
             descriptor of the parameter
         value: Any
             value of the parameter
@@ -410,7 +410,7 @@ class batch_db_commit:
     Context manager to write multiple parameters to database at once. Useful for sequential writes 
     to parameters with database settings. 
     """
-    def __init__(self, db_engine : RemoteObjectDB) -> None:
+    def __init__(self, db_engine : ThingDB) -> None:
         self.db_engine = db_engine
 
     def __enter__(self) -> None: 
@@ -432,6 +432,6 @@ class batch_db_commit:
 __all__ = [
     BaseAsyncDB.__name__,
     BaseSyncDB.__name__,
-    RemoteObjectDB.__name__,
+    ThingDB.__name__,
     batch_db_commit.__name__
 ]
