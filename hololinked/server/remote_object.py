@@ -28,15 +28,14 @@ from .events import Event
 
 class StateMachine:
     """
-    A container class for state machine related logic, this is intended to be used by the 
-    RemoteObject and its descendents.  
-    	
+    A container class for state machine related logic. 
+
     Parameters
     ----------
-    initial_state: str 
-        initial state of machine 
     states: Enum
         enumeration of states 
+    initial_state: str 
+        initial state of machine 
     on_enter: Dict[str, Callable | RemoteParameter] 
         callbacks to be invoked when a certain state is entered. It is to be specified 
         as a dictionary with the states being the keys
@@ -251,31 +250,43 @@ class RemoteObjectMeta(ParameterizedMetaclass):
         """
         return mcs._param_container
     
+    @property
+    def properties(mcs) -> RemoteClassParameters:
+        """
+        returns ``RemoteClassParameters`` instance instead of ``param``'s own 
+        ``Parameters`` instance. See code of ``param``.
+        """
+        return mcs._param_container
 
 
 class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
+    """
+    Subclass from here to expose python objects on the network
+    """
 
     __server_type__ = ServerTypes.REMOTE_OBJECT 
-    state_machine : StateMachine
-
+   
     # local parameters
     instance_name = String(default=None, regex=r'[A-Za-z]+[A-Za-z_0-9\-\/]*', constant=True, remote=False,
                         doc="""Unique string identifier of the instance. This value is used for many operations,
                         for example - creating zmq socket address, tables in databases, and to identify the instance 
-                        in the HTTP Server & webdashboard clients - 
-                        (http(s)://{domain and sub domain}/{instance name}). Instance names must be unique
-                        in your entire system.""") # type: str
+                        in the HTTP Server - (http(s)://{domain and sub domain}/{instance name}). 
+                        If creating a big system, instance names are recommended to be unique.""") # type: str
     logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, remote=False, 
                         doc="""Logger object to print log messages, should be instance of ``logging.Logger()``. Default 
-                            logger is created if none supplied.""") # type: logging.Logger
+                            logger with a stream handler and streamable log messages over network is created 
+                            if none supplied.""") # type: logging.Logger
     rpc_serializer = ClassSelector(class_=(BaseSerializer, str), 
                         allow_None=True, default='json', remote=False,
-                        doc="""Serializer used for exchanging messages with RPC clients. Subclass to implement
-                            your own serialization requirements.""") # type: BaseSerializer
+                        doc="""Serializer used for exchanging messages with python RPC clients. Subclass the base serializer 
+                        or one of the available serializers to implement your own serialization requirements; or, register 
+                        type replacements. Some other serializers like MessagePack improve performance many times over 
+                        and can be useful for data intensive applications within python. Default is JSON.""") # type: BaseSerializer
     json_serializer = ClassSelector(class_=(JSONSerializer, str), default=None, allow_None=True, remote=False,
-                        doc = """Serializer used for exchanging messages with a HTTP server,
-                            subclass JSONSerializer to implement your own serialization requirements.""") # type: JSONSerializer
-    
+                        doc="""Serializer used for exchanging messages with a HTTP clients,
+                            subclass JSONSerializer to implement your own JSON serialization requirements; or, 
+                            register type replacements.""") # type: JSONSerializer
+        
     # remote paramerters
     state = String(default=None, allow_None=True, URL_path='/state', readonly=True,
                 fget= lambda self : self.state_machine.current_state if hasattr(self, 'state_machine') else None,  
@@ -311,10 +322,37 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
 
 
     def __init__(self, *, instance_name : str, logger : typing.Optional[logging.Logger] = None, 
-                serializer : typing.Optional[BaseSerializer] = None,
+                serializer : typing.Optional[JSONSerializer] = None,
                 **params) -> None:
+        """
+        Parameters
+        ----------
+        instance_name: str
+            Unique string identifier of the instance. This value is used for many operations,
+            for example - creating zmq socket address, tables in databases, and to identify the instance in the HTTP Server - 
+            (http(s)://{domain and sub domain}/{instance name}). 
+            If creating a big system, instance names are recommended to be unique.
+        logger: logging.Logger, Optional
+            Logger object to print log messages, should be instance of ``logging.Logger()``. Default 
+            logger with a stream handler and streamable log messages over network is created 
+            if none supplied.
+        serializer: JSONSerializer, Optional
+            JSON serializer. To use separate serializer for python clients and cross-platform 
+            HTTP clients, use keyword arguments rpc_serializer and json_serializer
+        **kwargs:
+            rpc_serializer: BaseSerializer | str 
+                serializer for object proxy from hololinked.client. Some other serializers like 
+                MessagePack improve performance many times over and can be useful for data intensive
+                applications within python. if string values are supplied, supported are 'msgpack', 'pickle',
+                'serpent', 'json'
+            json_serializer: JSONSerializer
+                serializer used for cross platform HTTP clients. 
+        """
         if instance_name.startswith('/'):
             instance_name = instance_name[1:]
+        if not isinstance(serializer, JSONSerializer) or serializer == 'json':
+            raise TypeError("serializer key word argument must be JSONSerializer. If you wish to use separate serializers " +
+                            "for python clients and HTTP clients, use rpc_serializer and json_serializer keyword arguments.")
         rpc_serializer = serializer or params.pop('rpc_serializer', 'json')
         json_serializer = serializer if isinstance(serializer, JSONSerializer) else params.pop('json_serializer', 'json')
         rpc_serializer, json_serializer = _get_serializer_from_user_given_options(
@@ -474,6 +512,10 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
 
     @remote_method(URL_path='/parameters/db-reload', http_method=HTTP_METHODS.POST)
     def load_parameters_from_DB(self):
+        """
+        Load and apply parameter values which have ``db_init`` or ``db_persist``
+        set to ``True`` from database
+        """
         if not hasattr(self, 'db_engine'):
             return
         
@@ -497,7 +539,7 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
 
    
     @remote_method(URL_path='/resources/postman-collection', http_method=HTTP_METHODS.GET)
-    def _get_postman_collection(self, domain_prefix : str = None):
+    def get_postman_collection(self, domain_prefix : str = None):
         """
         organised postman collection for this object
         """
@@ -506,24 +548,22 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
                     domain_prefix=domain_prefix if domain_prefix is not None else self._object_info.http_server)
     
     @remote_method(URL_path='/resources/wot-td', http_method=HTTP_METHODS.GET)
-    def _get_thing_description(self, authority : typing.Optional[str] = None, 
+    def get_thing_description(self, authority : typing.Optional[str] = None, 
                             allow_loose_schema : typing.Optional[bool] = False): 
         """
-        thing description schema of W3 Web of Things https://www.w3.org/TR/wot-thing-description11/, 
-        one can use the node-wot client with the generated schema (https://github.com/eclipse-thingweb/node-wot)
-        to as a client for the object. Other WoT related tools based on TD will be compatible. One can validate the 
-        generated schema at https://playground.thingweb.io/.
-        Composed RemoteObjects within the top level object is currently not supported.
+        generate thing description schema of Web of Things https://www.w3.org/TR/wot-thing-description11/.
+        one can use the node-wot as a client for the object with the generated schema 
+        (https://github.com/eclipse-thingweb/node-wot). Other WoT related tools based on TD will be compatible. 
+        Composed RemoteObjects that are not the top level object is currently not supported.
         """
         from ..wot import ThingDescription
         return ThingDescription().build(self, authority or self._object_info.http_server,
                                             allow_loose_schema=allow_loose_schema)
     
-
     @property
     def event_publisher(self) -> EventPublisher:
         """
-        event publishing PUB socket object
+        event publishing PUB socket owning object
         """
         try:
             return self._event_publisher 
@@ -554,7 +594,8 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
     def exit(self) -> None:
         """
         Exit the object without killing the eventloop that runs this object. If RemoteObject was 
-        started using the run() method, the eventloop is also killed. 
+        started using the run() method, the eventloop is also killed. This method can
+        only be called remotely.
         """
         if self._owner is None:
             raise BreakInnerLoop
@@ -563,14 +604,30 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
  
 
     def run(self, 
-            zmq_protocols : typing.Union[typing.List[ZMQ_PROTOCOLS], typing.Tuple[ZMQ_PROTOCOLS], 
+            zmq_protocols : typing.Union[typing.Sequence[ZMQ_PROTOCOLS], 
                                          ZMQ_PROTOCOLS] = ZMQ_PROTOCOLS.IPC, 
-            expose_eventloop : bool = False,
+            # expose_eventloop : bool = False,
             **kwargs 
-        ):
+        ) -> None:
         """
-        quick-start ``RemoteObject`` server by creating a default eventloop & servers. 
+        Quick-start ``RemoteObject`` server by creating a default eventloop & servers. This 
+        method is blocking until exit() is called.
+
+        Parameters
+        ----------
+        zmq_protocols: Sequence[ZMQ_PROTOCOLS] | ZMQ_Protocools, Default ZMQ_PROTOCOLS.IPC or "IPC"
+            zmq transport layers at which the object is exposed. 
+            TCP - provides network access apart from HTTP. Supply a socket address additionally.  
+            IPC - inter process communication. Connection can be made from other processes running 
+            locally within same computer. No client on the network will be able to contact the object. 
+            INPROC - one main python process which spawns several threads in one of which the ``RemoteObject``
+            the running. The object can be contacted by a client on another thread but not from other objects.
+            One may use more than one form of transport.  All requests made will be anyway queued internally. 
         """
+        # expose_eventloop: bool, False
+        #     expose the associated Eventloop which executes the object. This is generally useful for remotely 
+        #     adding more objects to the same event loop.
+        
         self.load_parameters_from_DB()
 
         context = zmq.asyncio.Context()
@@ -594,14 +651,9 @@ class RemoteObject(Parameterized, metaclass=RemoteObjectMeta):
                     logger=self.logger,
                     rpc_serializer=self.rpc_serializer, 
                     json_serializer=self.json_serializer, 
-                    expose=expose_eventloop
+                    expose=False, # expose_eventloop
                 )
         self.event_loop.run()
        
 
 
-
-__all__ = [
-    RemoteObject.__name__, 
-    StateMachine.__name__
-]
