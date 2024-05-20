@@ -240,7 +240,11 @@ if __name__ == "__main__":
 ```
 Here one can see the use of `instance_name` and why it turns up in the URL path.
 
-The intention behind specifying HTTP URL paths and methods is to eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in queueing commands issued to instruments, or write an additional bioler-plate HTTP to RPC bridge, or find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events, yet appeals deeply to the object oriented python world. See a list of currently supported features [below](#currently-supported). <br/>
+The intention behind specifying HTTP URL paths and methods directly on object's members is to 
+- eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in queueing commands issued to instruments
+- or, write an additional bioler-plate HTTP to RPC bridge
+- or, find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events, yet appeals deeply to the object oriented python world. 
+See a list of currently supported features [below](#currently-supported). <br/>
 Ultimately, as expected, the redirection from the HTTP side to the object is mediated by ZeroMQ which implements the fully fledged RPC that queues all the HTTP requests to execute them one-by-one on the hardware/object. The HTTP server can also communicate with the RPC server over ZeroMQ's INPROC (intra-process - for the non-expert = multithreaded applications) or IPC (inter-process - for the non-expert = multiprocess applications) transport methods. In the example above, IPC is used by default. There is no need for yet another TCP from HTTP to TCP to ZeroMQ transport athough this is also supported. <br/>
 Serialization-Deserialization overheads are also already reduced. For example, when pushing an event from the object which gets automatically tunneled as a HTTP SSE or returning a reply for an action from the object, there is no JSON deserialization-serialization overhead when the message passes through the HTTP server. The message is serialized once on the object side but passes transparently through the HTTP server.     
 
