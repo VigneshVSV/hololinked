@@ -35,9 +35,6 @@ arbitrary data to clients. Once such a ``RemoteObject`` is instantiated, it can 
 
 Please follow the documentation for examples & tutorials, how-to's and API reference.
 
-.. warning::
-   This project is under development and is an idealogical state. Please use it only for playtesting or exploring.
-
 .. note::
    web developers & software engineers, consider reading the :ref:`note <note>` section
 

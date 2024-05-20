@@ -13,7 +13,7 @@ API Reference
 .. toctree::
     :maxdepth: 1
 
-    server/remote_object
+    server/remote_object/index
     server/http_server/index
     server/remote_parameter/index
     server/decorators
