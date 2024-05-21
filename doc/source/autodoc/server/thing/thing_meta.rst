@@ -1,7 +1,7 @@
 ThingMeta
 ---------
 
-.. autoclass:: hololinked.server.remote_object.ThingMeta
+.. autoclass:: hololinked.server.thing.ThingMeta
     :members: parameters, _create_param_container
     :show-inheritance:
 

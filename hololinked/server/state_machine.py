@@ -3,7 +3,7 @@ import inspect
 from types import FunctionType, MethodType
 from enum import EnumMeta, Enum, StrEnum
 
-from ..param.parameterized import ParameterizedMetaclass
+from ..param.parameterized import Parameterized
 from .properties import ClassSelector, TypedDict, Boolean
 from .property import Property
 from .utils import getattr_without_descriptor_read
@@ -29,7 +29,7 @@ class StateMachine:
         It is to be specified as a dictionary with the states being the keys
     **machine:
         state name: List[Callable, Property]
-            directly pass the state name as an argument along with the methods/parameters which are allowed to execute 
+            directly pass the state name as an argument along with the methods/properties which are allowed to execute 
             in that state
     """
     initial_state = ClassSelector(default=None, allow_None=True, constant=True, class_=(Enum, str), 
@@ -67,7 +67,7 @@ class StateMachine:
             # self.state_change_event = Event('state-change') 
 
     # dont think ParameterizedMetaclass is the correct type, should be Parameterized
-    def _prepare(self, owner : ParameterizedMetaclass) -> None:
+    def _prepare(self, owner : Parameterized) -> None:
         if self.states is None and self.initial_state is None:    
             self._exists = False 
             self._state = None
@@ -77,7 +77,7 @@ class StateMachine:
 
         self._state = self._get_machine_compliant_state(self.initial_state)
         self.owner = owner
-        owner_parameters = owner.parameters.descriptors.values()
+        owner_properties = owner.properties.descriptors.values()
         owner_methods = [obj[0] for obj in inspect._getmembers(owner, inspect.ismethod, getattr_without_descriptor_read)]
         
         if isinstance(self.states, list):
@@ -95,7 +95,7 @@ class StateMachine:
                         if resource._remote_info.iscallable and resource._remote_info.obj_name not in owner_methods: 
                             raise AttributeError("Given object {} for state machine does not belong to class {}".format(
                                                                                                 resource, owner))
-                        if resource._remote_info.isparameter and resource not in owner_parameters: 
+                        if resource._remote_info.isproperty and resource not in owner_properties: 
                             raise AttributeError("Given object {} - {} for state machine does not belong to class {}".format(
                                                                                                 resource.name, resource, owner))
                         if resource._remote_info.state is None: 
@@ -104,7 +104,7 @@ class StateMachine:
                             resource._remote_info.state = resource._remote_info.state + (self._get_machine_compliant_state(state), ) 
                     else: 
                         raise AttributeError(f"Object {resource} was not made remotely accessible," + 
-                                    " use state machine with remote parameters and remote methods only.")
+                                    " use state machine with properties and actions only.")
             else:
                 raise AttributeError("Given state {} not in states Enum {}".format(state, self.states.__members__))
             

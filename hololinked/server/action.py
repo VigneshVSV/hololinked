@@ -49,7 +49,7 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
             else:
                 obj._remote_info = RemoteResourceInfoValidator() 
             obj_name = obj.__qualname__.split('.')
-            if len(obj_name) > 1: # i.e. its a bound method, used by RemoteObject
+            if len(obj_name) > 1: # i.e. its a bound method, used by Thing
                 if URL_path == USE_OBJECT_NAME: 
                     obj._remote_info.URL_path = f'/{obj_name[1]}'
                 else:

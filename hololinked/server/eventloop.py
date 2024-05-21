@@ -9,7 +9,6 @@ import threading
 import logging
 from uuid import uuid4
 
-
 from .constants import HTTP_METHODS
 from .utils import format_exception_as_json
 from .config import global_config
@@ -69,7 +68,7 @@ class EventLoop(Thing):
                         doc="list of Things which are being executed", remote=False) #type: typing.List[Thing]
     
     threaded = Boolean(default=False, remote=False, 
-                        doc="set True to run each remote object in its own thread")
+                        doc="set True to run each thing in its own thread")
   
 
     def __init__(self, *, 
@@ -104,21 +103,20 @@ class EventLoop(Thing):
     @remote_method()
     def exit(self):
         """
-        Stops the event loop and all its remote objects. Generally, this leads
+        Stops the event loop and all its things. Generally, this leads
         to exiting the program unless some code follows the ``run()`` method.  
         """
         raise BreakAllLoops
     
 
-    # Remote Parameters
     uninstantiated_things = TypedDict(default=None, allow_None=True, key_type=str,
-                        item_type=(Consumer, str), URL_path='/remote-objects/uninstantiated')
+                        item_type=(Consumer, str), URL_path='/things/uninstantiated')
     
     
     @classmethod
     def _import_thing(cls, file_name : str, object_name : str):
         """
-        import a remote object specified by ``object_name`` from its 
+        import a thing specified by ``object_name`` from its 
         script or module. 
 
         Parameters
@@ -143,11 +141,11 @@ class EventLoop(Thing):
                             f" Only subclasses are accepted (not even instances). Given object : {consumer}")
         
 
-    @remote_method(URL_path='/remote-objects', http_method=HTTP_METHODS.POST)
+    @remote_method(URL_path='/things', http_method=HTTP_METHODS.POST)
     def import_thing(self, file_name : str, object_name : str):
         """
-        import remote object from the specified path and return the default 
-        parameters to be supplied to instantiate the object. 
+        import thing from the specified path and return the default 
+        properties to be supplied to instantiate the object. 
         """
         consumer = self._import_thing(file_name, object_name) # type: ThingMeta
         id = uuid4()
@@ -155,11 +153,11 @@ class EventLoop(Thing):
         return id
            
 
-    @remote_method(URL_path='/remote-objects/instantiate', 
+    @remote_method(URL_path='/things/instantiate', 
                 http_method=HTTP_METHODS.POST) # remember to pass schema with mandatory instance name
     def instantiate(self, id : str, kwargs : typing.Dict = {}):      
         """
-        Instantiate the remote object that was imported with given arguments 
+        Instantiate the thing that was imported with given arguments 
         and add to the event loop
         """
         consumer = self.uninstantiated_things[id]
@@ -228,7 +226,7 @@ class EventLoop(Thing):
         Please dont call this method when the async loop is already running. 
         """
         thing_executor_loop = self.get_async_loop()
-        self.logger.info(f"starting remote object executor loop in thread {threading.get_ident()} for {[obj.instance_name for obj in things]}")
+        self.logger.info(f"starting thing executor loop in thread {threading.get_ident()} for {[obj.instance_name for obj in things]}")
         thing_executor_loop.run_until_complete(
             asyncio.gather(
                 *[self.run_single_target(instance) 
@@ -267,7 +265,7 @@ class EventLoop(Thing):
                     await instance.message_broker.async_send_reply(instruction, return_value)
                     # Also catches exception in sending messages like serialization error
                 except (BreakInnerLoop, BreakAllLoops):
-                    instance.logger.info("Remote object {} with instance name {} exiting event loop.".format(
+                    instance.logger.info("Thing {} with instance name {} exiting event loop.".format(
                                                             instance.__class__.__name__, instance_name))
                     if oneway:
                         await instance.message_broker.async_send_reply_with_message_type(instruction, b'ONEWAY', None)

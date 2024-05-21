@@ -41,7 +41,7 @@ class postman_collection:
         collection = postman_collection(
             info = postman_collection_info(
                 name = instance.__class__.__name__,
-                description = "API endpoints available for Remote Object", 
+                description = "API endpoints available for Thing", 
             ),
             item = [ 
                 properties_folder,

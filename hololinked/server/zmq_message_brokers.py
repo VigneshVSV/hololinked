@@ -2011,7 +2011,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         execute the same instruction in all Things, eventloops are excluded. 
         """
         return await self.async_execute_in_all(instruction=instruction, 
-                        instance_names=[instance_name for instance_name, client in self.pool.items() if client.server_type == ServerTypes.REMOTE_OBJECT],
+                        instance_names=[instance_name for instance_name, client in self.pool.items() if client.server_type == ServerTypes.THING],
                         arguments=arguments, context=context, invokation_timeout=invokation_timeout, 
                         execution_timeout=execution_timeout)
     
@@ -2095,7 +2095,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
 
     def __init__(self, instance_name : str, protocol : str, 
                     context : typing.Union[zmq.Context, None] = None, **kwargs) -> None:
-        super().__init__(instance_name=instance_name, server_type=ServerTypes.REMOTE_OBJECT.value, 
+        super().__init__(instance_name=instance_name, server_type=ServerTypes.THING.value, 
                             **kwargs)
         self.create_socket(identity=f'{instance_name}/event-publisher', bind=True, context=context,
                            protocol=protocol, socket_type=zmq.PUB, **kwargs)

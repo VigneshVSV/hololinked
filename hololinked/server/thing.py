@@ -78,9 +78,9 @@ class Thing(Parameterized, metaclass=ThingMeta):
     Subclass from here to expose python objects on the network
     """
 
-    __server_type__ = ServerTypes.REMOTE_OBJECT 
+    __server_type__ = ServerTypes.THING
    
-    # local parameters
+    # local properties
     instance_name = String(default=None, regex=r'[A-Za-z]+[A-Za-z_0-9\-\/]*', constant=True, remote=False,
                         doc="""Unique string identifier of the instance. This value is used for many operations,
                         for example - creating zmq socket address, tables in databases, and to identify the instance 
@@ -231,7 +231,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
             if not any(isinstance(handler, RemoteAccessHandler) for handler in self.logger.handlers):
                 self._remote_access_loghandler = RemoteAccessHandler(instance_name='logger', 
                                                     maxlen=500, emit_interval=1, logger=self.logger) 
-                                                    # remote object has its own logger so we dont recreate one for
+                                                    # thing has its own logger so we dont recreate one for
                                                     # remote access handler
                 self.logger.addHandler(self._remote_access_loghandler)
         
@@ -259,7 +259,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         object_info = self.db_engine.fetch_own_info()
         if object_info is not None:
             self._object_info = object_info
-        # 3. enter parameters to DB if not already present 
+        # 3. enter properties to DB if not already present 
         if self.object_info.class_name != self.__class__.__name__:
             raise ValueError("Fetched instance name and class name from database not matching with the ", 
                 " current Thing class/subclass. You might be reusing an instance name of another subclass ", 
@@ -287,35 +287,35 @@ class Thing(Parameterized, metaclass=ThingMeta):
         self._object_info = ThingInformation(**value)  
       
     
-    @action(URL_path='/parameters', http_method=HTTP_METHODS.GET)
-    def _get_parameters(self, **kwargs) -> typing.Dict[str, typing.Any]:
+    @action(URL_path='/properties', http_method=HTTP_METHODS.GET)
+    def _get_properties(self, **kwargs) -> typing.Dict[str, typing.Any]:
         """
         """
         if len(kwargs) == 0:
-            return self.parameters.descriptors.keys()
+            return self.properties.descriptors.keys()
         data = {}
         if 'names' in kwargs:
             names = kwargs.get('names')
             if not isinstance(names, (list, tuple, str)):
-                raise TypeError(f"Specify parameters to be fetched as a list, tuple or comma separated names. Givent type {type(names)}")
+                raise TypeError(f"Specify properties to be fetched as a list, tuple or comma separated names. Givent type {type(names)}")
             if isinstance(names, str):
                 names = names.split(',')
             for requested_parameter in names:
                 if not isinstance(requested_parameter, str):
                     raise TypeError(f"parameter name must be a string. Given type {type(requested_parameter)}")
-                data[requested_parameter] = self.parameters[requested_parameter].__get__(self, type(self))
+                data[requested_parameter] = self.properties[requested_parameter].__get__(self, type(self))
         elif len(kwargs.keys()) != 0:
             for rename, requested_parameter in kwargs.items():
-                data[rename] = self.parameters[requested_parameter].__get__(self, type(self))              
+                data[rename] = self.properties[requested_parameter].__get__(self, type(self))              
         else:
-            for parameter in self.parameters.descriptors.keys():
-                data[parameter] = self.parameters[parameter].__get__(self, type(self))
+            for parameter in self.properties.descriptors.keys():
+                data[parameter] = self.properties[parameter].__get__(self, type(self))
         return data 
     
-    @action(URL_path='/parameters', http_method=HTTP_METHODS.PATCH)
-    def _set_parameters(self, **values : typing.Dict[str, typing.Any]) -> None:
+    @action(URL_path='/properties', http_method=HTTP_METHODS.PATCH)
+    def _set_properties(self, **values : typing.Dict[str, typing.Any]) -> None:
         """ 
-        set parameters whose name is specified by keys of a dictionary
+        set properties whose name is specified by keys of a dictionary
         
         Parameters
         ----------
@@ -356,8 +356,8 @@ class Thing(Parameterized, metaclass=ThingMeta):
         recusively_set_events_publisher(self, value)
 
 
-    @action(URL_path='/parameters/db-reload', http_method=HTTP_METHODS.POST)
-    def load_parameters_from_DB(self):
+    @action(URL_path='/properties/db-reload', http_method=HTTP_METHODS.POST)
+    def load_properties_from_DB(self):
         """
         Load and apply parameter values which have ``db_init`` or ``db_persist``
         set to ``True`` from database
@@ -365,23 +365,23 @@ class Thing(Parameterized, metaclass=ThingMeta):
         if not hasattr(self, 'db_engine'):
             return
         
-        def recursively_load_parameters_from_DB(obj : Thing) -> None:
+        def recursively_load_properties_from_DB(obj : Thing) -> None:
             nonlocal self
             for name, resource in inspect._getmembers(obj, lambda o : isinstance(o, Thing), getattr_without_descriptor_read): 
                 if name == '_owner':
                     continue
-                recursively_load_parameters_from_DB(resource) # load from the lower up
-            missing_parameters = self.db_engine.create_missing_parameters(obj.__class__.parameters.db_init_objects,
-                                                                        get_missing_parameters=True)
+                recursively_load_properties_from_DB(resource) # load from the lower up
+            missing_properties = self.db_engine.create_missing_properties(obj.__class__.properties.db_init_objects,
+                                                                        get_missing_properties=True)
             # 4. read db_init and db_persist objects
-            for db_param in obj.db_engine.get_all_parameters():
+            for db_param in obj.db_engine.get_all_properties():
                 try:
-                    if db_param.name not in missing_parameters:
+                    if db_param.name not in missing_properties:
                         setattr(obj, db_param.name, db_param.value) # type: ignore
                 except Exception as ex:
                     obj.logger.error(f"could not set attribute {db_param.name} due to error {str(ex)}")
 
-        recursively_load_parameters_from_DB(self)
+        recursively_load_properties_from_DB(self)
 
    
     @action(URL_path='/resources/postman-collection', http_method=HTTP_METHODS.GET)
@@ -467,7 +467,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         #     adding more objects to the same event loop.
         # dont specify http server as a kwarg, as the other method run_with_http_server has to be used
 
-        self.load_parameters_from_DB()
+        self.load_properties_from_DB()
 
         context = zmq.asyncio.Context()
         self.rpc_server = RPCServer(
@@ -486,7 +486,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         from .eventloop import EventLoop
         self.event_loop = EventLoop(
                     instance_name=f'{self.instance_name}/eventloop', 
-                    remote_objects=[self], 
+                    things=[self], 
                     logger=self.logger,
                     rpc_serializer=self.rpc_serializer, 
                     json_serializer=self.json_serializer, 
@@ -538,7 +538,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
                 custom event handler of your choice for handling events
         """
         # host: str
-        #     Host Server to subscribe to coordinate starting sequence of remote objects & web GUI
+        #     Host Server to subscribe to coordinate starting sequence of things & web GUI
         
         from .HTTPServer import HTTPServer
         

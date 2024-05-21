@@ -13,10 +13,10 @@ API Reference
 .. toctree::
     :maxdepth: 1
 
-    server/remote_object/index
+    server/thing/index
     server/http_server/index
-    server/remote_parameter/index
-    server/decorators
+    server/properties/index
+    server/action
     server/eventloop
     server/database/index
     server/zmq_message_brokers/index

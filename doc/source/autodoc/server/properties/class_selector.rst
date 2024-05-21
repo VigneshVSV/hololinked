@@ -2,6 +2,6 @@
     :hidden:
     :maxdepth: 1
 
-.. autoclass:: hololinked.server.remote_parameters.Selector
+.. autoclass:: hololinked.server.properties.ClassSelector
     :members:
     :show-inheritance:

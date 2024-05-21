@@ -97,7 +97,7 @@ class RemoteResourceInfoValidator:
         Parameters
         ----------
         obj : Union[Property | Callable]  
-            property or method
+            property or method/action
 
         bound_obj : owner instance
             ``Thing`` instance
@@ -142,7 +142,7 @@ class RemoteResource(SerializableDataclass):
     """
     This container class is used by the ``EventLoop`` methods (for example ``execute_once()``) to access resource 
     metadata instead of directly using ``RemoteResourceInfoValidator``. Instances of this dataclass is stored under 
-    ``Thing.instance_resources`` dictionary for each property & method. Events use similar dataclass with 
+    ``Thing.instance_resources`` dictionary for each property & method/action. Events use similar dataclass with 
     metadata but with much less information. 
 
     Attributes
@@ -161,7 +161,7 @@ class RemoteResource(SerializableDataclass):
     isproperty : bool
         True for a property
     obj : Union[Property | Callable]  
-            property or method
+            property or method/action
     bound_obj : owner instance
         ``Thing`` instance
     """
@@ -227,7 +227,7 @@ class HTTPResource(SerializableDataclass):
     ----------
 
     what : str
-        is it a property, action/method or event?
+        is it a property, method/action or event?
     instance_name : str
         The ``instance_name`` of the thing which owns the resource. Used by HTTP server to inform 
         the message brokers to send the instruction to the correct recipient thing.
@@ -237,7 +237,7 @@ class HTTPResource(SerializableDataclass):
         unique string that identifies the resource operation for each HTTP method, generally made using the URL_path 
         (qualified URL path {instance name}/{URL path}).  
     argument_schema : JSON
-        argument schema of the method for validation before passing over the instruction to the RPC server. 
+        argument schema of the method/action for validation before passing over the instruction to the RPC server. 
     request_as_argument: bool
         pass the request as a argument to the callable. For HTTP server ``tornado.web.HTTPServerRequest`` will be passed. 
     """
@@ -269,7 +269,7 @@ class HTTPResource(SerializableDataclass):
 @dataclass
 class RPCResource(SerializableDataclass): 
     """
-    Representation of resource used by RPC clients for mapping client method calls, property read/writes & events
+    Representation of resource used by RPC clients for mapping client method/action calls, property read/writes & events
     to a server resource. Used to dynamically populate the ``ObjectProxy``
 
     Attributes
@@ -290,7 +290,7 @@ class RPCResource(SerializableDataclass):
     doc : str
         the docstring of the resource
     argument_schema : JSON
-        argument schema of the method for validation before passing over the instruction to the RPC server. 
+        argument schema of the method/action for validation before passing over the instruction to the RPC server. 
     """
     what : str 
     instance_name : str 

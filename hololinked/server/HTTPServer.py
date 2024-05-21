@@ -9,9 +9,7 @@ from tornado.web import Application
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 import zmq.asyncio
-
 # from tornado_http2.server import Server as TornadoHTTP2Server 
-
 
 from ..param import Parameterized
 from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector, TypedList, String)
@@ -20,14 +18,14 @@ from .utils import get_IP_from_interface
 from .data_classes import HTTPResource, ServerSentEvent
 from .utils import get_default_logger, run_coro_sync
 from .serializers import JSONSerializer
-from .database import RemoteObjectInformation
+from .database import ThingInformation
 from .zmq_message_brokers import  AsyncZMQClient, MessageMappedZMQClientPool
-from .handlers import RPCHandler, BaseHandler, EventHandler, RemoteObjectsHandler
+from .handlers import RPCHandler, BaseHandler, EventHandler, ThingsHandler
 
 
 class HTTPServer(Parameterized):
     """
-    HTTP(s) server to route requests to ``RemoteObject``. Only one HTTPServer per process supported.
+    HTTP(s) server to route requests to ``Thing``. Only one HTTPServer per process supported.
     """
 
     address = IPAddress(default='0.0.0.0', 
@@ -42,7 +40,7 @@ class HTTPServer(Parameterized):
     log_level = Selector(objects=[logging.DEBUG, logging.INFO, logging.ERROR, logging.CRITICAL, logging.ERROR], 
                     default=logging.INFO, 
                     doc="Alternative to logger, this creates an internal logger with the specified log level" ) # type: int
-    remote_objects = TypedList(item_type=str, default=None, allow_None=True, 
+    things = TypedList(item_type=str, default=None, allow_None=True, 
                        doc="Remote Objects to be served by the HTTP server" ) # type: typing.List[str]
     host = String(default=None, allow_None=True, 
                 doc="Host Server to subscribe to coordinate starting sequence of remote objects & web GUI" ) # type: str
@@ -67,7 +65,7 @@ class HTTPServer(Parameterized):
     allowed_clients = TypedList(item_type=str,
                             doc="serves request and sets CORS only from these clients, other clients are reject with 403")
 
-    def __init__(self, remote_objects : typing.List[str], *, port : int = 8080, address : str = '0.0.0.0', 
+    def __init__(self, things : typing.List[str], *, port : int = 8080, address : str = '0.0.0.0', 
                 host : str = None, logger : typing.Optional[logging.Logger] = None, log_level : int = logging.INFO, 
                 certfile : str = None, keyfile : str = None, serializer : JSONSerializer = None,
                 allowed_clients : typing.Union[str, typing.Iterable[str]] = None,   
@@ -76,7 +74,7 @@ class HTTPServer(Parameterized):
                 event_handler : typing.Union[BaseHandler, EventHandler] = EventHandler,
                 zmq_protocol : str = 'IPC', context : zmq.asyncio.Context = None) -> None:
         super().__init__(
-            remote_objects=remote_objects,
+            things=things,
             port=port, 
             address=address, 
             host=host,
@@ -92,8 +90,8 @@ class HTTPServer(Parameterized):
             event_handler=event_handler,
             allowed_clients=allowed_clients if allowed_clients is not None else []
         )
-        self._type = HTTPServerTypes.REMOTE_OBJECT_SERVER
-        self._lost_remote_objects = dict() # see update_router_with_remote_object
+        self._type = HTTPServerTypes.THING_SERVER
+        self._lost_things = dict() # see update_router_with_thing
         self._zmq_protocol = zmq_protocol
         self._zmq_socket_context = context
         self._zmq_event_context = context
@@ -107,17 +105,17 @@ class HTTPServer(Parameterized):
                                             self.log_level)
             
         self.app = Application(handlers=[
-            (r'/remote-objects', RemoteObjectsHandler, dict(request_handler=self.request_handler, 
+            (r'/remote-objects', ThingsHandler, dict(request_handler=self.request_handler, 
                                                         event_handler=self.event_handler))
         ])
         
-        self.zmq_client_pool = MessageMappedZMQClientPool(self.remote_objects, identity=self._IP, 
+        self.zmq_client_pool = MessageMappedZMQClientPool(self.things, identity=self._IP, 
                                                     deserialize_server_messages=False, handshake=False,
                                                     json_serializer=self.serializer, context=self._zmq_socket_context,
                                                     protocol=self._zmq_protocol)
     
         event_loop = asyncio.get_event_loop()
-        event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_remote_objects()))
+        event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
         event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
         event_loop.call_soon(lambda : asyncio.create_task(self.zmq_client_pool.poll()) )
         for client in self.zmq_client_pool:
@@ -178,18 +176,18 @@ class HTTPServer(Parameterized):
         self.event_loop.close()    
 
 
-    async def update_router_with_remote_objects(self)-> None:
+    async def update_router_with_things(self)-> None:
         """
-        updates HTTP router with paths from newly instantiated ``RemoteObject``s
+        updates HTTP router with paths from newly instantiated ``Thing``s
         """
-        await asyncio.gather(*[self.update_router_with_remote_object(client) for client in self.zmq_client_pool])
+        await asyncio.gather(*[self.update_router_with_thing(client) for client in self.zmq_client_pool])
 
         
-    async def update_router_with_remote_object(self, client : AsyncZMQClient):
-        if client.instance_name in self._lost_remote_objects:
+    async def update_router_with_thing(self, client : AsyncZMQClient):
+        if client.instance_name in self._lost_things:
             # Just to avoid duplication of this call as we proceed at single client level and not message mapped level
             return 
-        self._lost_remote_objects[client.instance_name] = client
+        self._lost_things[client.instance_name] = client
         self.logger.info(f"attempting to update router with remote object {client.instance_name}.")
         while True:
             try:
@@ -256,7 +254,7 @@ class HTTPServer(Parameterized):
                         instruction=CommonRPC.object_info_read(client.instance_name), 
                         raise_client_side_exception=True
                     ))[ServerMessage.DATA]
-            object_info = RemoteObjectInformation(**reply)
+            object_info = ThingInformation(**reply)
             object_info.http_server ="{}://{}:{}".format("https" if self.ssl_context is not None else "http", 
                                                 socket.gethostname(), self.port)
     
@@ -269,7 +267,7 @@ class HTTPServer(Parameterized):
             self.logger.error(f"error while trying to update remote object with HTTP server details - {str(ex)}. " +
                                 "Trying again in 5 seconds")
         self.zmq_client_pool.poller.register(client.socket, zmq.POLLIN)
-        self._lost_remote_objects.pop(client.instance_name)
+        self._lost_things.pop(client.instance_name)
                
     
 

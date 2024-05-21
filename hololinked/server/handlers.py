@@ -1,15 +1,12 @@
 import asyncio
 import zmq.asyncio
 import typing
-import logging
 import uuid
 from tornado.web import RequestHandler, StaticFileHandler
 from tornado.iostream import StreamClosedError
 
-
 from .data_classes import HTTPResource, ServerSentEvent
-from .serializers import JSONSerializer
-from .webserver_utils import *
+from .utils import *
 from .zmq_message_brokers import AsyncEventConsumer, EventConsumer
 
 
@@ -34,7 +31,7 @@ class BaseHandler(RequestHandler):
         override this to set custom headers without having to reimplement entire handler
         """
         raise NotImplementedError("implement set headers in child class to automatically call it" +
-                            " after directing the request to RemoteObject")
+                            " after directing the request to Thing")
     
     def get_execution_parameters(self) -> typing.Tuple[typing.Dict[str, typing.Any], 
                                                 typing.Dict[str, typing.Any], typing.Union[float, int, None]]:
@@ -90,38 +87,38 @@ class BaseHandler(RequestHandler):
 
 class RPCHandler(BaseHandler):
     """
-    Handler for parameter read-write and method calls
+    Handler for property read-write and method calls
     """
 
     async def get(self):
         """
         get method
         """
-        await self.handle_through_remote_object('GET')    
+        await self.handle_through_thing('GET')    
 
     async def post(self):
         """
         post method
         """
-        await self.handle_through_remote_object('POST')
+        await self.handle_through_thing('POST')
     
     async def patch(self):
         """
         patch method
         """
-        await self.handle_through_remote_object('PATCH')        
+        await self.handle_through_thing('PATCH')        
     
     async def put(self):
         """
         put method
         """
-        await self.handle_through_remote_object('PUT')        
+        await self.handle_through_thing('PUT')        
     
     async def delete(self):
         """
         delete method
         """
-        await self.handle_through_remote_object('DELETE')  
+        await self.handle_through_thing('DELETE')  
        
     def set_headers(self):
         """
@@ -147,7 +144,7 @@ class RPCHandler(BaseHandler):
         self.finish()
     
 
-    async def handle_through_remote_object(self, http_method : str) -> None:
+    async def handle_through_thing(self, http_method : str) -> None:
         """
         handles the RPC call
         """
@@ -175,11 +172,11 @@ class RPCHandler(BaseHandler):
             except ConnectionAbortedError as ex:
                 self.set_status(503, str(ex))
                 event_loop = asyncio.get_event_loop()
-                event_loop.call_soon(lambda : asyncio.create_task(self.owner.update_router_with_remote_object(
+                event_loop.call_soon(lambda : asyncio.create_task(self.owner.update_router_with_thing(
                                                                     self.zmq_client_pool[self.resource.instance_name])))
             except ConnectionError as ex:
-                await self.owner.update_router_with_remote_object(self.zmq_client_pool[self.resource.instance_name])
-                await self.handle_through_remote_object(http_method) # reschedule
+                await self.owner.update_router_with_thing(self.zmq_client_pool[self.resource.instance_name])
+                await self.handle_through_thing(http_method) # reschedule
                 return 
             except Exception as ex:
                 self.logger.error(f"error while scheduling RPC call - {str(ex)}")
@@ -253,7 +250,7 @@ class EventHandler(BaseHandler):
                                             context=self.owner._zmq_event_context if self.resource.socket_address.startswith('inproc') else None)
         except Exception as ex:
             self.logger.error(f"error while subscribing to event - {str(ex)}")
-            self.set_status(500, "could not subscribe to event source from remote object")
+            self.set_status(500, "could not subscribe to event source from thing")
             self.write(data_header % self.serializer.dumps({"exception" : format_exception_as_json(ex)}))
             return
         self.set_status(200)
@@ -345,9 +342,9 @@ class FileHandler(StaticFileHandler):
     
 
 
-class RemoteObjectsHandler(BaseHandler):
+class ThingsHandler(BaseHandler):
     """
-    add or remove remote objects
+    add or remove things
     """
 
     async def get(self):
@@ -361,7 +358,7 @@ class RemoteObjectsHandler(BaseHandler):
             try:
                 instance_name = ""
                 await self.zmq_client_pool.create_new(server_instance_name=instance_name)
-                await self.owner.update_router_with_remote_object(self.zmq_client_pool[instance_name])
+                await self.owner.update_router_with_thing(self.zmq_client_pool[instance_name])
                 self.set_status(204, "ok")
             except Exception as ex:
                 self.set_status(500, str(ex))

@@ -24,7 +24,7 @@ PUT = HTTP_METHODS.PUT
 
 class String(Property):
     """
-    A string parameter with a default value and optional regular expression (regex) matching.
+    A string property with a default value and optional regular expression (regex) matching.
     """
 
     __slots__ = ['regex']
@@ -91,11 +91,11 @@ class String(Property):
 
 class Bytes(String):
     """
-    A bytes parameter with a default value and optional regular
+    A bytes property with a default value and optional regular
     expression (regex) matching.
 
-    Similar to the string parameter, but instead of type basestring
-    this parameter only allows objects of type bytes (e.g. b'bytes').
+    Similar to the string property, but instead of type basestring
+    this property only allows objects of type bytes (e.g. b'bytes').
     """
     @classmethod
     def _assert(obj, value : typing.Any, regex : typing.Optional[bytes] = None, allow_None : bool = False) -> None:
@@ -323,10 +323,10 @@ class IPAddress(Property):
 
 class Number(Property):
     """
-    A numeric parameter with a default value and optional bounds.
+    A numeric property with a default value and optional bounds.
 
     There are two types of bounds: ``bounds`` and
-    ``softbounds``. ``bounds`` are hard bounds: the parameter must
+    ``softbounds``. ``bounds`` are hard bounds: the property must
     have a value within the specified range.  The default bounds are
     (None,None), meaning there are actually no hard bounds.  One or
     both bounds can be set by specifying a value
@@ -340,7 +340,7 @@ class Number(Property):
     bounds, or one that is not numeric, results in an exception.
 
     As a special case, if allow_None=True (which is true by default if
-    the parameter has a default of None when declared) then a value
+    the property has a default of None when declared) then a value
     of None is also allowed.
 
     A separate function set_in_bounds() is provided that will
@@ -348,7 +348,7 @@ class Number(Property):
     in, for instance, a GUI.
 
     ``softbounds`` are present to indicate the typical range of
-    the parameter, but are not enforced. Setting the soft bounds
+    the property, but are not enforced. Setting the soft bounds
     allows, for instance, a GUI to know what values to display on
     sliders for the Number.
 
@@ -393,7 +393,7 @@ class Number(Property):
     def _crop_to_bounds(self, value : typing.Union[int, float]) -> typing.Union[int, float]:
         """
         Return the given value cropped to be within the hard bounds
-        for this parameter.
+        for this property.
 
         If a numeric value is passed in, check it is within the hard
         bounds. If it is larger than the high bound, return the high
@@ -448,15 +448,15 @@ class Number(Property):
                         raise_ValueError("given value must be at most {}, not {}.".format(vmax, value), obj)
                 else:
                     if not value < vmax:
-                        raise_ValueError("Parameter must be less than {}, not {}.".format(vmax, value), obj)
+                        raise_ValueError("Property must be less than {}, not {}.".format(vmax, value), obj)
 
             if vmin is not None:
                 if incmin is True:
                     if not value >= vmin:
-                        raise_ValueError("Parameter must be at least {}, not {}.".format(vmin, value), obj)
+                        raise_ValueError("Property must be at least {}, not {}.".format(vmin, value), obj)
                 else:
                     if not value > vmin:
-                        raise_ValueError("Parameter must be greater than {}, not {}.".format(vmin, value), obj)
+                        raise_ValueError("Property must be greater than {}, not {}.".format(vmin, value), obj)
             return value 
     
     def _validate_step(self, value : typing.Any) -> None:
@@ -495,7 +495,7 @@ class Number(Property):
 
 class Integer(Number):
 
-    """Numeric Parameter required to be an Integer"""
+    """Numeric Property required to be an Integer"""
 
     def __init__(self, default : typing.Optional[int] = 0, *, bounds : typing.Optional[typing.Tuple] = None, 
             crop_to_bounds : bool = False, inclusive_bounds : typing.Tuple = (True,True), step : typing.Any = None, 
@@ -521,7 +521,7 @@ class Integer(Number):
 
 
 class Boolean(Property):
-    """Binary or tristate Boolean Parameter."""
+    """Binary or tristate Boolean Property."""
 
     def __init__(self, default : typing.Optional[bool] = False, *, 
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
@@ -545,7 +545,7 @@ class Boolean(Property):
 
 
 class Iterable(Property):
-    """A tuple or list Parameter (e.g. ('a',7.6,[3,5])) with a fixed tuple length."""
+    """A tuple or list Property (e.g. ('a',7.6,[3,5])) with a fixed tuple length."""
 
     __slots__ = ['bounds', 'length', 'item_type', 'dtype']
 
@@ -559,7 +559,7 @@ class Iterable(Property):
             fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
             fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
         """
-        Initialize a tuple parameter with a fixed length (number of
+        Initialize a tuple property with a fixed length (number of
         elements).  The length is determined by the initial default
         value, if any, and must be supplied explicitly otherwise.  The
         length is not allowed to change after instantiation.
@@ -656,7 +656,7 @@ class Tuple(Iterable):
 
 class List(Iterable):
     """
-    Parameter whose value is a list of objects, usually of a specified type.
+    Property whose value is a list of objects, usually of a specified type.
 
     The bounds allow a minimum and/or maximum length of
     list to be enforced.  If the item_type is non-None, all
@@ -699,7 +699,7 @@ class List(Iterable):
 
 class Callable(Property):
     """
-    Parameter holding a value that is a callable object, such as a function.
+    Property holding a value that is a callable object, such as a function.
 
     A keyword argument instantiate=True should be provided when a
     function object is used that might have state.  On the other hand,
@@ -716,22 +716,22 @@ class Callable(Property):
 
 class Composite(Property):
     """
-    A Parameter that is a composite of a set of other attributes of the class.
+    A Property that is a composite of a set of other attributes of the class.
 
     The constructor argument 'attribs' takes a list of attribute
-    names, which may or may not be Parameters.  Getting the parameter
+    names, which may or may not be Properties.  Getting the property
     returns a list of the values of the constituents of the composite,
-    in the order specified.  Likewise, setting the parameter takes a
+    in the order specified.  Likewise, setting the property takes a
     sequence of values and sets the value of the constituent
     attributes.
 
-    This Parameter type has not been tested with watchers and
+    This Property type has not been tested with watchers and
     dependencies, and may not support them properly.
     """
 
     __slots__ = ['attribs']
 
-    def __init__(self, attribs : typing.List[typing.Union[str, Parameter]], *, 
+    def __init__(self, attribs : typing.List[typing.Union[str, Property]], *, 
             doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
 			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
 			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
@@ -760,7 +760,7 @@ class Composite(Property):
 
     def validate_and_adapt(self, value):
         if not len(value) == len(self.attribs):
-            raise_ValueError("Compound parameter got the wrong number of values (needed {}, but got {}).".format(
+            raise_ValueError("Compound property got the wrong number of values (needed {}, but got {}).".format(
                         len(self.attribs), len(value)), self)
         return value
 
@@ -772,7 +772,7 @@ class Composite(Property):
 
 class SelectorBase(Property):
     """
-    Parameter whose value must be chosen from a list of possibilities.
+    Property whose value must be chosen from a list of possibilities.
 
     Subclasses must implement get_range().
     """
@@ -787,7 +787,7 @@ class SelectorBase(Property):
 
 class Selector(SelectorBase):
     """
-    Parameter whose value must be one object from a list of possible objects.
+    Property whose value must be one object from a list of possible objects.
 
     By default, if no default is specified, picks the first object from
     the provided set of objects, as long as the objects are in an
@@ -806,7 +806,7 @@ class Selector(SelectorBase):
 
     The list of objects can be supplied as a list (appropriate for
     selecting among a set of strings, or among a set of objects with a
-    "name" parameter), or as a (preferably ordered) dictionary from
+    "name" property), or as a (preferably ordered) dictionary from
     names to objects.  If a dictionary is supplied, the objects
     will need to be hashable so that their names can be looked
     up from the object value.
@@ -857,7 +857,7 @@ class Selector(SelectorBase):
     @property
     def range(self):
         """
-        Return the possible objects to which this parameter could be set.
+        Return the possible objects to which this property could be set.
 
         (Returns the dictionary {object.name:object}.)
         """
@@ -870,7 +870,7 @@ class Selector(SelectorBase):
 
 class ClassSelector(SelectorBase):
     """
-    Parameter allowing selection of either a subclass or an instance of a given set of classes.
+    Property allowing selection of either a subclass or an instance of a given set of classes.
     By default, requires an instance, but if isinstance=False, accepts a class instead.
     Both class and instance values respect the instantiate slot, though it matters only
     for isinstance=True.
@@ -905,18 +905,18 @@ class ClassSelector(SelectorBase):
             return
         if self.isinstance:
             if not isinstance(value, self.class_):
-                raise_ValueError("{} parameter {} value must be an instance of {}, not {}.".format(
+                raise_ValueError("{} property {} value must be an instance of {}, not {}.".format(
                     self.__class__.__name__, self.name, self._get_class_name(), value), self)
         else:
             if not issubclass(value, self.class_):
-               raise_ValueError("{} parameter {} must be a subclass of {}, not {}.".format(
+               raise_ValueError("{} property {} must be a subclass of {}, not {}.".format(
                     self.__class__.__name__, self.name, self._get_class_name(), value.__name__), self)
         return value
 
     @property
     def range(self):
         """
-        Return the possible types for this parameter's value.
+        Return the possible types for this property's value.
 
         (I.e. return `{name: <class>}` for all classes that are
         concrete_descendents() of `self.class_`.)
@@ -989,7 +989,7 @@ class TupleSelector(Selector):
 
 class Path(Property):
     """
-    Parameter that can be set to a string specifying the path of a file or folder.
+    Property that can be set to a string specifying the path of a file or folder.
 
     The string should be specified in UNIX style, but it will be
     returned in the format of the user's operating system. Please use
@@ -1057,7 +1057,7 @@ class Path(Property):
 
 class Filename(Path):
     """
-    Parameter that can be set to a string specifying the path of a file.
+    Property that can be set to a string specifying the path of a file.
 
     The string should be specified in UNIX style, but it will be
     returned in the format of the user's operating system.
@@ -1079,7 +1079,7 @@ class Filename(Path):
 
 class Foldername(Path):
     """
-    Parameter that can be set to a string specifying the path of a folder.
+    Property that can be set to a string specifying the path of a folder.
 
     The string should be specified in UNIX style, but it will be
     returned in the format of the user's operating system.
@@ -1181,7 +1181,7 @@ class MultiFileSelector(FileSelector):
 
 class Date(Number):
     """
-    Date parameter of datetime or date type.
+    Date property of datetime or date type.
     """
 
     def __init__(self, default, *, bounds : typing.Union[typing.Tuple, None] = None, 
@@ -1224,7 +1224,7 @@ class Date(Number):
 
 class CalendarDate(Number):
     """
-    Parameter specifically allowing dates (not datetimes).
+    Property specifically allowing dates (not datetimes).
     """
 
     def __init__(self, default, *, bounds : typing.Union[typing.Tuple, None] = None, 
@@ -1265,7 +1265,7 @@ class CalendarDate(Number):
 
 class CSS3Color(Property):
     """
-    Color parameter defined as a hex RGB string with an optional #
+    Color property defined as a hex RGB string with an optional #
     prefix or (optionally) as a CSS3 color name.
     """
 
@@ -1328,7 +1328,7 @@ class CSS3Color(Property):
         if (self.allow_None and value is None):
             return
         if not isinstance(value, str):
-            raise ValueError("Color parameter %r expects a string value, "
+            raise ValueError("Color property %r expects a string value, "
                              "not an object of type %s." % (self.name, type(value)))
         if self.allow_named and value in self._named_colors:
             return 
@@ -1381,7 +1381,7 @@ class Range(Tuple):
             too_low = (vmin is not None) and (v < vmin if incmin else v <= vmin)
             too_high = (vmax is not None) and (v > vmax if incmax else v >= vmax)
             if too_low or too_high:
-                raise ValueError("Range parameter %r's %s bound must be in range %s."
+                raise ValueError("Range property %r's %s bound must be in range %s."
                                  % (self.name, bound, self.rangestr))
 
     @property
@@ -1409,17 +1409,17 @@ class DateRange(Range):
             return
 
         if not isinstance(val, tuple):
-            raise ValueError("DateRange parameter %r only takes a tuple value, "
+            raise ValueError("DateRange property %r only takes a tuple value, "
                              "not %s." % (self.name, type(val).__name__))
         for n in val:
             if isinstance(n, dt_types):
                 continue
-            raise ValueError("DateRange parameter %r only takes date/datetime "
+            raise ValueError("DateRange property %r only takes date/datetime "
                              "values, not type %s." % (self.name, type(n).__name__))
 
         start, end = val
         if not end >= start:
-            raise ValueError("DateRange parameter %r's end datetime %s "
+            raise ValueError("DateRange property %r's end datetime %s "
                              "is before start datetime %s." %
                              (self.name, val[1], val[0]))
 
@@ -1467,12 +1467,12 @@ class CalendarDateRange(Range):
 
         for n in val:
             if not isinstance(n, dt.date):
-                raise ValueError("CalendarDateRange parameter %r only "
+                raise ValueError("CalendarDateRange property %r only "
                                  "takes date types, not %s." % (self.name, val))
 
         start, end = val
         if not end >= start:
-            raise ValueError("CalendarDateRange parameter %r's end date "
+            raise ValueError("CalendarDateRange property %r's end date "
                              "%s is before start date %s." %
                              (self.name, val[1], val[0]))
 

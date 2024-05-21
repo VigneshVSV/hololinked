@@ -1,5 +1,5 @@
-Remote Parameters
-=================
+Properties
+==========
 
 .. toctree::
     :hidden:
@@ -15,10 +15,10 @@ Remote Parameters
     list
 
 
-RemoteParameter
----------------
+Property
+--------
 
-.. autoclass:: hololinked.server.remote_parameter.RemoteParameter
+.. autoclass:: hololinked.server.property.Property
     :members:
     :show-inheritance:
 

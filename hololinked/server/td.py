@@ -2,9 +2,9 @@ import typing
 import socket
 from dataclasses import dataclass, field
 
-from ..server.data_classes import RemoteResourceInfoValidator
-from ..server.remote_parameters import *
-from ..server.constants import JSONSerializable
+from .data_classes import RemoteResourceInfoValidator
+from .properties import *
+from .constants import JSONSerializable
 from .thing import Thing
 from .properties import Property
 from .events import Event
@@ -185,7 +185,7 @@ class DataSchema(Schema):
 @dataclass
 class PropertyAffordance(InteractionAffordance, DataSchema):
     """
-    creates property affordance schema from ``property`` descriptor object (or parameter)
+    creates property affordance schema from ``property`` descriptor object 
     schema - https://www.w3.org/TR/wot-thing-description11/#propertyaffordance
     """
     observable : bool
@@ -217,8 +217,8 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
 
     @classmethod
     def generate_schema(self, property : Property, owner : Thing, authority : str) -> typing.Dict[str, JSONSerializable]:
-        if not isinstance(property, (Property, RemoteParameter)):
-            raise TypeError(f"Property affordance schema can only be generated for Property/RemoteParameter. "
+        if not isinstance(property, Property):
+            raise TypeError(f"Property affordance schema can only be generated for Property. "
                             f"Given type {type(property)}")
         if isinstance(property, (String, Filename, Foldername, Path)):
             schema = StringSchema()
@@ -243,11 +243,11 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
     
     @classmethod
     def register_descriptor(cls, descriptor : Property, schema_generator : "PropertyAffordance") -> None:
-        if not isinstance(descriptor, (Property, RemoteParameter)):
-            raise TypeError("custom schema generator can also be registered for Property/RemoteParameter." +
+        if not isinstance(descriptor, Property):
+            raise TypeError("custom schema generator can also be registered for Property." +
                             f" Given type {type(descriptor)}")
         if not isinstance(schema_generator, PropertyAffordance):
-            raise TypeError("schema generator for Property/RemoteParameter must be subclass of PropertyAfforance. " +
+            raise TypeError("schema generator for Property must be subclass of PropertyAfforance. " +
                             f"Given type {type(schema_generator)}" )
         PropertyAffordance._custom_schema_generators[descriptor] = schema_generator
 
@@ -423,7 +423,7 @@ class OneOfSchema(PropertyAffordance):
         if isinstance(property, ClassSelector):
             if not property.isinstance:
                 raise NotImplementedError("WoT TD for ClassSelector with isinstance set to True is not supported yet. "  +
-                                          "Consider user this parameter in a different way.")
+                                          "Consider user this property in a different way.")
             if isinstance(property.class_, (list, tuple)):
                 objects = list(property.class_)
             else:
@@ -671,11 +671,11 @@ class ThingDescription(Schema):
     security : typing.Union[str, typing.List[str]]
     securityDefinitions : SecurityScheme
 
-    skip_parameters = ['expose', 'httpserver_resources', 'rpc_resources', 'gui_resources',
+    skip_properties = ['expose', 'httpserver_resources', 'rpc_resources', 'gui_resources',
                     'events', 'debug_logs', 'warn_logs', 'info_logs', 'error_logs', 'critical_logs',  
                     'thing_description', 'maxlen', 'execution_logs', 'GUI', 'object_info'  ]
 
-    skip_actions = ['_parameter_values', '_parameters', 'push_events', 'stop_events', 
+    skip_actions = ['_set_properties', '_get_properties', 'push_events', 'stop_events', 
                     'postman_collection']
 
     def __init__(self):
@@ -693,8 +693,8 @@ class ThingDescription(Schema):
 
         # properties and actions
         for resource in instance.instance_resources.values():
-            if (resource.isparameter and resource.obj_name not in self.properties and 
-                resource.obj_name not in self.skip_parameters and 
+            if (resource.isproperty and resource.obj_name not in self.properties and 
+                resource.obj_name not in self.skip_properties and 
                 hasattr(resource.obj, "_remote_info") and resource.obj._remote_info is not None): 
                 self.properties[resource.obj_name] = PropertyAffordance.generate_schema(resource.obj, instance, authority) 
             elif (resource.iscallable and resource.obj_name not in self.actions and 

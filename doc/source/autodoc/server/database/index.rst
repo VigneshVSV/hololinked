@@ -1,7 +1,7 @@
 Database
 ========
 
-.. autoclass:: hololinked.server.database.RemoteObjectDB
+.. autoclass:: hololinked.server.database.ThingDB
     :members: 
     :show-inheritance:
 

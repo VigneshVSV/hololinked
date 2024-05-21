@@ -1,5 +1,6 @@
 import os
 import socket
+import uuid
 import typing
 import copy
 from typing import List
@@ -15,8 +16,7 @@ from tornado.web import RequestHandler, HTTPError, authenticated
 from .models import *
 from ..server.serializers import JSONSerializer
 from ..server.config import global_config
-from ..server.utils import uuid4_in_bytes
-from ..server.webserver_utils import get_IP_from_interface
+from ..server.utils import get_IP_from_interface
 
 
 def for_authenticated_user(method):
@@ -156,7 +156,7 @@ class LoginHandler(SystemHostHandler):
                 ph = PasswordHasher(time_cost=global_config.PWD_HASHER_TIME_COST)
                 if ph.verify(data.password, password):
                     self.set_status(204, "logged in")
-                    cookie_value = uuid4_in_bytes()
+                    cookie_value = bytes(str(uuid.uuid4()), encoding = 'utf-8')
                     self.set_signed_cookie("user", cookie_value, httponly=True,  
                                             secure=True, samesite="strict", 
                                             expires_days=30 if rememberme else None)

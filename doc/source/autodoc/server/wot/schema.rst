@@ -1,41 +1,41 @@
 Thing Description Schema
 ------------------------
 
-.. autoclass:: hololinked.wot.td.ThingDescription
+.. autoclass:: hololinked.server.td.ThingDescription
     :members:
     :show-inheritance:
 
 
 .. collapse:: Schema
 
-    .. autoclass:: hololinked.wot.td.Schema
+    .. autoclass:: hololinked.server.td.Schema
         :members:
         :show-inheritance:
 
 
 .. collapse:: InteractionAffordance
 
-    .. autoclass:: hololinked.wot.td.InteractionAffordance
+    .. autoclass:: hololinked.server.td.InteractionAffordance
         :members:
         :show-inheritance:
 
 
 .. collapse:: PropertyAffordance
 
-    .. autoclass:: hololinked.wot.td.PropertyAffordance
+    .. autoclass:: hololinked.server.td.PropertyAffordance
         :members:
         :show-inheritance:
 
 
 .. collapse:: ActionAffordance
     
-    .. autoclass:: hololinked.wot.td.ActionAffordance
+    .. autoclass:: hololinked.server.td.ActionAffordance
         :members:
         :show-inheritance:
 
 
 .. collapse:: EventAffordance
 
-    .. autoclass:: hololinked.wot.td.EventAffordance
+    .. autoclass:: hololinked.server.td.EventAffordance
         :members:
         :show-inheritance:

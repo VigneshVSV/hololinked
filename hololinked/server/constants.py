@@ -126,7 +126,7 @@ class ServerTypes(Enum):
 
     UNKNOWN_TYPE = b'UNKNOWN' 
     EVENTLOOP = b'EVENTLOOP'  
-    REMOTE_OBJECT = b'REMOTE_OBJECT'
+    THING = b'THING'
     POOL = b'POOL'
        
        
@@ -142,7 +142,7 @@ class HTTPServerTypes(StrEnum):
     "types of HTTP server"
 
     SYSTEM_HOST = 'SYSTEM_HOST'
-    REMOTE_OBJECT_SERVER = 'REMOTE_OBJECT_SERVER'
+    THING_SERVER = 'THING_SERVER'
 
 
 class Serializers(StrEnum):

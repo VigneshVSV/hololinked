@@ -19,15 +19,15 @@ from .property import Property
 
 
 class ThingTableBase(DeclarativeBase):
-    """SQLAlchemy base table for all remote object related tables"""
+    """SQLAlchemy base table for all thing related tables"""
     pass 
     
-class SerializedParameter(MappedAsDataclass, ThingTableBase):
+class SerializedProperty(MappedAsDataclass, ThingTableBase):
     """
-    Parameter value is serialized before storing in database, therefore providing unified version for 
+    Property value is serialized before storing in database, therefore providing unified version for 
     SQLite and other relational tables
     """
-    __tablename__ = "parameters"
+    __tablename__ = "properties"
 
     instance_name  : Mapped[str] = mapped_column(String)
     name : Mapped[str] = mapped_column(String, primary_key=True)
@@ -35,7 +35,7 @@ class SerializedParameter(MappedAsDataclass, ThingTableBase):
 
 
 class ThingInformation(MappedAsDataclass, ThingTableBase):
-    __tablename__ = "remote_objects"
+    __tablename__ = "things"
 
     instance_name  : Mapped[str] = mapped_column(String, primary_key=True)
     class_name     : Mapped[str] = mapped_column(String)
@@ -60,9 +60,9 @@ class ThingInformation(MappedAsDataclass, ThingTableBase):
     
 
 @dataclass 
-class DeserializedParameter: # not part of database
+class DeserializedProperty: # not part of database
     """
-    Parameter with deserialized value
+    Property with deserialized value
     """
     instance_name : str
     name : str 
@@ -74,7 +74,7 @@ class BaseDB:
 
     def __init__(self, instance : Parameterized, serializer : typing.Optional[BaseSerializer] = None, 
                 config_file : typing.Union[str, None] = None) -> None:
-        self.remote_object_instance = instance
+        self.thing_instance = instance
         self.instance_name = instance.instance_name
         self.serializer = serializer
         self.URL = self.create_URL(config_file)
@@ -101,7 +101,7 @@ class BaseDB:
         and creates the URL 
         """
         if config_file is None:
-            folder = f'{global_config.TEMP_DIR}{os.sep}databases{os.sep}{pep8_to_dashed_URL(self.remote_object_instance.__class__.__name__.lower())}'
+            folder = f'{global_config.TEMP_DIR}{os.sep}databases{os.sep}{pep8_to_dashed_URL(self.thing_instance.__class__.__name__.lower())}'
             if not os.path.exists(folder):
                 os.makedirs(folder)
             return BaseDB.create_sqlite_URL(**dict(file=f'{folder}{os.sep}{self.instance_name}.db'))
@@ -158,7 +158,7 @@ class BaseAsyncDB(BaseDB):
         The database to open in the database server specified in config_file (see below)
     serializer: BaseSerializer
         The serializer to use for serializing and deserializing data (for example
-        parameter serializing before writing to database). Will be the same as
+        property serializing before writing to database). Will be the same as
         serializer supplied to ``Thing``.
     config_file: str
         absolute path to database server configuration file
@@ -186,7 +186,7 @@ class BaseSyncDB(BaseDB):
         The database to open in the database server specified in config_file (see below)
     serializer: BaseSerializer
         The serializer to use for serializing and deserializing data (for example
-        parameter serializing into database for storage). Will be the same as
+        property serializing into database for storage). Will be the same as
         serializer supplied to ``Thing``.
     config_file: str
         absolute path to database server configuration file
@@ -213,7 +213,7 @@ class ThingDB(BaseSyncDB):
         ``instance_name`` of the ``Thing```
     serializer: BaseSerializer
         serializer used by the ``Thing``. The serializer to use for 
-        serializing and deserializing data (for example parameter serializing 
+        serializing and deserializing data (for example property serializing 
         into database for storage).
     config_file: str
         configuration file of the database server
@@ -228,7 +228,7 @@ class ThingDB(BaseSyncDB):
         -------
         info: Thing
         """
-        if not inspect_database(self.engine).has_table("remote_objects"):
+        if not inspect_database(self.engine).has_table("things"):
             return
         with self.sync_session() as session:
             stmt = select(ThingInformation).filter_by(instance_name=self.instance_name)
@@ -239,113 +239,113 @@ class ThingDB(BaseSyncDB):
             elif len(data) == 1:
                 return data[0]
             else:
-                raise DatabaseError("Multiple remote objects with same instance name found, either cleanup database/detach/make new")
+                raise DatabaseError("Multiple things with same instance name found, either cleanup database/detach/make new")
             
-    def get_all_parameters(self, deserialized : bool = True) -> typing.Sequence[
-                            typing.Union[SerializedParameter, DeserializedParameter]]:
+    def get_all_properties(self, deserialized : bool = True) -> typing.Sequence[
+                            typing.Union[SerializedProperty, DeserializedProperty]]:
         """
         read all paramaters of the ``Thing`` instance.
 
         Parameters
         ----------
         deserialized: bool, default True
-            deserilize the parameters if True
+            deserilize the properties if True
         """
         with self.sync_session() as session:
-            stmt = select(SerializedParameter).filter_by(instance_name=self.instance_name)
+            stmt = select(SerializedProperty).filter_by(instance_name=self.instance_name)
             data = session.execute(stmt)
-            existing_params = data.scalars().all() #type: typing.Sequence[SerializedParameter]
+            existing_params = data.scalars().all() #type: typing.Sequence[SerializedProperty]
             if not deserialized:
                 return existing_params
             params_data = []
             for param in existing_params:
-                params_data.append(DeserializedParameter(
+                params_data.append(DeserializedProperty(
                     instance_name=self.instance_name,
                     name = param.name, 
                     value = self.serializer.loads(param.serialized_value)
                 ))
             return params_data
         
-    def create_missing_parameters(self, parameters : typing.Dict[str, Property],
-                            get_missing_parameters : bool = False) -> None:
+    def create_missing_properties(self, properties : typing.Dict[str, Property],
+                            get_missing_properties : bool = False) -> None:
         """
-        create any and all missing remote parameters of ``Thing`` instance
+        create any and all missing properties of ``Thing`` instance
         in database.
 
         Parameters
         ----------
-        parameters: Dict[str, RemoteParamater]
-            descriptors of the parameters
+        properties: Dict[str, Property]
+            descriptors of the properties
 
         Returns
         -------
         List[str]
-            list of missing parameters if get_missing_paramaters is True
+            list of missing properties if get_missing_paramaters is True
         """
         missing_params = []
         with self.sync_session() as session:
-            existing_params = self.get_all_parameters()
+            existing_params = self.get_all_properties()
             existing_names = [p.name for p in existing_params]
-            for name, new_param in parameters.items():
+            for name, new_param in properties.items():
                 if name not in existing_names: 
-                    param = SerializedParameter(
+                    param = SerializedProperty(
                         instance_name=self.instance_name, 
                         name=new_param.name, 
-                        serialized_value=self.serializer.dumps(getattr(self.remote_object_instance, 
+                        serialized_value=self.serializer.dumps(getattr(self.thing_instance, 
                                                                 new_param.name))
                     )
                     session.add(param)
                     missing_params.append(name)
             session.commit()
-        if get_missing_parameters:
+        if get_missing_properties:
             return missing_params
         
-    def get_parameter(self, parameter : typing.Union[str, Property], 
-                        deserialized : bool = True) -> typing.Sequence[typing.Union[SerializedParameter, DeserializedParameter]]:
+    def get_property(self, property : typing.Union[str, Property], 
+                        deserialized : bool = True) -> typing.Sequence[typing.Union[SerializedProperty, DeserializedProperty]]:
         """
         read a paramater of the ``Thing`` instance.
 
         Parameters
         ----------
-        parameter: str | Property
+        property: str | Property
             string name or descriptor object
         deserialized: bool, default True
-            deserilize the parameters if True
+            deserilize the properties if True
         """
         with self.sync_session() as session:
-            name = parameter if isinstance(parameter, str) else parameter.name
-            stmt = select(SerializedParameter).filter_by(instance_name=self.instance_name, name=name)
+            name = property if isinstance(property, str) else property.name
+            stmt = select(SerializedProperty).filter_by(instance_name=self.instance_name, name=name)
             data = session.execute(stmt)
-            param = data.scalars().all() #type: typing.Sequence[SerializedParameter]
+            param = data.scalars().all() #type: typing.Sequence[SerializedProperty]
             if len(param) == 0:
-                raise DatabaseError("parameter {name} not found in datanbase ")
+                raise DatabaseError(f"property {name} not found in datanbase ")
             elif len(param) > 1:
-                raise DatabaseError("multiple parameters with same name found") # Impossible actually
+                raise DatabaseError("multiple properties with same name found") # Impossible actually
             if not deserialized:
                 return param[0]
-            return DeserializedParameter(
+            return DeserializedProperty(
                     instance_name=param[0].instance_name,
                     name = param[0].name, 
                     value = self.serializer.loads(param[0].serialized_value)
                 )
           
-    def set_parameter(self, parameter : typing.Union[str, Property], value : typing.Any) -> None:
+    def set_property(self, property : typing.Union[str, Property], value : typing.Any) -> None:
         """
-        change the value of an already existing parameter
+        change the value of an already existing property
 
         Parameters
         ----------
-        parameter: Property
-            descriptor of the parameter
+        property: Property
+            descriptor of the property
         value: Any
-            value of the parameter
+            value of the property
         """
         if self.in_context:
-            self._context[threading.get_ident()][parameter.name] = value
+            self._context[threading.get_ident()][property.name] = value
             return
         with self.sync_session() as session:
-            name = parameter if isinstance(parameter, str) else parameter.name
-            stmt = select(SerializedParameter).filter_by(instance_name=self.instance_name, 
+            name = property if isinstance(property, str) else property.name
+            stmt = select(SerializedProperty).filter_by(instance_name=self.instance_name, 
                                                 name=name)
             data = session.execute(stmt)
             param = data.scalars().all()
@@ -355,47 +355,47 @@ class ThingDB(BaseSyncDB):
                 param = param[0]
                 param.serialized_value = self.serializer.dumps(value)
             else:
-                param = SerializedParameter(
+                param = SerializedProperty(
                         instance_name=self.instance_name, 
                         name=name,
-                        serialized_value=self.serializer.dumps(getattr(self.remote_object_instance, name))
+                        serialized_value=self.serializer.dumps(getattr(self.thing_instance, name))
                     )
                 session.add(param)
             session.commit()
                 
 
-    def set_parameters(self, parameters : typing.Dict[typing.Union[str, Property], typing.Any]) -> None:
+    def set_properties(self, properties : typing.Dict[typing.Union[str, Property], typing.Any]) -> None:
         """
-        change the value of an already existing parameter
+        change the value of an already existing property
 
         Parameters
         ----------
-        parameter: Property
-            descriptor of the parameter
+        property: Property
+            descriptor of the property
         value: Any
-            value of the parameter
+            value of the property
         """
         if self.in_context:
-            for obj, value in parameters.items():
+            for obj, value in properties.items():
                 name = obj if isinstance(obj, str) else obj.name
                 self._context[threading.get_ident()][name] = value
             return
         with self.sync_session() as session:
             names = []
-            for obj in parameters.keys():
+            for obj in properties.keys():
                 names.append(obj if isinstance(obj, str) else obj.name)
-            stmt = select(SerializedParameter).filter_by(instance_name=self.instance_name).filter(
-                                    SerializedParameter.name.in_(names))
+            stmt = select(SerializedProperty).filter_by(instance_name=self.instance_name).filter(
+                                    SerializedProperty.name.in_(names))
             data = session.execute(stmt)
             db_params = data.scalars().all()
-            for obj, value in parameters.items():
+            for obj, value in properties.items():
                 name = obj if isinstance(obj, str) else obj.name
-                db_param = list(filter(lambda db_param: db_param.name == name, db_params)) # type: typing.List[SerializedParameter]
+                db_param = list(filter(lambda db_param: db_param.name == name, db_params)) # type: typing.List[SerializedProperty]
                 if len(db_param) > 0:
                     db_param = db_param[0]
                     db_param.serialized_value = self.serializer.dumps(value)
                 else:
-                    param = SerializedParameter(
+                    param = SerializedProperty(
                         instance_name=self.instance_name, 
                         name=name,
                         serialized_value=self.serializer.dumps(value)
@@ -407,8 +407,8 @@ class ThingDB(BaseSyncDB):
 
 class batch_db_commit:
     """
-    Context manager to write multiple parameters to database at once. Useful for sequential writes 
-    to parameters with database settings. 
+    Context manager to write multiple properties to database at once. Useful for sequential writes 
+    to properties with database settings. 
     """
     def __init__(self, db_engine : ThingDB) -> None:
         self.db_engine = db_engine
@@ -419,11 +419,11 @@ class batch_db_commit:
     def __exit__(self, exc_type, exc_value, exc_tb) -> None:
         data = self.db_engine._context.pop(threading.get_ident(), dict()) # typing.Dict[str, typing.Any]
         if exc_type is None:
-            self.db_engine.set_parameters(data)
+            self.db_engine.set_properties(data)
             return 
         for name, value in data.items():
             try:
-                self.db_engine.set_parameter(name, value)
+                self.db_engine.set_property(name, value)
             except Exception as ex:
                 pass
 

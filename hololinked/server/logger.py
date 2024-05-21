@@ -11,7 +11,7 @@ from .events import Event
 from .property import Property
 from .properties import Integer
 from .thing import Thing as RemoteObject
-from .decorators import remote_method
+from .action import action as remote_method
 
 
 

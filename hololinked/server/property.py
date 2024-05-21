@@ -2,34 +2,34 @@ import typing
 from enum import Enum
 
 from ..param.parameterized import Parameter, ClassParameters
-from .decorators import RemoteResourceInfoValidator
+from .data_classes import RemoteResourceInfoValidator
 from .constants import USE_OBJECT_NAME, HTTP_METHODS
 
 
 
 class Property(Parameter):
     """
-    Initialize a new Parameter object and store the supplied attributes:
+    Initialize a new Property object and store the supplied attributes:
 
     Parameters
     ----------
 
     default: None or corresponding to parameter type 
         The default value of the parameter. This is owned by class for the attribute 
-        represented by the Parameter, which is overridden in an instance after 
+        represented by the Property, which is overridden in an instance after 
         setting the parameter.
 
     doc: str, default empty
         docstring explaining what this parameter represents.
 
     constant: bool, default False
-        if true, the Parameter value can be changed only at
+        if true, the Property value can be changed only at
         the class level or in a Parameterized constructor call. The
         value is otherwise constant on the Parameterized instance,
         once it has been constructed.
 
     readonly: bool, default False
-        if true, the Parameter value cannot ordinarily be
+        if true, the Property value cannot ordinarily be
         changed by setting the attribute at the class or instance
         levels at all. The value can still be changed in code by
         temporarily overriding the value of this slot and then
@@ -39,7 +39,7 @@ class Property(Parameter):
 
     allow_None: bool, default False 
         if True, None is accepted as a valid value for
-        this Parameter, in addition to any other values that are
+        this Property, in addition to any other values that are
         allowed. If the default value is defined as None, allow_None
         is set to True automatically.
 
@@ -79,7 +79,7 @@ class Property(Parameter):
         which gives useful (and modifiable) information about the parameter. 
 
     label: str, default extracted from object name
-        optional text label to be used when this Parameter is
+        optional text label to be used when this Property is
         shown in a listing. If no label is supplied, the attribute name
         for this parameter in the owning Parameterized object is used.
 
@@ -93,31 +93,31 @@ class Property(Parameter):
         custom deleter method
         
     per_instance_descriptor: bool, default False 
-        whether a separate Parameter instance will be
+        whether a separate Property instance will be
         created for every Parameterized instance. True by default.
         If False, all instances of a Parameterized class will share
-        the same Parameter object, including all validation
+        the same Property object, including all validation
         attributes (bounds, etc.). See also deep_copy, which is
-        conceptually similar but affects the Parameter value rather
-        than the Parameter object.
+        conceptually similar but affects the Property value rather
+        than the Property object.
 
     deepcopy_default: bool, default False 
-        controls whether the value of this Parameter will
+        controls whether the value of this Property will
         be deepcopied when a Parameterized object is instantiated (if
         True), or if the single default value will be shared by all
-        Parameterized instances (if False). For an immutable Parameter
+        Parameterized instances (if False). For an immutable Property
         value, it is best to leave deep_copy at the default of
         False, so that a user can choose to change the value at the
         Parameterized instance level (affecting only that instance) or
         at the Parameterized class or superclass level (affecting all
         existing and future instances of that class or superclass). For
-        a mutable Parameter value, the default of False is also appropriate
+        a mutable Property value, the default of False is also appropriate
         if you want all instances to share the same value state, e.g. if
         they are each simply referring to a single global object like
         a singleton. If instead each Parameterized should have its own
         independently mutable value, deep_copy should be set to
         True, but note that there is then no simple way to change the
-        value of this Parameter at the class or superclass level,
+        value of this Property at the class or superclass level,
         because each instance, once created, will then have an
         independently deepcopied value.
 
@@ -126,7 +126,7 @@ class Property(Parameter):
 
     precedence: float, default None
         a numeric value, usually in the range 0.0 to 1.0,
-        which allows the order of Parameters in a class to be defined in
+        which allows the order of Properties in a class to be defined in
         a listing or e.g. in GUI menus. A negative precedence indicates
         a parameter that should be hidden in such listings.
 
@@ -179,8 +179,8 @@ class Property(Parameter):
 
     def _post_value_set(self, obj, value : typing.Any) -> None:
         if (self.db_persist or self.db_commit) and hasattr(obj, 'db_engine'):
-            from .remote_object import RemoteObject
-            assert isinstance(obj, RemoteObject), f"database parameter {self.name} bound to a non RemoteObject, currently not supported"
+            from .thing import Thing
+            assert isinstance(obj, Thing), f"database parameter {self.name} bound to a non Thing, currently not supported"
             obj.db_engine.set_parameter(self, value)
         return super()._post_value_set(obj, value)
 
@@ -199,7 +199,7 @@ __parameter_info__ = [
 class ClassProperties(ClassParameters):
     """
     Object that holds the namespace and implementation of Parameterized methods as well as any state that is not 
-    in __slots__ or the Parameters themselves.
+    in __slots__ or the Properties themselves.
     Exists at metaclass level (instantiated by the metaclass). Contains state specific to the class.
     """
 
