@@ -4,6 +4,7 @@ from enum import Enum
 from ..param.parameterized import Parameter, ClassParameters
 from .data_classes import RemoteResourceInfoValidator
 from .constants import USE_OBJECT_NAME, HTTP_METHODS
+from .events import Event
 
 
 
@@ -14,17 +15,17 @@ class Property(Parameter):
     Parameters
     ----------
 
-    default: None or corresponding to parameter type 
-        The default value of the parameter. This is owned by class for the attribute 
+    default: None or corresponding to property type 
+        The default value of the property. This is owned by class for the attribute 
         represented by the Property, which is overridden in an instance after 
-        setting the parameter.
+        setting the property.
 
     doc: str, default empty
-        docstring explaining what this parameter represents.
+        docstring explaining what this property represents.
 
     constant: bool, default False
         if true, the Property value can be changed only at
-        the class level or in a Parameterized constructor call. The
+        the class level or in a propertyized constructor call. The
         value is otherwise constant on the Parameterized instance,
         once it has been constructed.
 
@@ -49,7 +50,7 @@ class Property(Parameter):
         is used and underscores and replaced with dash
 
     remote: bool, default True
-        set to false to make the parameter local
+        set to false to make the property local
 
     http_method: tuple, default (GET, PUT)
         http methods for read and write respectively 
@@ -75,13 +76,16 @@ class Property(Parameter):
         and write
 
     metadata: dict, default None
-        store your own JSON compatible metadata for the parameter 
-        which gives useful (and modifiable) information about the parameter. 
+        store your own JSON compatible metadata for the property 
+        which gives useful (and modifiable) information about the property. 
+        Properties operate using slots which means you cannot set foreign 
+        attributes on this object normally. The metadata dictionary should 
+        overcome this limitation. 
 
     label: str, default extracted from object name
         optional text label to be used when this Property is
         shown in a listing. If no label is supplied, the attribute name
-        for this parameter in the owning Parameterized object is used.
+        for this property in the owning Parameterized object is used.
 
     fget: Callable, default None
         custom getter method, mandatory when setter method is also custom.
@@ -122,17 +126,18 @@ class Property(Parameter):
         independently deepcopied value.
 
     class_member : bool, default False
-        when True, parameter is set on class instead of instance. 
+        when True, property is set on class instead of instance. 
 
     precedence: float, default None
         a numeric value, usually in the range 0.0 to 1.0,
         which allows the order of Properties in a class to be defined in
         a listing or e.g. in GUI menus. A negative precedence indicates
-        a parameter that should be hidden in such listings.
+        a property that should be hidden in such listings.
 
     """
 
-    __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', '_remote_info', 'observable']
+    __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', '_remote_info', 'observable', 
+                '_observable_event']
 
     def __init__(self, default: typing.Any = None, *, doc : typing.Optional[str] = None, constant : bool = False, 
                 readonly : bool = False, allow_None : bool = False, 
@@ -159,7 +164,7 @@ class Property(Parameter):
                 http_method=http_method,
                 URL_path=URL_path,
                 state=state,
-                isparameter=True
+                isproperty=True
             )
         else:
             self._remote_info = None
@@ -172,6 +177,9 @@ class Property(Parameter):
                 elif not self._remote_info.URL_path.startswith('/'): 
                     self._remote_info.URL_path = f'/{self._remote_info.URL_path}',
                 self._remote_info.obj_name = self.name
+            if self.observable:
+                self._observable_event = Event(name=f'observable-{self.name}', 
+                                        URL_path=f'{self._remote_info.URL_path}/change-event')
             # In principle the above could be done when setting name itself however to simplify
             # we do it with owner. So we should always remember order of __set_name__ -> 1) attrib_name, 
             # 2) name and then 3) owner
@@ -179,20 +187,26 @@ class Property(Parameter):
 
     def _post_value_set(self, obj, value : typing.Any) -> None:
         if (self.db_persist or self.db_commit) and hasattr(obj, 'db_engine'):
-            from .thing import Thing
-            assert isinstance(obj, Thing), f"database parameter {self.name} bound to a non Thing, currently not supported"
-            obj.db_engine.set_parameter(self, value)
+            # from .thing import Thing
+            # assert isinstance(obj, Thing), f"database property {self.name} bound to a non Thing, currently not supported"
+            # uncomment for type definitions
+            obj.db_engine.set_property(self, value)
+        if self.observable:
+            old_value = obj.__dict__.get(self._internal_name, NotImplemented)
+            obj.__dict__[f'{self._internal_name}_old_value'] = value 
+            if old_value != value:
+                self._observable_event.push(value)
         return super()._post_value_set(obj, value)
 
     
 
 
-__parameter_info__ = [
+__property_info__ = [
                 'allow_None' , 'class_member', 'db_init', 'db_persist', 
                 'db_commit', 'deepcopy_default', 'per_instance_descriptor', 
                 'default', 'doc', 'constant', 
                 'metadata', 'name', 'readonly'
-                # 'scada_info', 'parameter_type' # descriptor related info is also necessary
+                # 'scada_info', 'property_type' # descriptor related info is also necessary
             ]
 
    
@@ -257,7 +271,7 @@ class ClassProperties(ClassParameters):
                 type = param.__class__.__name__,
                 owner = param.owner.__name__
             )
-            for field in __parameter_info__:
+            for field in __property_info__:
                 info[param.name][field] = state.get(field, None) 
         return info 
 

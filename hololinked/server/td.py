@@ -206,7 +206,7 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
             form = Form()
             # index is the order for http methods for (get, set, delete), generally (GET, PUT, DELETE)
             if (index == 1 and property.readonly) or index >= 2:
-                continue # delete property is not a part of WoT, we also mostly never use it.
+                continue # delete property is not a part of WoT, we also mostly never use it so ignore.
             elif index == 0:
                 form.op = 'readproperty'
             elif index == 1:

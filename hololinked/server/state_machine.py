@@ -4,10 +4,11 @@ from types import FunctionType, MethodType
 from enum import EnumMeta, Enum, StrEnum
 
 from ..param.parameterized import Parameterized
-from .properties import ClassSelector, TypedDict, Boolean
-from .property import Property
 from .utils import getattr_without_descriptor_read
 from .data_classes import RemoteResourceInfoValidator
+from .property import Property
+from .properties import ClassSelector, TypedDict, Boolean
+from .events import Event
 
 
 
@@ -21,6 +22,8 @@ class StateMachine:
         enumeration of states 
     initial_state: str 
         initial state of machine 
+    push_state_change_event : bool, default True
+        when the state changes, an event is pushed with the new state
     on_enter: Dict[str, Callable | Property] 
         callbacks to be invoked when a certain state is entered. It is to be specified 
         as a dictionary with the states being the keys
@@ -49,10 +52,9 @@ class StateMachine:
     
     def __init__(self, 
             states : typing.Union[EnumMeta, typing.List[str], typing.Tuple[str]], *, 
-            initial_state : typing.Union[StrEnum, str], 
+            initial_state : typing.Union[StrEnum, str], push_state_change_event : bool = True,
             on_enter : typing.Dict[str, typing.Union[typing.List[typing.Callable], typing.Callable]] = {}, 
             on_exit  : typing.Dict[str, typing.Union[typing.List[typing.Callable], typing.Callable]] = {}, 
-            # push_state_change_event : bool = False,
             **machine : typing.Dict[str, typing.Union[typing.Callable, Property]]
         ) -> None:
         self._exists = False
@@ -62,9 +64,9 @@ class StateMachine:
         self.states   = states
         self.initial_state = initial_state
         self.machine = machine
-        # self.push_state_change_event = push_state_change_event
-        # if push_state_change_event:
-            # self.state_change_event = Event('state-change') 
+        self.state_change_event = None
+        if push_state_change_event:
+            self.state_change_event = Event('state-change') 
 
     # dont think ParameterizedMetaclass is the correct type, should be Parameterized
     def _prepare(self, owner : Parameterized) -> None:
@@ -82,10 +84,7 @@ class StateMachine:
         
         if isinstance(self.states, list):
             self.states = tuple(self.states) # freeze the list of states
-        # if hasattr(self, 'state_change_event'):
-            # This has to be fixed with "observable" option for properties 
-            # self.state_change_event.publisher = owner.event_publisher
-
+      
         # first validate machine
         for state, objects in self.machine.items():
             if state in self:
@@ -157,8 +156,7 @@ class StateMachine:
         """
         return self._state
         
-    def set_state(self, value : typing.Union[str, StrEnum, Enum], 
-                #  push_event : bool = True, 
+    def set_state(self, value : typing.Union[str, StrEnum, Enum], push_event : bool = True, 
                 skip_callbacks : bool = False) -> None:
         """ 
         set state of state machine. Also triggers state change callbacks if skip_callbacks=False. 
@@ -177,8 +175,8 @@ class StateMachine:
         if value in self.states:
             previous_state = self._state
             self._state = self._get_machine_compliant_state(value)
-            # if push_event and self.push_state_change_event:
-            #     self.state_change_event.push({self.owner.instance_name : value})
+            if push_event and self.state_change_event is not None:
+                self.state_change_event.push(value)
             if skip_callbacks:
                 return 
             if previous_state in self.on_exit:
@@ -199,7 +197,7 @@ class StateMachine:
         Supply unbound method for checking methods as state machine is specified at class level
         when the methods are unbound. 
         """
-        for state, objects in self.machine.items():
+        for objects in self.machine.values():
             if object in objects:
                 return True 
         return False

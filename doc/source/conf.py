@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.abspath(f'..{os.sep}..'))
 # -- Project information -----------------------------------------------------
 
 project = 'hololinked'
-copyright = '2023, Vignesh Venkatasubramanian Vaidyanathan'
+copyright = '2024, Vignesh Venkatasubramanian Vaidyanathan'
 author = 'Vignesh Venkatasubramanian Vaidyanathan'
 
 # The full version, including alpha/beta/rc tags
@@ -58,7 +58,10 @@ html_sidebars = {
 }
 
 html_theme_options = {
-    "secondary_sidebar_items": ["page-toc", "sourcelink"]
+    "secondary_sidebar_items": {
+        "**" : ["page-toc", "sourcelink"],
+        "**/*thing*" : ["sourcelink"]
+    }
 }
 
 pygments_style = 'vs'

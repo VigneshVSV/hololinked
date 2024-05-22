@@ -84,3 +84,8 @@ class CriticalEvent(Event):
         Method to be called by RPC server when an acknowledgement is received. Not for user to be set.
         """
         self._synchronize_event.set()
+
+
+__all__ = [
+    Event.__name__,
+]

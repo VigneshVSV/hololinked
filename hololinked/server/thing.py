@@ -26,10 +26,10 @@ class ThingMeta(ParameterizedMetaclass):
     """
     Metaclass for Thing, implements a ``__post_init__()`` call and instantiation of a container for properties' descriptor 
     objects. During instantiation of ``Thing``, first serializers, loggers and database connection are created, after which
-    the user ``__init__`` is called. In ``__post_init__()`` the exposed resources are segregated while accounting for 
-    any ``Event`` objects or instance specific properties created during init. Message brokers creation
-    and loading of properties from database happen while calling ``run()``. Properties can also be explicity loaded from 
-    database before calling ``run()`` during or after init. 
+    the user ``__init__`` is called. In ``__post_init__()``, that runs after user's ``__init__()``, the exposed resources 
+    are segregated while accounting for any ``Event`` objects or instance specific properties created during init. Properties 
+    are also loaded from database at this time. One can overload ``__post_init__()`` for any property operations after loading
+    from database.
     """
     
     @classmethod
@@ -75,7 +75,7 @@ class ThingMeta(ParameterizedMetaclass):
 
 class Thing(Parameterized, metaclass=ThingMeta):
     """
-    Subclass from here to expose python objects on the network
+    Subclass from here to expose python objects on the network (with HTTP/TCP) or to other processes (ZeroMQ)
     """
 
     __server_type__ = ServerTypes.THING
@@ -87,27 +87,27 @@ class Thing(Parameterized, metaclass=ThingMeta):
                         in the HTTP Server - (http(s)://{domain and sub domain}/{instance name}). 
                         If creating a big system, instance names are recommended to be unique.""") # type: str
     logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, remote=False, 
-                        doc="""Logger object to print log messages, should be instance of ``logging.Logger``. Default 
-                            logger with a stream handler and streamable log messages over network is created 
+                        doc="""logging.Logger instance to print log messages. Default 
+                            logger with a IO-stream handler and network accessible handler is created 
                             if none supplied.""") # type: logging.Logger
     rpc_serializer = ClassSelector(class_=(BaseSerializer, str), 
                         allow_None=True, default='json', remote=False,
                         doc="""Serializer used for exchanging messages with python RPC clients. Subclass the base serializer 
                         or one of the available serializers to implement your own serialization requirements; or, register 
-                        type replacements. Some other serializers like MessagePack improve performance many times over 
-                        and can be useful for data intensive applications within python. Default is JSON.""") # type: BaseSerializer
+                        type replacements. Default is JSON. Some serializers like MessagePack improve performance many times 
+                        compared to JSON and can be useful for data intensive applications within python.""") # type: BaseSerializer
     json_serializer = ClassSelector(class_=(JSONSerializer, str), default=None, allow_None=True, remote=False,
                         doc="""Serializer used for exchanging messages with a HTTP clients,
                             subclass JSONSerializer to implement your own JSON serialization requirements; or, 
-                            register type replacements.""") # type: JSONSerializer
+                            register type replacements. Other types of serializers are currently not allowed for HTTP clients.""") # type: JSONSerializer
         
     # remote paramerters
     state = String(default=None, allow_None=True, URL_path='/state', readonly=True,
                 fget= lambda self : self.state_machine.current_state if hasattr(self, 'state_machine') else None,  
-                doc='current state machine state if state machine present') #type: typing.Optional[str]
+                doc="current state machine's state if state machine present, None indicates absence of state machine.") #type: typing.Optional[str]
     
     httpserver_resources = Property(readonly=True, URL_path='/resources/http-server', 
-                        doc="object's resources exposed to HTTP client (through ``hololinked.server.HTTPServer``)", 
+                        doc="object's resources exposed to HTTP client (through ``hololinked.server.HTTPServer.HTTPServer``)", 
                         fget=lambda self: self._httpserver_resources ) # type: typing.Dict[str, HTTPResource]
     rpc_resources = Property(readonly=True, URL_path='/resources/object-proxy', 
                         doc="object's resources exposed to RPC client, similar to HTTP resources but differs in details.", 
@@ -117,27 +117,22 @@ class Thing(Parameterized, metaclass=ThingMeta):
                         in details.""",
                         fget=lambda self: GUIResources().build(self)) # type: typing.Dict[str, typing.Any]
     GUI = Property(default=None, allow_None=True, URL_path='/resources/web-gui', fget = lambda self : self._gui,
-                        doc="GUI specified here will become visible at GUI tab of hololinked-portal dashboard tool") # type: typing.Optional[ReactApp]
-    
+                        doc="GUI specified here will become visible at GUI tab of hololinked-portal dashboard tool")     
     object_info = Property(doc="contains information about this object like the class name, script location etc.",
                         URL_path='/object-info') # type: ThingInformation
-    events = Property(readonly=True, URL_path='/events', 
-                        doc="returns a dictionary with two fields containing event name and event information") # type: typing.Dict[str, typing.Any]
     
 
     def __new__(cls, *args, **kwargs):
-        # defines some internal fixed attributes
         obj = super().__new__(cls)
-        # objects created by us that require no validation but cannot be modified are called _internal_fixed_attributes
+        # defines some internal fixed attributes. attributes created by us that require no validation but 
+        # cannot be modified are called _internal_fixed_attributes
         obj._internal_fixed_attributes = ['_internal_fixed_attributes', 'instance_resources',
                                         '_httpserver_resources', '_rpc_resources', '_owner']        
-        # objects given by user which we need to validate (mostly descriptors)
         return obj
 
 
     def __init__(self, *, instance_name : str, logger : typing.Optional[logging.Logger] = None, 
-                serializer : typing.Optional[JSONSerializer] = None,
-                **kwargs) -> None:
+                serializer : typing.Optional[JSONSerializer] = None, **kwargs) -> None:
         """
         Parameters
         ----------
@@ -146,22 +141,33 @@ class Thing(Parameterized, metaclass=ThingMeta):
             for example - creating zmq socket address, tables in databases, and to identify the instance in the HTTP Server - 
             (http(s)://{domain and sub domain}/{instance name}). 
             If creating a big system, instance names are recommended to be unique.
-        logger: logging.Logger, Optional
-            Logger object to print log messages, should be instance of ``logging.Logger``. Default 
-            logger with a stream handler and streamable log messages over network is created 
-            if none supplied.
-        serializer: JSONSerializer, Optional
-            JSON serializer. To use separate serializer for python clients and cross-platform 
-            HTTP clients, use keyword arguments rpc_serializer and json_serializer
+        logger: logging.Logger, optional
+            logging.Logger instance to print log messages. Default logger with a IO-stream handler and network 
+            accessible handler is created if none supplied.
+        serializer: JSONSerializer, optional
+            custom JSON serializer. To use separate serializer for python RPC clients and cross-platform 
+            HTTP clients, use keyword arguments rpc_serializer and json_serializer and leave this argument at None.
         **kwargs:
-            rpc_serializer: BaseSerializer | str, Optional 
-                serializer for object proxy from hololinked.client. Some other serializers like 
-                MessagePack improve performance many times over and can be useful for data intensive
-                applications within python. if string values are supplied, supported are 'msgpack', 'pickle',
-                'serpent', 'json'
-            json_serializer: JSONSerializer, Optional
+            rpc_serializer: BaseSerializer | str, optional 
+                Serializer used for exchanging messages with python RPC clients. If string value is supplied, 
+                supported are 'msgpack', 'pickle', 'serpent', 'json'. Subclass the base serializer 
+                ``hololinked.server.serializer.BaseSerializer`` or one of the available serializers to implement your 
+                own serialization requirements; or, register type replacements. Default is JSON. Some serializers like 
+                MessagePack improve performance many times  compared to JSON and can be useful for data intensive 
+                applications within python. The serializer supplied here must also be supplied to object proxy from 
+                ``hololinked.client``. 
+            json_serializer: JSONSerializer, optional
                 serializer used for cross platform HTTP clients. 
-            use_default_db
+            use_default_db: bool, Default False
+                if True, default SQLite database is created where properties can be stored and loaded. There is no need to supply
+                any database credentials. This value can also be set as a class attribute, see docs.
+            logger_remote_access: bool, Default True
+                if False, network accessible handler is not attached to the logger. This value can also be set as a 
+                class attribute, see docs.
+            db_config_file: str, optional
+                if not using a default database, supply a JSON configuration file to create a connection. Check documentaion
+                of ``hololinked.server.database``.  
+
         """
         if instance_name.startswith('/'):
             instance_name = instance_name[1:]
@@ -196,7 +202,13 @@ class Thing(Parameterized, metaclass=ThingMeta):
         self._event_publisher : typing.Optional[EventPublisher]
         self._gui = None # filler for a future feature
         self._prepare_resources()
+        self.load_properties_from_DB()
         self.logger.info(f"initialialised Thing class {self.__class__.__name__} with instance name {self.instance_name}")
+
+
+    @property
+    def properties(self):
+        return self.parameters
 
 
     def __setattr__(self, __name: str, __value: typing.Any) -> None:
@@ -214,8 +226,8 @@ class Thing(Parameterized, metaclass=ThingMeta):
 
     def _prepare_resources(self):
         """
-        this function analyses the members of the class which have 'scadapy' variable declared
-        and extracts information 
+        this method analyses the members of the class which have '_remote_info' variable declared
+        and extracts information necessary to make RPC functionality work.
         """
         # The following dict is to be given to the HTTP server
         self._rpc_resources, self._httpserver_resources, self.instance_resources = get_organised_resources(self)
@@ -329,7 +341,8 @@ class Thing(Parameterized, metaclass=ThingMeta):
     @property
     def event_publisher(self) -> EventPublisher:
         """
-        event publishing PUB socket owning object
+        event publishing PUB socket owning object, valid only after 
+        ``run()`` is called, otherwise raises AttributeError.
         """
         try:
             return self._event_publisher 
@@ -341,19 +354,28 @@ class Thing(Parameterized, metaclass=ThingMeta):
         if hasattr(self, '_event_publisher'):
             raise AttributeError("Can set event publisher only once.")
         
-        def recusively_set_events_publisher(obj : Thing, publisher : EventPublisher) -> None:
+        def recusively_set_event_publisher(obj : Thing, publisher : EventPublisher) -> None:
             for name, evt in inspect._getmembers(obj, lambda o: isinstance(o, Event), getattr_without_descriptor_read):
                 assert isinstance(evt, Event), "object is not an event"
                 # above is type definition
                 evt.publisher = publisher 
                 evt._remote_info.socket_address = publisher.socket_address
+            for prop in self.properties.descriptors.values():
+                if prop._observable_event is not None:
+                    assert isinstance(prop._observable_event, Event)
+                    prop._observable_event.publisher = publisher 
+                    prop._observable_event._remote_info.socket_address = publisher.socket_address
+            if (hasattr(obj, 'state_machine') and isinstance(obj.state_machine, StateMachine) and 
+                        obj.state_machine.state_change_event is not None):                
+                obj.state_machine.state_change_event.publisher = publisher 
+                obj.state_machine.state_change_event._remote_info.socket_address = publisher.socket_address
             for name, obj in inspect._getmembers(obj, lambda o: isinstance(o, Thing), getattr_without_descriptor_read):
                 if name == '_owner':
                     continue 
-                recusively_set_events_publisher(obj, publisher)
-            obj._event_publisher = publisher
+                recusively_set_event_publisher(obj, publisher)
+            obj._event_publisher = publisher            
             
-        recusively_set_events_publisher(self, value)
+        recusively_set_event_publisher(self, value)
 
 
     @action(URL_path='/properties/db-reload', http_method=HTTP_METHODS.POST)
@@ -404,7 +426,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         
         Parameters
         ----------
-        authority: str, Optional
+        authority: str, optional
             protocol with DNS or protocol with hostname+port, for example 'https://my-pc:8080' or 
             'http://my-pc:9090' or 'https://IT-given-domain-name'. If absent, a value will be automatically
             given using ``socket.gethostname()`` and the port at which the last HTTPServer (``hololinked.server.HTTPServer``) 
@@ -414,11 +436,11 @@ class Thing(Parameterized, metaclass=ThingMeta):
         hololinked.wot.td.ThingDescription
             represented as an object in python, gets automatically serialized to JSON when pushed out of the socket. 
         """
-        # allow_loose_schema: bool, Optional, Default False 
+        # allow_loose_schema: bool, optional, Default False 
         #     Experimental properties, actions or events for which schema was not given will be supplied with a suitable 
         #     value for node-wot to ignore validation or claim the accessed value for complaint with the schema.
         #     In other words, schema validation will always pass.  
-        from ..wot import ThingDescription
+        from .td import ThingDescription
         return ThingDescription().build(self, authority or self._object_info.http_server,
                                             allow_loose_schema=False) #allow_loose_schema)
     
@@ -459,16 +481,14 @@ class Thing(Parameterized, metaclass=ThingMeta):
             irrespective of origin. 
         
         **kwargs
-            socket_address: str, Optional
+            socket_address: str, optional
                 socket_address for TCP access, for example: tcp://0.0.0.0:61234
         """
         # expose_eventloop: bool, False
         #     expose the associated Eventloop which executes the object. This is generally useful for remotely 
         #     adding more objects to the same event loop.
         # dont specify http server as a kwarg, as the other method run_with_http_server has to be used
-
-        self.load_properties_from_DB()
-
+        
         context = zmq.asyncio.Context()
         self.rpc_server = RPCServer(
                                 instance_name=self.instance_name, 
@@ -508,7 +528,8 @@ class Thing(Parameterized, metaclass=ThingMeta):
                 # host : str = None, 
                 allowed_clients : typing.Union[str, typing.Iterable[str]] = None,   
                 ssl_context : ssl.SSLContext = None, # protocol_version : int = 1, 
-                network_interface : str = 'Ethernet', **kwargs):
+                # network_interface : str = 'Ethernet', 
+                **kwargs):
         """
         Quick-start ``Thing`` server by creating a default eventloop & servers. This 
         method is fully blocking.
@@ -521,9 +542,6 @@ class Thing(Parameterized, metaclass=ThingMeta):
             set custom IP address, default is localhost (0.0.0.0)
         ssl_context: ssl.SSLContext | None
             use it for highly customized SSL context to provide encrypted communication
-        network_interface: str
-            Currently there is no logic to detect the IP addresss (as externally visible) correctly, therefore please 
-            send the network interface name to retrieve the IP. If a DNS server is present, you may leave this field
         allowed_clients
             serves request and sets CORS only from these clients, other clients are rejected with 403. Unlike pure CORS
             feature, the server resource is not even executed if the client is not an allowed client.
@@ -537,6 +555,9 @@ class Thing(Parameterized, metaclass=ThingMeta):
             event_handler: BaseHandler | EventHandler
                 custom event handler of your choice for handling events
         """
+        # network_interface: str
+        #     Currently there is no logic to detect the IP addresss (as externally visible) correctly, therefore please 
+        #     send the network interface name to retrieve the IP. If a DNS server is present, you may leave this field
         # host: str
         #     Host Server to subscribe to coordinate starting sequence of things & web GUI
         
@@ -545,7 +566,8 @@ class Thing(Parameterized, metaclass=ThingMeta):
         http_server = HTTPServer(
             [self.instance_name], logger=self.logger, serializer=self.json_serializer, 
             port=port, address=address, ssl_context=ssl_context,
-            network_interface=network_interface, allowed_clients=allowed_clients,
+            allowed_clients=allowed_clients,
+            # network_interface=network_interface, 
             zmq_protocol=ZMQ_PROTOCOLS.INPROC,
             **kwargs,
         )
