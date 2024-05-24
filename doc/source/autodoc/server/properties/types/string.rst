@@ -1,6 +1,5 @@
-.. toctree::
-    :hidden:
-    :maxdepth: 1
+``String``
+==========
 
 .. autoclass:: hololinked.server.properties.String
     :members:

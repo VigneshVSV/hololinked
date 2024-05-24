@@ -1,5 +1,5 @@
-ObjectProxy
-===========
+``ObjectProxy``
+===============
 
 .. autoclass:: hololinked.client.ObjectProxy
     :members: 

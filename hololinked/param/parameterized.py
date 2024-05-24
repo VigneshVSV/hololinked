@@ -450,10 +450,9 @@ class Parameter(metaclass=ParameterMetaclass):
             
     def validate_and_adapt(self, value : typing.Any) -> typing.Any:
         """
-        modify the given value if a proper logical reasoning can be given.
-        returns modified value. Should not be mostly used unless the data stored is quite complex by structure.
+        Validate the given value and adapt it if a proper logical reasoning can be given, for example, cropping a number
+        to its bounds. Returns modified value. 
         """
-        # raise NotImplementedError("overload this function in child class to validate your value and adapt it if necessary.")
         return value
      
     def _post_value_set(self, obj : typing.Union['Parameterized', typing.Any], value : typing.Any) -> None:
@@ -491,21 +490,29 @@ class Parameter(metaclass=ParameterMetaclass):
                 setattr(self,k,v)
         
     def getter(self, func : typing.Callable) -> typing.Callable:
+        """
+        Register a getter method by using this as a decorator.
+        """
         self.overloads['fget'] = func 
         return func
 
     def setter(self, func : typing.Callable) -> typing.Callable: 
+        """
+        Register a setter method by using this as a decorator. Getters are mandatory if setter is defined.
+        """
         self.overloads['fset'] = func
         return func
     
     def deleter(self, func : typing.Callable) -> typing.Callable: 
+        """
+        Register a deleter method by using this as a decorator. Getters & Setters are mandatory if deleter is defined.
+        """
         self.overloads['fdel'] = func
         return func
     
     def __call__(self, func: typing.Callable) -> "Parameter":
-        self.getter(func)
-        return self
-
+        return self.getter(func)
+      
     @classmethod
     def serialize(cls, value : typing.Any) -> typing.Any:
         "Given the parameter value, return a Python value suitable for serialization"

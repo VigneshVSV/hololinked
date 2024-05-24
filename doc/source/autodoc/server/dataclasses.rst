@@ -13,7 +13,7 @@ resources on the network. These classese are generally not for consumption by th
 
 
 .. autoclass:: hololinked.server.data_classes.RemoteResourceInfoValidator
-    :members: 
+    :members: to_dataclass
     :show-inheritance:
 
 |br|
@@ -37,12 +37,6 @@ resources on the network. These classese are generally not for consumption by th
 |br|
 
 .. autoclass:: hololinked.server.data_classes.ServerSentEvent
-    :members: 
-    :show-inheritance:
-
-|br|
-
-.. autoclass:: hololinked.server.data_classes.GUIResources
     :members: 
     :show-inheritance:
 

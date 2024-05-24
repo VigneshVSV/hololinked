@@ -1,6 +1,6 @@
-.. toctree::
-    :hidden:
-    :maxdepth: 1
+``ClassSelector``
+=================
+
 
 .. autoclass:: hololinked.server.properties.ClassSelector
     :members:

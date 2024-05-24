@@ -1,9 +1,5 @@
-Boolean
-=======
-
-.. toctree::
-    :hidden:
-    :maxdepth: 1
+``Boolean``
+===========
 
 .. autoclass:: hololinked.server.properties.Boolean
     :members:

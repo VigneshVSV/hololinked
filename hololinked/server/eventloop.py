@@ -51,8 +51,9 @@ class Consumer:
         self.kwargs = kwargs
 
 
+RemoteObject = Thing # reading convenience
 
-class EventLoop(Thing):
+class EventLoop(RemoteObject):
     """
     The EventLoop class implements a infinite loop where zmq ROUTER sockets listen for messages. Each consumer of the 
     event loop (an instance of Thing) listen on their own ROUTER socket and execute methods or allow read and write
@@ -77,6 +78,16 @@ class EventLoop(Thing):
                 log_level : int = logging.INFO, 
                 **kwargs
             ) -> None:
+        """
+        Parameters
+        ----------
+        instance_name: str
+            instance name of the event loop
+        things: List[Thing]
+            things to be run/served
+        log_level: int
+            log level of the event loop logger
+        """
         super().__init__(instance_name=instance_name, things=things, log_level=log_level, **kwargs)
         things = [] # type: typing.List[Thing]
         if self.expose:
@@ -191,7 +202,7 @@ class EventLoop(Thing):
     @classmethod
     def get_async_loop(cls):
         """
-        get or create an asnyc loop
+        get or automatically create an asnyc loop for the current thread.
         """
         try:
             loop = asyncio.get_event_loop()

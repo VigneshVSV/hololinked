@@ -1,5 +1,5 @@
-ThingMeta
-=========
+``ThingMeta``
+=============
 
 .. autoclass:: hololinked.server.thing.ThingMeta()
     :members: properties

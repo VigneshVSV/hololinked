@@ -120,7 +120,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
                         doc="GUI specified here will become visible at GUI tab of hololinked-portal dashboard tool")     
     object_info = Property(doc="contains information about this object like the class name, script location etc.",
                         URL_path='/object-info') # type: ThingInformation
-  
+    
 
     def __new__(cls, *args, **kwargs):
         obj = super().__new__(cls)

@@ -1,4 +1,4 @@
-Database
+database
 ========
 
 .. autoclass:: hololinked.server.database.ThingDB
@@ -9,4 +9,5 @@ Database
     :hidden:
     :maxdepth: 1
 
-    base_DB
+    helpers
+    baseDB

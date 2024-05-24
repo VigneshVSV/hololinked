@@ -1,5 +1,5 @@
-StateMachine
-============
+``StateMachine``
+================
 
 .. autoclass:: hololinked.server.state_machine.StateMachine()
     :members: valid, on_enter, on_exit, states, initial_state, machine, current_state

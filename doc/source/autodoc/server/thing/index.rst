@@ -1,5 +1,5 @@
-Thing
-=====
+``Thing``
+=========
 
 .. autoclass:: hololinked.server.thing.Thing()
     :members: instance_name, logger, state, rpc_serializer, json_serializer, 

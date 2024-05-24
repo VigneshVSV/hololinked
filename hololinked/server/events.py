@@ -10,8 +10,8 @@ from .data_classes import ServerSentEvent
 class Event:
     """
     Asynchronously push arbitrary messages to clients. Apart from default events created by the package (like state
-    change event, observable properties etc.), events are supposed to be created at '__init__' as a instance attribute, 
-    otherwise their publishing socket is unbound and will lead to ``AttributeError``.  
+    change event, observable properties etc.), events are supposed to be created at class level or at ``__init__`` 
+    as a instance attribute, otherwise their publishing socket is unbound and will lead to ``AttributeError``.  
 
     Parameters
     ----------

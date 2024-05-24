@@ -61,8 +61,7 @@ class Configuration:
     PWD_HASHER_MEMORY_COST - system view server password authentication memory cost. 
     Refer argon2-cffi docs.
 
-    USE_UVLOOP - signicantly faster event loop for Linux systems. Reads data from network faster. 
-                default False. 
+    USE_UVLOOP - signicantly faster event loop for Linux systems. Reads data from network faster. default False. 
 
     Parameters
     ----------

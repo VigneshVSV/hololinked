@@ -71,6 +71,9 @@ class DeserializedProperty: # not part of database
 
 
 class BaseDB:
+    """
+    Implements configuration file reader for all irrespective sync or async DB operation 
+    """
 
     def __init__(self, instance : Parameterized, serializer : typing.Optional[BaseSerializer] = None, 
                 config_file : typing.Union[str, None] = None) -> None:
@@ -78,7 +81,7 @@ class BaseDB:
         self.instance_name = instance.instance_name
         self.serializer = serializer
         self.URL = self.create_URL(config_file)
-        self._context = {}
+        self._batch_call_context = {}
 
 
     @classmethod
@@ -97,8 +100,7 @@ class BaseDB:
             
     def create_URL(self, config_file : str) -> str:
         """
-        auto chooses among the different supported databases based on config file
-        and creates the URL 
+        auto chooses among the different supported databases based on config file and creates the DB URL 
         """
         if config_file is None:
             folder = f'{global_config.TEMP_DIR}{os.sep}databases{os.sep}{pep8_to_dashed_URL(self.thing_instance.__class__.__name__.lower())}'
@@ -143,14 +145,16 @@ class BaseDB:
             return f"sqlite+{dialect}:///:memory:"
 
     @property
-    def in_context(self):
-        return threading.get_ident() in self._context
+    def in_batch_call_context(self):
+        return threading.get_ident() in self._batch_call_context
 
 
 class BaseAsyncDB(BaseDB):
     """
     Base class for an async database engine, implements configuration file reader, 
-    sqlalchemy engine & session creation.
+    sqlalchemy engine & session creation. Set ``async_db_engine`` boolean flag to True in ``Thing`` class 
+    to use this engine. Database operations are then scheduled in the event loop instead of blocking the current thread.
+    Scheduling happens after properties are set/written.
 
     Parameters
     ----------
@@ -158,8 +162,7 @@ class BaseAsyncDB(BaseDB):
         The database to open in the database server specified in config_file (see below)
     serializer: BaseSerializer
         The serializer to use for serializing and deserializing data (for example
-        property serializing before writing to database). Will be the same as
-        serializer supplied to ``Thing``.
+        property serializing before writing to database). Will be the same as rpc_serializer supplied to ``Thing``.
     config_file: str
         absolute path to database server configuration file
     """
@@ -177,8 +180,8 @@ class BaseAsyncDB(BaseDB):
 
 class BaseSyncDB(BaseDB):
     """
-    Base class for an synchronous (blocking) database engine, implements 
-    configuration file reader, sqlalchemy engine & session creation.
+    Base class for an synchronous (blocking) database engine, implements configuration file reader, sqlalchemy engine 
+    & session creation. Default DB engine for ``Thing`` & called immediately after properties are set/written.
 
     Parameters
     ----------
@@ -187,7 +190,7 @@ class BaseSyncDB(BaseDB):
     serializer: BaseSerializer
         The serializer to use for serializing and deserializing data (for example
         property serializing into database for storage). Will be the same as
-        serializer supplied to ``Thing``.
+        rpc_serializer supplied to ``Thing``.
     config_file: str
         absolute path to database server configuration file
     """
@@ -204,29 +207,27 @@ class BaseSyncDB(BaseDB):
 
 class ThingDB(BaseSyncDB):
     """
-    Database engine composed within ``Thing``, carries out database 
-    operations like storing object information, paramaters etc. 
+    Database engine composed within ``Thing``, carries out database operations like storing object information, properties 
+    etc. 
 
     Parameters
     ----------
     instance_name: str
-        ``instance_name`` of the ``Thing```
+        ``instance_name`` of the ``Thing``
     serializer: BaseSerializer
-        serializer used by the ``Thing``. The serializer to use for 
-        serializing and deserializing data (for example property serializing 
-        into database for storage).
+        serializer used by the ``Thing``. The serializer to use for serializing and deserializing data (for example 
+        property serializing into database for storage).
     config_file: str
         configuration file of the database server
     """
 
     def fetch_own_info(self): # -> ThingInformation:
         """
-        fetch ``Thing`` instance's own information, for schema see 
-        ``ThingInformation``.
-
+        fetch ``Thing`` instance's own information (some useful metadata which helps the ``Thing`` run).
+        
         Returns
         -------
-        info: Thing
+        ``ThingInformation``
         """
         if not inspect_database(self.engine).has_table("things"):
             return
@@ -241,10 +242,144 @@ class ThingDB(BaseSyncDB):
             else:
                 raise DatabaseError("Multiple things with same instance name found, either cleanup database/detach/make new")
             
-    def get_all_properties(self, deserialized : bool = True) -> typing.Sequence[
-                            typing.Union[SerializedProperty, DeserializedProperty]]:
+    
+    def get_property(self, property : typing.Union[str, Property], deserialized : bool = True) -> typing.Any:
         """
-        read all paramaters of the ``Thing`` instance.
+        fetch a single property.
+
+        Parameters
+        ----------
+        property: str | Property
+            string name or descriptor object
+        deserialized: bool, default True
+            deserialize the property if True
+
+        Returns
+        -------
+        value: Any
+            property value
+        """
+        with self.sync_session() as session:
+            name = property if isinstance(property, str) else property.name
+            stmt = select(SerializedProperty).filter_by(instance_name=self.instance_name, name=name)
+            data = session.execute(stmt)
+            prop = data.scalars().all() # type: typing.Sequence[SerializedProperty]
+            if len(prop) == 0:
+                raise DatabaseError(f"property {name} not found in database")
+            elif len(prop) > 1:
+                raise DatabaseError("multiple properties with same name found") # Impossible actually
+            if not deserialized:
+                return prop[0]
+            return self.serializer.loads(prop[0].serialized_value)
+            
+
+    def set_property(self, property : typing.Union[str, Property], value : typing.Any) -> None:
+        """
+        change the value of an already existing property.
+
+        Parameters
+        ----------
+        property: str | Property
+            string name or descriptor object
+        value: Any
+            value of the property
+        """
+        if self.in_batch_call_context:
+            self._batch_call_context[threading.get_ident()][property.name] = value
+            return
+        with self.sync_session() as session:
+            name = property if isinstance(property, str) else property.name
+            stmt = select(SerializedProperty).filter_by(instance_name=self.instance_name, 
+                                                name=name)
+            data = session.execute(stmt)
+            prop = data.scalars().all()
+            if len(prop) > 1:
+                raise DatabaseError("multiple properties with same name found") # Impossible actually
+            if len(prop) == 1:
+                prop = prop[0]
+                prop.serialized_value = self.serializer.dumps(value)
+            else:
+                prop = SerializedProperty(
+                        instance_name=self.instance_name, 
+                        name=name,
+                        serialized_value=self.serializer.dumps(getattr(self.thing_instance, name))
+                    )
+                session.add(prop)
+            session.commit()
+
+        
+    def get_properties(self, properties : typing.Dict[typing.Union[str, Property], typing.Any],
+                                                        deserialized : bool = True) -> typing.Dict[str, typing.Any]:
+        """
+        get multiple properties at once.
+
+        Parameters
+        ----------
+        properties: List[str | Property]
+            string names or the descriptor of the properties as a list
+
+        Returns
+        -------
+        value: Dict[str, Any]
+            property names and values as items
+        """
+        with self.sync_session() as session:
+            names = []
+            for obj in properties.keys():
+                names.append(obj if isinstance(obj, str) else obj.name)
+            stmt = select(SerializedProperty).filter_by(instance_name=self.instance_name).filter(
+                                    SerializedProperty.name.in_(names))
+            data = session.execute(stmt)
+            unserialized_props = data.scalars().all()
+            props = dict()
+            for prop in unserialized_props:
+                props[prop.name] = prop.serialized_value if not deserialized else self.serializer.loads(prop.serialized_value)
+            return props
+
+
+    def set_properties(self, properties : typing.Dict[typing.Union[str, Property], typing.Any]) -> None:
+        """
+        change the values of already existing few properties at once
+
+        Parameters
+        ----------
+        properties: Dict[str | Property, Any]
+            string names or the descriptor of the property and any value as dictionary pairs 
+        """
+        if self.in_batch_call_context:
+            for obj, value in properties.items():
+                name = obj if isinstance(obj, str) else obj.name
+                self._batch_call_context[threading.get_ident()][name] = value
+            return
+        with self.sync_session() as session:
+            names = []
+            for obj in properties.keys():
+                names.append(obj if isinstance(obj, str) else obj.name)
+            stmt = select(SerializedProperty).filter_by(instance_name=self.instance_name).filter(
+                                    SerializedProperty.name.in_(names))
+            data = session.execute(stmt)
+            db_props = data.scalars().all()
+            for obj, value in properties.items():
+                name = obj if isinstance(obj, str) else obj.name
+                db_prop = list(filter(lambda db_prop: db_prop.name == name, db_props)) # type: typing.List[SerializedProperty]
+                if len(prop) > 1:
+                    raise DatabaseError("multiple properties with same name found") # Impossible actually
+                if len(db_prop) == 1:
+                    db_prop = db_prop[0] # type: SerializedProperty
+                    db_prop.serialized_value = self.serializer.dumps(value)
+                else:
+                    prop = SerializedProperty(
+                        instance_name=self.instance_name, 
+                        name=name,
+                        serialized_value=self.serializer.dumps(value)
+                    )
+                    session.add(prop)
+            session.commit()
+
+            
+    def get_all_properties(self, deserialized : bool = True) -> typing.Dict[str, typing.Any]:
+        """
+        read all properties of the ``Thing`` instance.
 
         Parameters
         ----------
@@ -254,20 +389,17 @@ class ThingDB(BaseSyncDB):
         with self.sync_session() as session:
             stmt = select(SerializedProperty).filter_by(instance_name=self.instance_name)
             data = session.execute(stmt)
-            existing_params = data.scalars().all() #type: typing.Sequence[SerializedProperty]
+            existing_props = data.scalars().all() #type: typing.Sequence[SerializedProperty]
             if not deserialized:
-                return existing_params
-            params_data = []
-            for param in existing_params:
-                params_data.append(DeserializedProperty(
-                    instance_name=self.instance_name,
-                    name = param.name, 
-                    value = self.serializer.loads(param.serialized_value)
-                ))
-            return params_data
+                return existing_props
+            props = dict()
+            for prop in existing_props:
+                props[prop.name] = self.serializer.loads(prop.serialized_value)
+            return props
+        
         
     def create_missing_properties(self, properties : typing.Dict[str, Property],
-                            get_missing_properties : bool = False) -> None:
+                            get_missing_property_names : bool = False) -> None:
         """
         create any and all missing properties of ``Thing`` instance
         in database.
@@ -280,135 +412,31 @@ class ThingDB(BaseSyncDB):
         Returns
         -------
         List[str]
-            list of missing properties if get_missing_paramaters is True
+            list of missing properties if get_missing_propertys is True
         """
-        missing_params = []
+        missing_props = []
         with self.sync_session() as session:
-            existing_params = self.get_all_properties()
-            existing_names = [p.name for p in existing_params]
-            for name, new_param in properties.items():
-                if name not in existing_names: 
-                    param = SerializedProperty(
+            existing_props = self.get_all_properties()
+            for name, new_prop in properties.items():
+                if name not in existing_props: 
+                    prop = SerializedProperty(
                         instance_name=self.instance_name, 
-                        name=new_param.name, 
+                        name=new_prop.name, 
                         serialized_value=self.serializer.dumps(getattr(self.thing_instance, 
-                                                                new_param.name))
+                                                                new_prop.name))
                     )
-                    session.add(param)
-                    missing_params.append(name)
+                    session.add(prop)
+                    missing_props.append(name)
             session.commit()
-        if get_missing_properties:
-            return missing_params
+        if get_missing_property_names:
+            return missing_props
         
-    def get_property(self, property : typing.Union[str, Property], 
-                        deserialized : bool = True) -> typing.Sequence[typing.Union[SerializedProperty, DeserializedProperty]]:
-        """
-        read a paramater of the ``Thing`` instance.
-
-        Parameters
-        ----------
-        property: str | Property
-            string name or descriptor object
-        deserialized: bool, default True
-            deserilize the properties if True
-        """
-        with self.sync_session() as session:
-            name = property if isinstance(property, str) else property.name
-            stmt = select(SerializedProperty).filter_by(instance_name=self.instance_name, name=name)
-            data = session.execute(stmt)
-            param = data.scalars().all() #type: typing.Sequence[SerializedProperty]
-            if len(param) == 0:
-                raise DatabaseError(f"property {name} not found in datanbase ")
-            elif len(param) > 1:
-                raise DatabaseError("multiple properties with same name found") # Impossible actually
-            if not deserialized:
-                return param[0]
-            return DeserializedProperty(
-                    instance_name=param[0].instance_name,
-                    name = param[0].name, 
-                    value = self.serializer.loads(param[0].serialized_value)
-                )
-          
-    def set_property(self, property : typing.Union[str, Property], value : typing.Any) -> None:
-        """
-        change the value of an already existing property
-
-        Parameters
-        ----------
-        property: Property
-            descriptor of the property
-        value: Any
-            value of the property
-        """
-        if self.in_context:
-            self._context[threading.get_ident()][property.name] = value
-            return
-        with self.sync_session() as session:
-            name = property if isinstance(property, str) else property.name
-            stmt = select(SerializedProperty).filter_by(instance_name=self.instance_name, 
-                                                name=name)
-            data = session.execute(stmt)
-            param = data.scalars().all()
-            if len(param) > 1:
-                raise DatabaseError("")
-            if len(param) == 1:
-                param = param[0]
-                param.serialized_value = self.serializer.dumps(value)
-            else:
-                param = SerializedProperty(
-                        instance_name=self.instance_name, 
-                        name=name,
-                        serialized_value=self.serializer.dumps(getattr(self.thing_instance, name))
-                    )
-                session.add(param)
-            session.commit()
-                
-
-    def set_properties(self, properties : typing.Dict[typing.Union[str, Property], typing.Any]) -> None:
-        """
-        change the value of an already existing property
-
-        Parameters
-        ----------
-        property: Property
-            descriptor of the property
-        value: Any
-            value of the property
-        """
-        if self.in_context:
-            for obj, value in properties.items():
-                name = obj if isinstance(obj, str) else obj.name
-                self._context[threading.get_ident()][name] = value
-            return
-        with self.sync_session() as session:
-            names = []
-            for obj in properties.keys():
-                names.append(obj if isinstance(obj, str) else obj.name)
-            stmt = select(SerializedProperty).filter_by(instance_name=self.instance_name).filter(
-                                    SerializedProperty.name.in_(names))
-            data = session.execute(stmt)
-            db_params = data.scalars().all()
-            for obj, value in properties.items():
-                name = obj if isinstance(obj, str) else obj.name
-                db_param = list(filter(lambda db_param: db_param.name == name, db_params)) # type: typing.List[SerializedProperty]
-                if len(db_param) > 0:
-                    db_param = db_param[0]
-                    db_param.serialized_value = self.serializer.dumps(value)
-                else:
-                    param = SerializedProperty(
-                        instance_name=self.instance_name, 
-                        name=name,
-                        serialized_value=self.serializer.dumps(value)
-                    )
-                    session.add(param)
-            session.commit()
-     
-
+   
 
 class batch_db_commit:
     """
-    Context manager to write multiple properties to database at once. Useful for sequential writes 
-    to properties with database settings. 
+    Context manager to write multiple properties to database at once. Useful for sequential sets/writes of multiple properties 
+    which has db_commit or db_persist set to True, but only write their values to database at once. 
     """
     def __init__(self, db_engine : ThingDB) -> None:
         self.db_engine = db_engine

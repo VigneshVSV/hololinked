@@ -3,8 +3,8 @@
     <br />
 
 
-BaseZMQ
-=======
+Base ZMQ
+========
 
 .. autoclass:: hololinked.server.zmq_message_brokers.BaseZMQ
     :members: 
@@ -15,6 +15,10 @@ BaseZMQ
     :show-inheritance:
 
 .. autoclass:: hololinked.server.zmq_message_brokers.BaseAsyncZMQ
+    :members:
+    :show-inheritance:
+
+.. autoclass:: hololinked.server.zmq_message_brokers.BaseZMQServer
     :members:
     :show-inheritance:
 

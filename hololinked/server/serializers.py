@@ -46,7 +46,7 @@ from .utils import format_exception_as_json
 class BaseSerializer(object):
     """
     Base class for (de)serializer implementations. All serializers must inherit this class 
-    and overloads dumps() and loads() to be usable by the ZMQ message brokers. Any serializer 
+    and overload dumps() and loads() to be usable by the ZMQ message brokers. Any serializer 
     that returns bytes when serialized and a python object on deserialization will be accepted. 
     Serialization and deserialization errors will be passed as invalid message type 
     (see ZMQ messaging contract) from server side and a exception will be raised on the client.  
@@ -77,7 +77,7 @@ class BaseSerializer(object):
 dict_keys = type(dict().keys())
 
 class JSONSerializer(BaseSerializer):
-    "(de)serializer that wraps the msgspec json serialization protocol, default serializer for HTTP clients."
+    "(de)serializer that wraps the msgspec JSON serialization protocol, default serializer for all clients."
 
     _type_replacements = {}
 
@@ -134,7 +134,7 @@ class JSONSerializer(BaseSerializer):
 
 
 class PythonBuiltinJSONSerializer(JSONSerializer):
-    "(de)serializer that wraps the python builtin json serialization protocol."
+    "(de)serializer that wraps the python builtin JSON serialization protocol."
 
     def __init__(self) -> None:
         super().__init__() 
@@ -205,7 +205,11 @@ class SerpentSerializer(BaseSerializer):
 
 
 class MsgpackSerializer(BaseSerializer):
-    "(de)serializer that wraps the msgspec MessagePack serialization protocol, default serializer for RPC clients."
+    """
+    (de)serializer that wraps the msgspec MessagePack serialization protocol, recommended serializer for ZMQ based 
+    high speed applications. Set an instance of this serializer to both ``Thing.rpc_serializer`` and 
+    ``hololinked.client.ObjectProxy``.
+    """
 
     def __init__(self) -> None:
         super().__init__()

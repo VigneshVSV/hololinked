@@ -1,5 +1,5 @@
-RemoteAccessHandler
-===================
+``RemoteAccessHandler``
+=======================
 
 .. autoclass:: hololinked.server.logger.RemoteAccessHandler()
     :show-inheritance:

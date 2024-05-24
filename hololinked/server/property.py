@@ -212,6 +212,8 @@ class Property(Parameter):
                 self._observable_event.push(value)
         return super()._post_value_set(obj, value)
     
+    
+    
    
 
 __property_info__ = [
