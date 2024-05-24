@@ -76,3 +76,5 @@ numpydoc_show_class_members = False
 autodoc_member_order = 'bysource'
 
 today_fmt = '%d.%m.%Y %H:%M'
+
+

@@ -14,26 +14,9 @@ from .events import Event
 
 class StateMachine:
     """
-    A container class for state machine related information.  
-
-    Parameters
-    ----------
-    states: Enum
-        enumeration of states 
-    initial_state: str 
-        initial state of machine 
-    push_state_change_event : bool, default True
-        when the state changes, an event is pushed with the new state
-    on_enter: Dict[str, Callable | Property] 
-        callbacks to be invoked when a certain state is entered. It is to be specified 
-        as a dictionary with the states being the keys
-    on_exit: Dict[str, Callable | Property]
-        callbacks to be invoked when a certain state is exited. 
-        It is to be specified as a dictionary with the states being the keys
-    **machine:
-        state name: List[Callable, Property]
-            directly pass the state name as an argument along with the methods/properties which are allowed to execute 
-            in that state
+    A container class for state machine related information. Each ``Thing`` class can only have one state machine  
+    instantiated in a reserved class-level attribute ``state_machine``. The ``state`` attribute defined at the ``Thing``
+    can be subscribed for state change events from this state machine. 
     """
     initial_state = ClassSelector(default=None, allow_None=True, constant=True, class_=(Enum, str), 
                         doc="initial state of the machine") # type: typing.Union[Enum, str]
@@ -47,7 +30,7 @@ class StateMachine:
                         specfied as map with state as keys and callbacks as list""") # typing.Dict[str, typing.List[typing.Callable]]
     machine = TypedDict(default=None, allow_None=True, key_type=str, item_type=(list, tuple),
                         doc="the machine specification with state as key and objects as list") # typing.Dict[str, typing.List[typing.Callable, Property]]
-    exists = Boolean(default=False, readonly=True, fget=lambda self: self._exists, 
+    valid = Boolean(default=False, readonly=True, fget=lambda self: self._valid, 
                         doc="internally computed, True if states, initial_states and the machine is valid")
     
     def __init__(self, 
@@ -57,7 +40,27 @@ class StateMachine:
             on_exit  : typing.Dict[str, typing.Union[typing.List[typing.Callable], typing.Callable]] = {}, 
             **machine : typing.Dict[str, typing.Union[typing.Callable, Property]]
         ) -> None:
-        self._exists = False
+        """
+        Parameters
+        ----------
+        states: Enum
+            enumeration of states 
+        initial_state: str 
+            initial state of machine 
+        push_state_change_event : bool, default True
+            when the state changes, an event is pushed with the new state
+        on_enter: Dict[str, Callable | Property] 
+            callbacks to be invoked when a certain state is entered. It is to be specified 
+            as a dictionary with the states being the keys
+        on_exit: Dict[str, Callable | Property]
+            callbacks to be invoked when a certain state is exited. 
+            It is to be specified as a dictionary with the states being the keys
+        **machine:
+            state name: List[Callable, Property]
+                directly pass the state name as an argument along with the methods/properties which are allowed to execute 
+                in that state
+        """
+        self._valid = False
         self.on_enter = on_enter
         self.on_exit  = on_exit
         # None cannot be passed in, but constant is necessary. 
@@ -68,10 +71,9 @@ class StateMachine:
         if push_state_change_event:
             self.state_change_event = Event('state-change') 
 
-    # dont think ParameterizedMetaclass is the correct type, should be Parameterized
     def _prepare(self, owner : Parameterized) -> None:
         if self.states is None and self.initial_state is None:    
-            self._exists = False 
+            self._valid = False 
             self._state = None
             return
         elif self.initial_state not in self.states:
@@ -125,7 +127,7 @@ class StateMachine:
             for obj in self.on_exit[state]: # type: ignore
                 if not isinstance(obj, (FunctionType, MethodType)):
                     raise TypeError(f"on_enter accept only methods. Given type {type(obj)}.")     
-        self._exists = True
+        self._valid = True
         
     def __contains__(self, state : typing.Union[str, StrEnum]):
         if isinstance(self.states, EnumMeta) and state in self.states.__members__:
@@ -159,8 +161,8 @@ class StateMachine:
     def set_state(self, value : typing.Union[str, StrEnum, Enum], push_event : bool = True, 
                 skip_callbacks : bool = False) -> None:
         """ 
-        set state of state machine. Also triggers state change callbacks if skip_callbacks=False. 
-        One can also set state using '=' operator of `current_state` property in which case 
+        set state of state machine. Also triggers state change callbacks if skip_callbacks=False and pushes a state 
+        change event when push_event=True. One can also set state using '=' operator of `current_state` property in which case 
         callbacks will be called. If originally an enumeration for the list of allowed states was supplied, 
         then an enumeration member must be used to set state. If a list of strings were supplied, then a string is accepted. 
 
@@ -169,9 +171,7 @@ class StateMachine:
         ValueError: 
             if the state is not found in the allowed states
         """
-        # and pushes a state change event when push_event=True. 
-        # and state change event will be pushed.
-        # when state change event works, add above in docs.
+    
         if value in self.states:
             previous_state = self._state
             self._state = self._get_machine_compliant_state(value)
@@ -193,8 +193,8 @@ class StateMachine:
 
     def has_object(self, object : typing.Union[Property, typing.Callable]) -> bool:
         """
-        returns True if specified object is found in any of the states of state machine. 
-        Supply unbound method for checking methods as state machine is specified at class level
+        returns True if specified object is found in any of the state machine states. 
+        Supply unbound method for checking methods, as state machine is specified at class level
         when the methods are unbound. 
         """
         for objects in self.machine.values():

@@ -28,8 +28,8 @@ class ThingMeta(ParameterizedMetaclass):
     objects. During instantiation of ``Thing``, first serializers, loggers and database connection are created, after which
     the user ``__init__`` is called. In ``__post_init__()``, that runs after user's ``__init__()``, the exposed resources 
     are segregated while accounting for any ``Event`` objects or instance specific properties created during init. Properties 
-    are also loaded from database at this time. One can overload ``__post_init__()`` for any property operations after loading
-    from database.
+    are also loaded from database at this time. One can overload ``__post_init__()`` for any operations that rely on properties
+    values loaded from database.
     """
     
     @classmethod
@@ -120,7 +120,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
                         doc="GUI specified here will become visible at GUI tab of hololinked-portal dashboard tool")     
     object_info = Property(doc="contains information about this object like the class name, script location etc.",
                         URL_path='/object-info') # type: ThingInformation
-    
+  
 
     def __new__(cls, *args, **kwargs):
         obj = super().__new__(cls)
@@ -374,7 +374,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
                     continue 
                 recusively_set_event_publisher(obj, publisher)
             obj._event_publisher = publisher            
-            
+
         recusively_set_event_publisher(self, value)
 
 

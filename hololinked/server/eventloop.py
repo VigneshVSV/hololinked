@@ -177,11 +177,11 @@ class EventLoop(Thing):
         start the eventloop
         """
         if not self.threaded:
-            _thing_executor = threading.Thread(target=self.run_thing_executor, args=(self.things,))
+            _thing_executor = threading.Thread(target=self.run_things_executor, args=(self.things,))
             _thing_executor.start()
         else: 
             for thing in self.things:
-                _thing_executor = threading.Thread(target=self.run_thing_executor, args=([thing],))
+                _thing_executor = threading.Thread(target=self.run_things_executor, args=([thing],))
                 _thing_executor.start()
         self.run_external_message_listener()
         if not self.threaded:
@@ -219,7 +219,7 @@ class EventLoop(Thing):
         self.request_listener_loop.close()
     
 
-    def run_thing_executor(self, things):
+    def run_things_executor(self, things):
         """
         Run ZMQ sockets which provide queued instructions to ``Thing``.
         This method is automatically called by ``run()`` method. 

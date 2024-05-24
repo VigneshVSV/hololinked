@@ -9,14 +9,16 @@ from .data_classes import ServerSentEvent
 
 class Event:
     """
-    Asynchronously push arbitrary messages to clients. 
+    Asynchronously push arbitrary messages to clients. Apart from default events created by the package (like state
+    change event, observable properties etc.), events are supposed to be created at '__init__' as a instance attribute, 
+    otherwise their publishing socket is unbound and will lead to ``AttributeError``.  
 
     Parameters
     ----------
     name: str
-        name of the event. specified name may contain dashes and can be used on client side to subscribe to this event.
+        name of the event, specified name may contain dashes and can be used on client side to subscribe to this event.
     URL_path: str
-        url path of the event if a HTTP server is used. only GET HTTP methods are supported. 
+        URL path of the event if a HTTP server is used. only GET HTTP methods are supported. 
     """
 
     def __init__(self, name : str, URL_path : typing.Optional[str] = None) -> None:
@@ -30,10 +32,16 @@ class Event:
 
     @property
     def owner(self):
+        """
+        Event owning ``Thing`` object.
+        """
         return self._owner        
         
     @property
     def publisher(self) -> "EventPublisher": 
+        """
+        Event publishing PUB socket owning object.
+        """
         return self._publisher
     
     @publisher.setter
@@ -54,10 +62,13 @@ class Event:
             payload of the event
         serialize: bool, default True
             serialize the payload before pushing, set to False when supplying raw bytes
-        rpc_clients: bool, default True
-            pushes event to RPC clients
-        http_clients: bool, default True
-            pushed event to HTTP clients
+        **kwargs:
+            rpc_clients: bool, default True
+                pushes event to RPC clients, irrelevant if ``Thing`` uses only one type of serializer (refer to 
+                difference between rpc_serializer and json_serializer).
+            http_clients: bool, default True
+                pushed event to HTTP clients, irrelevant if ``Thing`` uses only one type of serializer (refer to 
+                difference between rpc_serializer and json_serializer).
         """
         self.publisher.publish(self._unique_identifier, data, rpc_clients=kwargs.get('rpc_clients', True), 
                                     http_clients=kwargs.get('http_clients', True), serialize=serialize)

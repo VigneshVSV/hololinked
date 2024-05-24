@@ -1,4 +1,4 @@
-action
-======
+actions
+=======
 
 .. autofunction:: hololinked.server.action.action

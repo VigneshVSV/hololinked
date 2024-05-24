@@ -14,9 +14,10 @@ API Reference
     :maxdepth: 1
 
     server/thing/index
-    server/http_server/index
     server/properties/index
     server/action
+    server/events
+    server/http_server/index
     server/eventloop
     server/database/index
     server/zmq_message_brokers/index

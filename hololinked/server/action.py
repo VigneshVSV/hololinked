@@ -12,7 +12,8 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
             state : typing.Optional[typing.Union[str, Enum]] = None, input_schema : typing.Optional[JSON] = None,
             output_schema : typing.Optional[JSON] = None, create_task : bool = False) -> typing.Callable:
     """
-    Use this function to decorate your methods to be accessible remotely.  
+    Use this function as a decorate on your methods to make them accessible remotely. For WoT, an action affordance schema 
+    for the method is generated.
     
     Parameters
     ----------
@@ -21,12 +22,12 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
     http_method: str, optional
         HTTP method (GET, POST, PUT etc.). defaults to POST.
     state: str | Tuple[str], optional 
-        state under which the object can executed or written. When not provided,
-        its accessible or can be executed under any state.
+        state machine state under which the object can executed. When not provided,
+        the action can be executed under any state.
     input_schema: JSON 
         schema for arguments to validate them.
     output_schema : JSON 
-        schema for return value, currently only used to inform clients. 
+        schema for return value, currently only used to inform clients which is supposed to validate on its won. 
         
     Returns
     -------

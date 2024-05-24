@@ -1,4 +1,5 @@
 import typing
+from types import FunctionType, MethodType
 from enum import Enum
 
 from ..param.parameterized import Parameter, ClassParameters
@@ -10,147 +11,156 @@ from .events import Event
 
 class Property(Parameter):
     """
-    Initialize a new Property object and store the supplied attributes:
+    Initialize a new Property object and to get/set/delete an object/instance attribute. Please note the capital 'P' in 
+    Property to differentiate from python's own ``property``. ``Property`` objects are similar to python ``property``
+    but not a subclass of it due to limitations and redundancy.
 
     Parameters
     ----------
 
     default: None or corresponding to property type 
-        The default value of the property. This is owned by class for the attribute 
-        represented by the Property, which is overridden in an instance after 
-        setting the property.
+        The default value of the property. 
 
     doc: str, default empty
         docstring explaining what this property represents.
 
     constant: bool, default False
-        if true, the Property value can be changed only at
-        the class level or in a propertyized constructor call. The
-        value is otherwise constant on the Parameterized instance,
-        once it has been constructed.
+        if True, the Property value can be changed only once when ``allow_None`` is set to True. The
+        value is otherwise constant on the ``Thing`` instance.
 
     readonly: bool, default False
-        if true, the Property value cannot ordinarily be
-        changed by setting the attribute at the class or instance
-        levels at all. The value can still be changed in code by
-        temporarily overriding the value of this slot and then
-        restoring it, which is useful for reporting values that the
-        _user_ should never change but which do change during code
-        execution.
+        if True, the Property value cannot be changed by setting the attribute at the class or instance
+        levels at all. Either the value is fetched always or a getter method is executed which may still generate dynamic
+        values at each get/read operation.
 
     allow_None: bool, default False 
-        if True, None is accepted as a valid value for
-        this Property, in addition to any other values that are
-        allowed. If the default value is defined as None, allow_None
-        is set to True automatically.
+        if True, None is accepted as a valid value for this Property, in addition to any other values that are
+        allowed. 
 
     URL_path: str, uses object name by default
-        resource locator under which the attribute is accessible through 
-        HTTP. when remote is True and no value is supplied, the variable name 
-        is used and underscores and replaced with dash
+        resource locator under which the attribute is accessible through HTTP. when value is supplied, the variable name 
+        is used and underscores are replaced with dash
 
-    remote: bool, default True
-        set to false to make the property local
+    http_method: tuple, default ("GET", "PUT", "DELETE")
+        http methods for read, write, delete respectively 
 
-    http_method: tuple, default (GET, PUT)
-        http methods for read and write respectively 
+    observable: bool, default False
+        set to True to receive change events. Supply a function if interested to evaluate on what conditions the change 
+        event must be emitted. Default condition is a plain not-equal-to operator.
 
     state: str | Enum, default None
-        state of state machine where write can be executed
+        state of state machine where property write can be executed
 
     db_persist: bool, default False
-        if True, every read and write is stored in database 
-        and persists instance destruction and creation. 
+        if True, every write is stored in database and property value persists ``Thing`` instance destruction and creation. 
+        The loaded value from database is written into the property at ``Thing.__post_init__``.
+        set ``Thing.use_default_db`` to True, to avoid setting up a database or supply a ``db_config_file``.
     
     db_init: bool, default False
-        if True, only the first read is loaded from database.
-        Further reads and writes not written to database. if db_persist
-        is True, this value is ignored. 
+        if True, property's first value is loaded from database and written using setter. 
+        Further writes are not written to database. if ``db_persist`` is True, this value is ignored. 
 
     db_commit: bool,
-        if True, all write values are stored to database. if db_persist
-        is True, this value is ignored. 
-
-    remote: bool, default True
-        set False to avoid exposing the variable for remote read 
-        and write
-
-    metadata: dict, default None
-        store your own JSON compatible metadata for the property 
-        which gives useful (and modifiable) information about the property. 
-        Properties operate using slots which means you cannot set foreign 
-        attributes on this object normally. The metadata dictionary should 
-        overcome this limitation. 
-
-    label: str, default extracted from object name
-        optional text label to be used when this Property is
-        shown in a listing. If no label is supplied, the attribute name
-        for this property in the owning Parameterized object is used.
+        if True, all write values are stored to database. The database value is not loaded at ``Thing.__post_init__()``. 
+        if db_persist is True, this value is ignored. 
 
     fget: Callable, default None
-        custom getter method, mandatory when setter method is also custom.
+        custom getter method, mandatory when setter method is also custom supplied.
 
     fset: Callable, default None
         custom setter method
     
     fdel: Callable, default None
         custom deleter method
-        
+
+    remote: bool, default True
+        set to false to make the property local/not remotely accessible
+
+    label: str, default extracted from object name
+        optional text label to be used when this Property is shown in a listing. If no label is supplied, 
+        the attribute name for this property in the owning ``Thing`` object is used.
+    
+    metadata: dict, default None
+        store your own JSON compatible metadata for the property which gives useful (and modifiable) information 
+        about the property. Properties operate using slots which means you cannot set foreign attributes on this object 
+        normally. This metadata dictionary should overcome this limitation. 
+
     per_instance_descriptor: bool, default False 
-        whether a separate Property instance will be
-        created for every Parameterized instance. True by default.
-        If False, all instances of a Parameterized class will share
-        the same Property object, including all validation
-        attributes (bounds, etc.). See also deep_copy, which is
-        conceptually similar but affects the Property value rather
-        than the Property object.
+        whether a separate Property instance will be created for every ``Thing`` instance. True by default.
+        If False, all instances of a ```Thing``` class will share the same Property object, including all validation
+        attributes (bounds, allow_None etc.). 
 
     deepcopy_default: bool, default False 
-        controls whether the value of this Property will
-        be deepcopied when a Parameterized object is instantiated (if
-        True), or if the single default value will be shared by all
-        Parameterized instances (if False). For an immutable Property
-        value, it is best to leave deep_copy at the default of
-        False, so that a user can choose to change the value at the
-        Parameterized instance level (affecting only that instance) or
-        at the Parameterized class or superclass level (affecting all
-        existing and future instances of that class or superclass). For
-        a mutable Property value, the default of False is also appropriate
-        if you want all instances to share the same value state, e.g. if
-        they are each simply referring to a single global object like
-        a singleton. If instead each Parameterized should have its own
-        independently mutable value, deep_copy should be set to
-        True, but note that there is then no simple way to change the
-        value of this Property at the class or superclass level,
-        because each instance, once created, will then have an
-        independently deepcopied value.
+        controls whether the default value of this Property will be deepcopied when a ``Thing`` object is instantiated (if
+        True), or if the single default value will be shared by all ``Thing`` instances (if False). For an immutable 
+        Property value, it is best to leave deep_copy at the default of False. For a mutable Property value, 
+        for example - lists and dictionaries, the default of False is also appropriate if you want all instances to share 
+        the same value state, e.g. if they are each simply referring to a single global object like a singleton. 
+        If instead each ``Thing`` should have its own independently mutable value, deep_copy should be set to
+        True. This setting is similar to using ``field``'s ``default_factory`` in python dataclasses.
 
     class_member : bool, default False
-        when True, property is set on class instead of instance. 
+        when True, property is set on ``Thing`` class instead of ``Thing`` instance. 
 
     precedence: float, default None
-        a numeric value, usually in the range 0.0 to 1.0,
-        which allows the order of Properties in a class to be defined in
-        a listing or e.g. in GUI menus. A negative precedence indicates
-        a property that should be hidden in such listings.
+        a numeric value, usually in the range 0.0 to 1.0, which allows the order of Properties in a class to be defined in
+        a listing or e.g. in GUI menus. A negative precedence indicates a property that should be hidden in such listings.
 
     """
 
     __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', '_remote_info', 'observable', 
-                '_observable_event']
+                '_observable_event', '_change_comparator']
+    
+    # RPC only init - no HTTP methods for those who dont like
+    @typing.overload
+    def __init__(self, default: typing.Any = None, *, doc : typing.Optional[str] = None, constant : bool = False, 
+                readonly : bool = False, allow_None : bool = False, observable : bool = False, 
+                state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+                db_persist : bool = False, db_init : bool = False, db_commit : bool = False,  remote : bool = True,
+                class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
+                fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None
+            ) -> None:
+        ...
 
+    @typing.overload
+    def __init__(self, default: typing.Any = None, *, doc : typing.Optional[str] = None, constant : bool = False, 
+                readonly : bool = False, allow_None : bool = False, URL_path : str = USE_OBJECT_NAME, 
+                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (HTTP_METHODS.GET, HTTP_METHODS.PUT), 
+                observable : bool = False, state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+                db_persist : bool = False, db_init : bool = False, db_commit : bool = False, remote : bool = True, 
+                class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
+                fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None, 
+                metadata : typing.Optional[typing.Dict] = None
+            ) -> None:
+        ...
+
+    @typing.overload
     def __init__(self, default: typing.Any = None, *, doc : typing.Optional[str] = None, constant : bool = False, 
                 readonly : bool = False, allow_None : bool = False, 
-                URL_path : str = USE_OBJECT_NAME, remote : bool = True, observable : bool = False, 
+                URL_path : str = USE_OBJECT_NAME, 
                 http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (HTTP_METHODS.GET, HTTP_METHODS.PUT), 
+                observable : bool = False, change_comparator : typing.Optional[typing.Union[FunctionType, MethodType]] = None,
                 state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-                db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+                db_persist : bool = False, db_init : bool = False, db_commit : bool = False, remote : bool = True,
                 class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
                 fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None, 
                 deepcopy_default : bool = False, per_instance_descriptor : bool = False, 
                 precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None
             ) -> None:
-        
+        ...
+ 
+    def __init__(self, default: typing.Any = None, *, doc : typing.Optional[str] = None, constant : bool = False, 
+                readonly : bool = False, allow_None : bool = False, 
+                URL_path : str = USE_OBJECT_NAME, 
+                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (HTTP_METHODS.GET, HTTP_METHODS.PUT),
+                state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+                db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+                observable : bool = False, change_comparator : typing.Optional[typing.Union[FunctionType, MethodType]] = None, 
+                class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
+                fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None, 
+                deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
+                precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None
+            ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, allow_None=allow_None,
                     per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default,
                     class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence)
@@ -168,6 +178,7 @@ class Property(Parameter):
             )
         else:
             self._remote_info = None
+        self._change_comparator = change_comparator
         
     def _post_slot_set(self, slot : str, old : typing.Any, value : typing.Any) -> None:
         if slot == 'owner' and self.owner is not None:
@@ -194,12 +205,14 @@ class Property(Parameter):
         if self.observable:
             old_value = obj.__dict__.get(self._internal_name, NotImplemented)
             obj.__dict__[f'{self._internal_name}_old_value'] = value 
-            if old_value != value:
+            if self._change_comparator:
+                if self._change_comparator(old_value, value):
+                    self._observable_event.push(value)               
+            elif old_value != value:
                 self._observable_event.push(value)
         return super()._post_value_set(obj, value)
-
     
-
+   
 
 __property_info__ = [
                 'allow_None' , 'class_member', 'db_init', 'db_persist', 

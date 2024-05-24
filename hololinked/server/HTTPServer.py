@@ -1,5 +1,6 @@
-import zmq
 import asyncio
+import zmq
+import zmq.asyncio
 import logging
 import socket
 import ssl
@@ -8,7 +9,6 @@ from tornado import ioloop
 from tornado.web import Application
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
-import zmq.asyncio
 # from tornado_http2.server import Server as TornadoHTTP2Server 
 
 from ..param import Parameterized
@@ -23,56 +23,88 @@ from .zmq_message_brokers import  AsyncZMQClient, MessageMappedZMQClientPool
 from .handlers import RPCHandler, BaseHandler, EventHandler, ThingsHandler
 
 
+
 class HTTPServer(Parameterized):
     """
-    HTTP(s) server to route requests to ``Thing``. Only one HTTPServer per process supported.
+    HTTP(s) server to route requests to ``Thing``.
     """
-
-    address = IPAddress(default='0.0.0.0', 
-                    doc="set custom IP address, default is localhost (0.0.0.0)") # type: str
+    
+    things = TypedList(item_type=str, default=None, allow_None=True, 
+                       doc="instance name of the things to be served by the HTTP server." ) # type: typing.List[str]
     port = Integer(default=8080, bounds=(1, 65535),  
-                    doc="the port at which the server should be run (unique)" ) # ytype: int
-    protocol_version = Selector(objects=[1, 1.1, 2], default=2, 
-                    doc="for HTTP 2, SSL is mandatory. HTTP2 is recommended. \
-                    When no SSL configurations are provided, defaults to 1.1" ) # type: float
+                    doc="the port at which the server should be run" ) # type: int
+    address = IPAddress(default='0.0.0.0', 
+                    doc="IP address") # type: str
+    # protocol_version = Selector(objects=[1, 1.1, 2], default=2, 
+    #                 doc="for HTTP 2, SSL is mandatory. HTTP2 is recommended. \
+    #                 When no SSL configurations are provided, defaults to 1.1" ) # type: float
     logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, 
-                    doc="Supply a custom logger here or set log_level parameter to a valid value" ) # type: logging.Logger
+                    doc="logging.Logger" ) # type: logging.Logger
     log_level = Selector(objects=[logging.DEBUG, logging.INFO, logging.ERROR, logging.CRITICAL, logging.ERROR], 
                     default=logging.INFO, 
-                    doc="Alternative to logger, this creates an internal logger with the specified log level" ) # type: int
-    things = TypedList(item_type=str, default=None, allow_None=True, 
-                       doc="Remote Objects to be served by the HTTP server" ) # type: typing.List[str]
+                    doc="""alternative to logger, this creates an internal logger with the specified log level 
+                    along with a IO stream handler.""" ) # type: int
+    serializer = ClassSelector(class_=JSONSerializer,  default=None, allow_None=True,
+                    doc="""json serializer used by the server""" ) # type: JSONSerializer
+    ssl_context = ClassSelector(class_=ssl.SSLContext, default=None, allow_None=True, 
+                    doc="SSL context to provide encrypted communication") # type: typing.Optional[ssl.SSLContext]    
+    certfile = String(default=None, allow_None=True, 
+                    doc="""alternative to SSL context, provide certificate file & key file to allow the server to 
+                        create a SSL context""") # type: str
+    keyfile = String(default=None, allow_None=True, 
+                    doc="""alternative to SSL context, provide certificate file & key file to allow the server to 
+                        create a SSL context""") # type: str
+    allowed_clients = TypedList(item_type=str,
+                            doc="""Serves request and sets CORS only from these clients, other clients are rejected with 403. 
+                                Unlike pure CORS, the server resource is not even executed if the client is not 
+                                an allowed client. if None any client is served.""")
     host = String(default=None, allow_None=True, 
                 doc="Host Server to subscribe to coordinate starting sequence of remote objects & web GUI" ) # type: str
-    serializer = ClassSelector(class_=JSONSerializer,  default=None, allow_None=True,
-                    doc="optionally, supply your own JSON serializer for custom types" ) # type: JSONSerializer
-    ssl_context = ClassSelector(class_=ssl.SSLContext, default=None, allow_None=True, 
-                    doc="use it for highly customized SSL context to provide encrypted communication") # type: typing.Optional[ssl.SSLContext]    
-    certfile = String(default=None, allow_None=True, 
-                    doc="alternative to SSL context, provide certificate file & key file to allow the server \
-                        to create a SSL connection on its own") # type: str
-    keyfile = String(default=None, allow_None=True, 
-                    doc="alternative to SSL context, provide certificate file & key file to allow the server \
-                            to create a SSL connection on its own") # type: str
-    network_interface = String(default='Ethernet',  
-                            doc="Currently there is no logic to detect the IP addresss (as externally visible) correctly, \
-                            therefore please send the network interface name to retrieve the IP. If a DNS server is present, \
-                            you may leave this field" ) # type: str
+    # network_interface = String(default='Ethernet',  
+    #                         doc="Currently there is no logic to detect the IP addresss (as externally visible) correctly, \
+    #                         therefore please send the network interface name to retrieve the IP. If a DNS server is present, \
+    #                         you may leave this field" ) # type: str
     request_handler = ClassSelector(default=RPCHandler, class_=RPCHandler, isinstance=False, 
-                            doc="custom web request handler of your choice" ) # type: RPCHandler
+                            doc="custom web request handler of your choice for property read-write & action execution" ) # type: typing.Union[BaseHandler, RPCHandler]
     event_handler = ClassSelector(default=EventHandler, class_=(EventHandler, BaseHandler), isinstance=False, 
                             doc="custom event handler of your choice for handling events") # type: typing.Union[BaseHandler, EventHandler]
-    allowed_clients = TypedList(item_type=str,
-                            doc="serves request and sets CORS only from these clients, other clients are reject with 403")
-
+    
     def __init__(self, things : typing.List[str], *, port : int = 8080, address : str = '0.0.0.0', 
-                host : str = None, logger : typing.Optional[logging.Logger] = None, log_level : int = logging.INFO, 
-                certfile : str = None, keyfile : str = None, serializer : JSONSerializer = None,
-                allowed_clients : typing.Union[str, typing.Iterable[str]] = None,   
-                ssl_context : ssl.SSLContext = None, protocol_version : int = 1, 
-                network_interface : str = 'Ethernet', request_handler : RPCHandler = RPCHandler, 
-                event_handler : typing.Union[BaseHandler, EventHandler] = EventHandler,
-                zmq_protocol : str = 'IPC', context : zmq.asyncio.Context = None) -> None:
+                host : typing.Optional[str] = None, logger : typing.Optional[logging.Logger] = None, log_level : int = logging.INFO, 
+                serializer : typing.Optional[JSONSerializer] = None, ssl_context : typing.Optional[ssl.SSLContext] = None, 
+                certfile : str = None, keyfile : str = None, # protocol_version : int = 1, network_interface : str = 'Ethernet', 
+                allowed_clients : typing.Optional[typing.Union[str, typing.Iterable[str]]] = None,   
+                **kwargs) -> None:
+        """
+        Parameters
+        ----------
+        things: List[str]
+            instance name of the things to be served as a list.
+        port: int, default 8080
+            the port at which the server should be run
+        address: str, default 0.0.0.0
+            IP address
+        logger: logging.Logger, optional
+            logging.Logger instance
+        log_level: int
+            alternative to logger, this creates an internal logger with the specified log level along with a IO stream handler. 
+        serializer: JSONSerializer, optional
+            json serializer used by the server
+        ssl_context: ssl.SSLContext
+            SSL context to provide encrypted communication
+        certfile: str
+            alternative to SSL context, provide certificate file & key file to allow the server to create a SSL context 
+        keyfile: str
+            alternative to SSL context, provide certificate file & key file to allow the server to create a SSL context 
+        allowed_clients: List[str] 
+            serves request and sets CORS only from these clients, other clients are reject with 403. Unlike pure CORS
+            feature, the server resource is not even executed if the client is not an allowed client.
+        **kwargs:
+            rpc_handler: RPCHandler | BaseHandler, optional
+                custom web request handler of your choice for property read-write & action execution
+            event_handler: EventHandler | BaseHandler, optional
+                custom event handler of your choice for handling events
+        """
         super().__init__(
             things=things,
             port=port, 
@@ -81,20 +113,20 @@ class HTTPServer(Parameterized):
             logger=logger, 
             log_level=log_level,
             serializer=serializer or JSONSerializer(), 
-            protocol_version=protocol_version,
+            # protocol_version=1, 
             certfile=certfile, 
             keyfile=keyfile,
             ssl_context=ssl_context,
-            network_interface=network_interface,
-            request_handler=request_handler,
-            event_handler=event_handler,
+            # network_interface='Ethernet',# network_interface,
+            request_handler=kwargs.get('request_handler', RPCHandler),
+            event_handler=kwargs.get('event_handler', EventHandler),
             allowed_clients=allowed_clients if allowed_clients is not None else []
         )
         self._type = HTTPServerTypes.THING_SERVER
         self._lost_things = dict() # see update_router_with_thing
-        self._zmq_protocol = zmq_protocol
-        self._zmq_socket_context = context
-        self._zmq_event_context = context
+        # self._zmq_protocol = zmq_protocol
+        # self._zmq_socket_context = context
+        # self._zmq_event_context = context
  
     @property
     def all_ok(self) -> bool:
@@ -164,6 +196,10 @@ class HTTPServer(Parameterized):
 
 
     def listen(self) -> None:
+        """
+        Start HTTP server. This method is blocking, async event loops intending to schedule the HTTP server should instead use  
+        the inner tornado instance's (``HTTPServer.tornado_instance``) listen() method. 
+        """
         assert self.all_ok, 'HTTPServer all is not ok before starting' # Will always be True or cause some other exception   
         self.event_loop = ioloop.IOLoop.current()
         self.tornado_instance.listen(port=self.port, address=self.address)    
@@ -176,9 +212,9 @@ class HTTPServer(Parameterized):
         self.event_loop.close()    
 
 
-    async def update_router_with_things(self)-> None:
+    async def update_router_with_things(self) -> None:
         """
-        updates HTTP router with paths from newly instantiated ``Thing``s
+        updates HTTP router with paths from ``Thing`` (s)
         """
         await asyncio.gather(*[self.update_router_with_thing(client) for client in self.zmq_client_pool])
 
@@ -270,6 +306,6 @@ class HTTPServer(Parameterized):
         self._lost_things.pop(client.instance_name)
                
     
-
-
-__all__ = ['HTTPServer']
+__all__ = [
+    HTTPServer.__name__
+]
