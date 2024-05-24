@@ -2,12 +2,12 @@
 
 ### Description
 
-For beginners - `hololinked` is a server side pythonic package suited for instrumentation control and data acquisition over network.
+For beginners - `hololinked` is a server side pythonic package suited for instrumentation control and data acquisition over network. If you have a requirement to control and capture data from your hardware/instrumentation remotely through your network, show the data in a web browser/dashboard, use IoT tools, provide a Qt-GUI or run automated scripts, hololinked can help. One can start small from a single device, and if interested, move ahead to build a bigger system made of individual components. 
 <br/>
 For those familiar with RPC & web development - `hololinked` is a ZeroMQ-based Object Oriented RPC toolkit with customizable HTTP end-points. 
-The main goal is to develop a pythonic & pure python modern package for instrumentation control through network (SCADA), along with "reasonable" HTTP support for web development.  
+The main goal is to develop a pythonic & pure python modern package for instrumentation control and data acquisition through network (SCADA), along with "reasonable" HTTP support for web development.  
 <br/>
-If you have a requirement to control and capture data from your hardware/instrumentation remotely through your network, show the data in a web browser/dashboard, use IoT tools, provide a Qt-GUI or run automated scripts, hololinked can help. One can start small from a single device, and if interested, move ahead to build a bigger system made of individual components. 
+
 
 ### Usage/Quickstart
 
