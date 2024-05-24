@@ -2,7 +2,7 @@
 
 ### Description
 
-For beginners - `hololinked` is a server side pythonic package suited for instrumentation control and data acquisition over network. If you have a requirement to control and capture data from your hardware/instrumentation remotely through your network, show the data in a web browser/dashboard, use IoT tools, provide a Qt-GUI or run automated scripts, hololinked can help. One can start small from a single device, and if interested, move ahead to build a bigger system made of individual components. 
+For beginners - `hololinked` is a server side pythonic package suited for instrumentation control and data acquisition over network, especially with HTTP support. If you have a requirement to control and capture data from your hardware/instrumentation remotely through your network, show the data in a web browser/dashboard, use IoT tools, provide a Qt-GUI or run automated scripts, hololinked can help. One can start small from a single device, and if interested, move ahead to build a bigger system made of individual components. 
 <br/>
 For those familiar with RPC & web development - `hololinked` is a ZeroMQ-based Object Oriented RPC toolkit with customizable HTTP end-points. 
 The main goal is to develop a pythonic & pure python modern package for instrumentation control and data acquisition through network (SCADA), along with "reasonable" HTTP support for web development.  
@@ -16,16 +16,16 @@ The main goal is to develop a pythonic & pure python modern package for instrume
 - actions are methods which issue commands to the device or run arbitrary python logic. 
 - events can asynchronously communicate/push data to a client, like alarm messages, streaming captured data etc. 
 
-In `hololinked`, the base class which enables this classification is the `RemoteObject` class, or the `Thing` class if one prefers to use terminology according to the Web of Things. Both classes are identical and differentiated only in the naming according to the application domain one may be using. In future one of the names may be dropped. Nevertheless, any class that inherits the base class can instantiate properties, actions and events which become visible to a client in this segragated manner. For example, consider an optical spectrometer device, the following code is possible:
+In `hololinked`, the base class which enables this classification is the `Thing` class. Any class that inherits the `Thing` class can instantiate properties, actions and events which become visible to a client in this segragated manner. For example, consider an optical spectrometer device, the following code is possible:
 
 ##### Import Statements
 
 ```python
-from hololinked.wot import Thing
-from hololinked.wot.actions import action
+
+from hololinked.wot import Thing, Property, action, Event
 from hololinked.wot.properties import String, Integer, Number, List
-from hololinked.wot.events import Event
 ```
+
 ##### Definition of one's own hardware controlling class
 
 subclass from Thing class to "make a network accessible Thing":
