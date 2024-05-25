@@ -60,8 +60,8 @@ html_sidebars = {
 html_theme_options = {
     "secondary_sidebar_items": {
         "**" : ["page-toc", "sourcelink"],
-        "**/*thing*" : ["sourcelink"]
-    }
+    },
+    "navigation_with_keys" : True
 }
 
 pygments_style = 'vs'

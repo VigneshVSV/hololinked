@@ -160,7 +160,6 @@ def get_signature(callable : typing.Callable) -> typing.Tuple[typing.List[str], 
     return arg_names, arg_types
 
 
-
 def getattr_without_descriptor_read(instance, key):
     """
     supply to inspect._get_members (not inspect.get_members) to avoid calling 
