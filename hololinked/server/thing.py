@@ -481,7 +481,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
             irrespective of origin. 
         
         **kwargs
-            socket_address: str, optional
+            tcp_socket_address: str, optional
                 socket_address for TCP access, for example: tcp://0.0.0.0:61234
         """
         # expose_eventloop: bool, False

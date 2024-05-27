@@ -1,0 +1,25 @@
+{    
+    "actions" : {
+        "connect": {
+            "title": "connect",
+            "description" : "connect to the spectrometer specified by serial number",
+            "forms": [{
+                "href": "https://example.com/spectrometer/connect",
+                "op": "invokeaction",
+                "htv:methodName": "POST",
+                "contentType": "application/json"
+            }]
+        }
+    },
+    "events" : {
+        "measurement_event": {
+            "forms": [{
+                "href": "https://example.com/spectrometer/intensity/measurement-event",
+                "op": "subscribeevent",
+                "htv:methodName": "GET",
+                "contentType": "text/event-stream"
+            }]
+        }
+
+    }
+}

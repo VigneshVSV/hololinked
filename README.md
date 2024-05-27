@@ -241,7 +241,7 @@ Here one can see the use of `instance_name` and why it turns up in the URL path.
 
 The intention behind specifying HTTP URL paths and methods directly on object's members is to 
 - eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in queueing commands issued to instruments
-- or, write an additional bioler-plate HTTP to RPC bridge
+- or, write an additional boiler-plate HTTP to RPC bridge
 - or, find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events, yet appeals deeply to the object oriented python world. 
 
 See a list of currently supported features [below](#currently-supported). <br/> <br/>

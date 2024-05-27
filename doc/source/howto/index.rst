@@ -26,8 +26,8 @@ on the network or to other processes are made by subclassing from ``Thing``:
     :linenos:
 
 ``instance_name`` is a unique name recognising the instantiated object. It allows multiple 
-instruments of same type to be connected to the same computer without overlapping the exposed interface. 
-This is mandatory to be supplied to the ``Thing`` parent. When maintained unique within the network, it allows 
+instruments of same type to be connected to the same computer without overlapping the exposed interface and is therefore a 
+mandatory argument to be supplied to the ``Thing`` parent. When maintained unique within the network, it allows 
 identification of the hardware itself. Non-experts may use strings composed of 
 characters, numbers, dashes and forward slashes, which looks like part of a browser URL, but the general definition is 
 that ``instance_name`` should be a URI compatible string.
@@ -52,10 +52,10 @@ For methods to be exposed on the network, one can use the ``action`` decorator:
 
 Arbitrary signature is permitted. Arguments are loosely typed and may need to be constrained with a schema, based 
 on the robustness the developer is expecting in their application. However, a schema is optional and it only matters that 
-the function signature is matching when requested from a client. 
+the method signature is matching when requested from a client. 
 
 To start a HTTP server for the ``Thing``, one can call the ``run_with_http_server()`` method after instantiating the 
-``Thing``
+``Thing``. The supplied ``URL_path`` to the actions and properties are used by this HTTP server: 
 
 .. literalinclude:: code/thing_with_http_server.py
     :language: python
@@ -63,9 +63,9 @@ To start a HTTP server for the ``Thing``, one can call the ``run_with_http_serve
     :lines: 6-9, 42-47
 
 
-By default, this starts a server a HTTP server and an INPROC zmq socket (intra-process) for the HTTP server to direct 
-the requests to the ``Thing`` object. All requests are queued by default as the domain of operation under the hood is 
-remote procedure calls (RPC).  
+By default, this starts a server a HTTP server and an INPROC zmq socket (GIL constrained intra-process as far as python is
+concerned) for the HTTP server to direct the requests to the ``Thing`` object. All requests are queued by default as the
+ domain of operation under the hood is remote procedure calls (RPC).  
 
 One can store captured data in properties & push events to supply clients with the measured data:
 
@@ -75,4 +75,4 @@ One can store captured data in properties & push events to supply clients with t
     :lines: 6-10, 15-20, 29-41
 
 Events can be defined as class or instance attributes and will be tunnelled as HTTP server sent events without any additional 
-serialization overhead. They never become ``properties`` and will be visible only as an ``Event`` to a client. 
+serialization overhead. 
