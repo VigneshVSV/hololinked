@@ -34,7 +34,8 @@ from .serializers import PythonBuiltinJSONSerializer
 class Configuration:
     """
     Allows to auto apply common settings used throughout the package,
-    instead of passing these settings as arguments. 
+    instead of passing these settings as arguments. Import ``global_config`` variable
+    instead of instantitation this class. 
 
     Supports loading configuration from a JSON file whose path is specified 
     under environment variable HOLOLINKED_CONFIG. 

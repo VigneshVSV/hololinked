@@ -694,8 +694,8 @@ class ThingDescription(Schema):
         # properties and actions
         for resource in instance.instance_resources.values():
             if (resource.isproperty and resource.obj_name not in self.properties and 
-                resource.obj_name not in self.skip_properties and 
-                hasattr(resource.obj, "_remote_info") and resource.obj._remote_info is not None): 
+                resource.obj_name not in self.skip_properties and hasattr(resource.obj, "_remote_info") and 
+                resource.obj._remote_info is not None): 
                 self.properties[resource.obj_name] = PropertyAffordance.generate_schema(resource.obj, instance, authority) 
             elif (resource.iscallable and resource.obj_name not in self.actions and 
                   resource.obj_name not in self.skip_actions and hasattr(resource.obj, '_remote_info')):

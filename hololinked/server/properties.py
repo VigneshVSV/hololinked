@@ -24,7 +24,7 @@ PUT = HTTP_METHODS.PUT
 
 class String(Property):
     """
-    A string property with a default value and optional regular expression (regex) matching.
+    A string property with optional regular expression (regex) matching.
     """
 
     __slots__ = ['regex']

@@ -24,7 +24,6 @@ SOFTWARE.
 """
 import json
 import pickle
-import serpent
 from msgspec import json, msgpack 
 import json as pythonjson
 import inspect
@@ -174,35 +173,6 @@ class PickleSerializer(BaseSerializer):
         return pickle.loads(self.convert_to_bytes(data))
     
 
-class SerpentSerializer(BaseSerializer):
-    """(de)serializer that wraps the serpent serialization protocol."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.type = serpent
-
-    def dumps(self, data) -> bytes:
-        "method called by ZMQ message brokers to serialize data"
-        return serpent.dumps(data, module_in_classname=True)
-
-    def loads(self, data) -> typing.Any:
-        "method called by ZMQ message brokers to deserialize data"
-        return serpent.loads(self.convert_to_bytes(data))
-
-    @classmethod
-    def register_type_replacement(cls, object_type, replacement_function) -> None:
-        "register custom serialization function for a particular type"
-        def custom_serializer(obj, serpent_serializer, outputstream, indentlevel):
-            replaced = replacement_function(obj)
-            if replaced is obj:
-                serpent_serializer.ser_default_class(replaced, outputstream, indentlevel)
-            else:
-                serpent_serializer._serialize(replaced, outputstream, indentlevel)
-
-        if object_type is type or not inspect.isclass(object_type):
-            raise ValueError("refusing to register replacement for a non-type or the type 'type' itself")
-        serpent.register_class(object_type, custom_serializer)
-
 
 class MsgpackSerializer(BaseSerializer):
     """
@@ -221,15 +191,49 @@ class MsgpackSerializer(BaseSerializer):
     def loads(self, value) -> typing.Any:
         return msgpack.decode(self.convert_to_bytes(value))
     
-
-
 serializers = {
     None      : JSONSerializer,
     'json'    : JSONSerializer, 
     'pickle'  : PickleSerializer,
-    'serpent' : SerpentSerializer,
     'msgpack' : MsgpackSerializer,
 }
+    
+
+try:
+    import serpent
+
+    class SerpentSerializer(BaseSerializer):
+        """(de)serializer that wraps the serpent serialization protocol."""
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.type = serpent
+
+        def dumps(self, data) -> bytes:
+            "method called by ZMQ message brokers to serialize data"
+            return serpent.dumps(data, module_in_classname=True)
+
+        def loads(self, data) -> typing.Any:
+            "method called by ZMQ message brokers to deserialize data"
+            return serpent.loads(self.convert_to_bytes(data))
+
+        @classmethod
+        def register_type_replacement(cls, object_type, replacement_function) -> None:
+            "register custom serialization function for a particular type"
+            def custom_serializer(obj, serpent_serializer, outputstream, indentlevel):
+                replaced = replacement_function(obj)
+                if replaced is obj:
+                    serpent_serializer.ser_default_class(replaced, outputstream, indentlevel)
+                else:
+                    serpent_serializer._serialize(replaced, outputstream, indentlevel)
+
+            if object_type is type or not inspect.isclass(object_type):
+                raise ValueError("refusing to register replacement for a non-type or the type 'type' itself")
+            serpent.register_class(object_type, custom_serializer)
+
+    serializers['serpent'] = SerpentSerializer,
+except ImportError:
+    pass
 
 
 
@@ -256,5 +260,5 @@ def _get_serializer_from_user_given_options(
 
 
 
-__all__ = ['JSONSerializer', 'SerpentSerializer', 'PickleSerializer', 'MsgpackSerializer', 
+__all__ = ['JSONSerializer', 'PickleSerializer', 'MsgpackSerializer', 
         'serializers', 'BaseSerializer']
