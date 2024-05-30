@@ -252,7 +252,9 @@ def _get_serializer_from_user_given_options(
         rpc_serializer = rpc_serializer 
         if isinstance(rpc_serializer, PickleSerializer) or rpc_serializer.type == pickle:
             warnings.warn("using pickle serializer which is unsafe, consider another like msgpack.", UserWarning)
-    elif isinstance(rpc_serializer, str) or rpc_serializer is None: 
+    elif rpc_serializer == 'json' or rpc_serializer is None:
+        rpc_serializer = json_serializer
+    elif isinstance(rpc_serializer, str): 
         rpc_serializer = serializers.get(rpc_serializer, JSONSerializer)()
     else:
         raise ValueError("invalid rpc serializer option : {}".format(rpc_serializer))    

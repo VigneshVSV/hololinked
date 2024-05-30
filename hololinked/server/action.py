@@ -78,7 +78,7 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
                     obj._remote_info.state = state     
             if 'request' in getfullargspec(obj).kwonlyargs:
                 obj._remote_info.request_as_argument = True
-            obj._remote_info.iscallable = True
+            obj._remote_info.isaction = True
             obj._remote_info.iscoroutine = iscoroutinefunction(obj)
             obj._remote_info.argument_schema = input_schema
             obj._remote_info.return_value_schema = output_schema

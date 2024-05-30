@@ -202,7 +202,8 @@ class BaseZMQ:
                 self.socket.connect(socket_address)
         else:
             raise NotImplementedError("protocols other than IPC, TCP & INPROC are not implemented now for {}".format(
-                                                                                                    self.__class__))
+                                                                                                    self.__class__) + 
+                                            f" Given protocol {protocol}.")
         self.socket_address = socket_address
         if not self.logger:
             self.logger = get_default_logger('{}|{}|{}|{}'.format(self.__class__.__name__, 

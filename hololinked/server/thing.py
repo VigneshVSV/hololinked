@@ -361,8 +361,8 @@ class Thing(Parameterized, metaclass=ThingMeta):
                 evt.publisher = publisher 
                 evt._remote_info.socket_address = publisher.socket_address
             for prop in self.properties.descriptors.values():
-                if prop._observable_event is not None:
-                    assert isinstance(prop._observable_event, Event)
+                if prop.observable:
+                    assert isinstance(prop._observable_event, Event), "observable event logic error in event_publisher set"
                     prop._observable_event.publisher = publisher 
                     prop._observable_event._remote_info.socket_address = publisher.socket_address
             if (hasattr(obj, 'state_machine') and isinstance(obj.state_machine, StateMachine) and 
@@ -517,6 +517,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
             from .HTTPServer import HTTPServer
             httpserver = kwargs.pop('http_server')
             assert isinstance(httpserver, HTTPServer)
+            httpserver._zmq_protocol = ZMQ_PROTOCOLS.INPROC
             httpserver._zmq_socket_context = context
             httpserver._zmq_event_context = self.event_publisher.context
             assert httpserver.all_ok
@@ -568,7 +569,6 @@ class Thing(Parameterized, metaclass=ThingMeta):
             port=port, address=address, ssl_context=ssl_context,
             allowed_clients=allowed_clients,
             # network_interface=network_interface, 
-            zmq_protocol=ZMQ_PROTOCOLS.INPROC,
             **kwargs,
         )
         

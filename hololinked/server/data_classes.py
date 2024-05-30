@@ -464,7 +464,7 @@ def get_organised_resources(instance):
     for prop in instance.parameters.descriptors.values():
         if isinstance(prop, Property) and hasattr(prop, '_remote_info') and prop._remote_info is not None: 
             if not isinstance(prop._remote_info, RemoteResourceInfoValidator): 
-                raise TypeError("instance member {} has unknown sub-member 'scada_info' of type {}.".format(
+                raise TypeError("instance member {} has unknown sub-member '_remote_info' of type {}.".format(
                             prop, type(prop._remote_info))) 
                 # above condition is just a gaurd in case somebody does some unpredictable patching activities
             remote_info = prop._remote_info

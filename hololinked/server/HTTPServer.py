@@ -153,11 +153,11 @@ class HTTPServer(Parameterized):
         for client in self.zmq_client_pool:
             event_loop.call_soon(lambda : asyncio.create_task(client._handshake(timeout=60000)))
         
-        if self.protocol_version == 2:
-            raise NotImplementedError("Current HTTP2 is not implemented.")
-            self.tornado_instance = TornadoHTTP2Server(self.app, ssl_options=self.ssl_context)
-        else:
-            self.tornado_instance = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)
+        # if self.protocol_version == 2:
+        #     raise NotImplementedError("Current HTTP2 is not implemented.")
+        #     self.tornado_instance = TornadoHTTP2Server(self.app, ssl_options=self.ssl_context)
+        # else:
+        self.tornado_instance = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)
         return True
     
 
@@ -237,7 +237,7 @@ class HTTPServer(Parameterized):
 
                 handlers = []
                 for instruction, http_resource in resources.items():
-                    if http_resource["what"] in [ResourceTypes.PARAMETER, ResourceTypes.CALLABLE] :
+                    if http_resource["what"] in [ResourceTypes.PROPERTY, ResourceTypes.ACTION] :
                         resource = HTTPResource(**http_resource)
                         handlers.append((resource.fullpath, self.request_handler, dict(
                                                                 resource=resource, 

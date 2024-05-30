@@ -109,7 +109,7 @@ class Property(Parameter):
     """
 
     __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', '_remote_info', 'observable', 
-                '_observable_event', '_change_comparator']
+                '_observable_event', 'fcomparator']
     
     # RPC only init - no HTTP methods for those who dont like
     @typing.overload
@@ -118,7 +118,7 @@ class Property(Parameter):
                 state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
                 db_persist : bool = False, db_init : bool = False, db_commit : bool = False,  remote : bool = True,
                 class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
-                fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None
+                fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None,
             ) -> None:
         ...
 
@@ -144,6 +144,7 @@ class Property(Parameter):
                 db_persist : bool = False, db_init : bool = False, db_commit : bool = False, remote : bool = True,
                 class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
                 fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None, 
+                fcomparator : typing.Optional[typing.Callable] = None, 
                 deepcopy_default : bool = False, per_instance_descriptor : bool = False, 
                 precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None
             ) -> None:
@@ -157,7 +158,8 @@ class Property(Parameter):
                 db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
                 observable : bool = False, change_comparator : typing.Optional[typing.Union[FunctionType, MethodType]] = None, 
                 class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
-                fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None, 
+                fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None,
+                fcomparator : typing.Optional[typing.Callable] = None,  
                 deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
                 precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None
             ) -> None:
@@ -169,6 +171,7 @@ class Property(Parameter):
         self.db_commit  = db_commit
         self.metadata = metadata
         self.observable = observable
+        self._observable_event = None
         if remote:
             self._remote_info = RemoteResourceInfoValidator(
                 http_method=http_method,
@@ -178,7 +181,7 @@ class Property(Parameter):
             )
         else:
             self._remote_info = None
-        self._change_comparator = change_comparator
+        self.fcomparator = fcomparator
         
     def _post_slot_set(self, slot : str, old : typing.Any, value : typing.Any) -> None:
         if slot == 'owner' and self.owner is not None:
@@ -202,11 +205,11 @@ class Property(Parameter):
             # assert isinstance(obj, Thing), f"database property {self.name} bound to a non Thing, currently not supported"
             # uncomment for type definitions
             obj.db_engine.set_property(self, value)
-        if self.observable:
+        if self.observable and self._observable_event is not None:
             old_value = obj.__dict__.get(self._internal_name, NotImplemented)
             obj.__dict__[f'{self._internal_name}_old_value'] = value 
-            if self._change_comparator:
-                if self._change_comparator(old_value, value):
+            if self.fcomparator:
+                if self.fcomparator(old_value, value):
                     self._observable_event.push(value)               
             elif old_value != value:
                 self._observable_event.push(value)

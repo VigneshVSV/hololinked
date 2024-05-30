@@ -145,10 +145,10 @@ class DataSchema(Schema):
     titles : typing.Optional[typing.Dict[str, str]]
     description : str
     descriptions : typing.Optional[typing.Dict[str, str]] 
-    constant : bool
+    const : bool
     default : typing.Optional[typing.Any] 
     readOnly : bool
-    writeOnly : bool
+    writeOnly : bool # write only are to be considered actions with no return value
     format : typing.Optional[str]
     unit : typing.Optional[str]
     type : str
@@ -161,11 +161,11 @@ class DataSchema(Schema):
     def build(self, property : Property, owner : Thing, authority : str) -> None:
         """generates the schema"""
         self.title = property.name # or property.label
-        self.constant = property.constant
-        self.readOnly = property.readonly
-        self.writeOnly = False
-        
-        if property.overloads["fget"] is None:
+        if property.constant:
+            self.const = property.constant 
+        if property.readonly:
+            self.readOnly = property.readonly
+        if property.fget is None:
             self.default = property.default
         if property.doc:
             self.description = Schema.format_doc(property.doc)
@@ -199,7 +199,8 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
         """generates the schema"""
         DataSchema.build(self, property, owner, authority)
 
-        self.observable = property.observable
+        if property.observable:
+            self.observable = property.observable
 
         self.forms = []
         for index, method in enumerate(property._remote_info.http_method):
@@ -697,7 +698,7 @@ class ThingDescription(Schema):
                 resource.obj_name not in self.skip_properties and hasattr(resource.obj, "_remote_info") and 
                 resource.obj._remote_info is not None): 
                 self.properties[resource.obj_name] = PropertyAffordance.generate_schema(resource.obj, instance, authority) 
-            elif (resource.iscallable and resource.obj_name not in self.actions and 
+            elif (resource.isaction and resource.obj_name not in self.actions and 
                   resource.obj_name not in self.skip_actions and hasattr(resource.obj, '_remote_info')):
                 self.actions[resource.obj_name] = ActionAffordance.generate_schema(resource.obj, instance, authority)
         # Events
