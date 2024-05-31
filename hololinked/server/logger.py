@@ -93,11 +93,11 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
     
     def set_maxlen(self, value, **kwargs):
         self._maxlen = value
-        self._debug_logs = deque(maxlen=kwargs.pop('len_debug', value/5))
-        self._info_logs = deque(maxlen=kwargs.pop('len_info', value/5))
-        self._warn_logs = deque(maxlen=kwargs.pop('len_warn', value/5))
-        self._error_logs = deque(maxlen=kwargs.pop('len_error', value/5))
-        self._critical_logs = deque(maxlen=kwargs.pop('len_critical', value/5))
+        self._debug_logs = deque(maxlen=kwargs.pop('len_debug', int(value/5)))
+        self._info_logs = deque(maxlen=kwargs.pop('len_info', int(value/5)))
+        self._warn_logs = deque(maxlen=kwargs.pop('len_warn', int(value/5)))
+        self._error_logs = deque(maxlen=kwargs.pop('len_error', int(value/5)))
+        self._critical_logs = deque(maxlen=kwargs.pop('len_critical', int(value/5)))
         self._execution_logs = deque(maxlen=value)
 
     maxlen = Integer(default=100, bounds=(1, None), crop_to_bounds=True, URL_path='/maxlen',

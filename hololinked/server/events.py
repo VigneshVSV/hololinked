@@ -28,6 +28,7 @@ class Event:
         self._unique_identifier = None # type: typing.Optional[str]
         self._owner = None  # type: typing.Optional[Parameterized]
         self._remote_info = None # type: typing.Optional[ServerSentEvent]
+        self._publisher = None
         # above two attributes are not really optional, they are set later. 
 
     @property
@@ -46,7 +47,7 @@ class Event:
     
     @publisher.setter
     def publisher(self, value : "EventPublisher") -> None:
-        if not hasattr(self, '_publisher'):
+        if not self._publisher:
             self._publisher = value
             self._publisher.register(self)
         else:

@@ -93,7 +93,7 @@ class StateMachine:
                 for resource in objects:
                     if hasattr(resource, '_remote_info'):
                         assert isinstance(resource._remote_info, RemoteResourceInfoValidator) # type definition
-                        if resource._remote_info.iscallable and resource._remote_info.obj_name not in owner_methods: 
+                        if resource._remote_info.isaction and resource._remote_info.obj_name not in owner_methods: 
                             raise AttributeError("Given object {} for state machine does not belong to class {}".format(
                                                                                                 resource, owner))
                         if resource._remote_info.isproperty and resource not in owner_properties: 
@@ -175,7 +175,7 @@ class StateMachine:
         if value in self.states:
             previous_state = self._state
             self._state = self._get_machine_compliant_state(value)
-            if push_event and self.state_change_event is not None:
+            if push_event and self.state_change_event is not None and self.state_change_event.publisher is not None:
                 self.state_change_event.push(value)
             if skip_callbacks:
                 return 
