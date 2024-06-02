@@ -190,8 +190,6 @@ class Property(Parameter):
                     self._remote_info.URL_path = '/' + self.name
                 elif not self._remote_info.URL_path.startswith('/'): 
                     raise ValueError(f"URL_path should start with '/', please add '/' before '{self._remote_info.URL_path}'")
-                else:
-                    self._remote_info.URL_path = f'/{self._remote_info.URL_path}',
                 self._remote_info.obj_name = self.name
             if self.observable:
                 self._observable_event = Event(name=f'observable-{self.name}', 
@@ -226,8 +224,6 @@ class Property(Parameter):
     
     
     
-   
-
 __property_info__ = [
                 'allow_None' , 'class_member', 'db_init', 'db_persist', 
                 'db_commit', 'deepcopy_default', 'per_instance_descriptor', 

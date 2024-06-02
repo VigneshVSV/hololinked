@@ -24,6 +24,8 @@ class Event:
     def __init__(self, name : str, URL_path : typing.Optional[str] = None) -> None:
         self.name = name 
         # self.name_bytes = bytes(name, encoding = 'utf-8')
+        if URL_path is not None and not URL_path.startswith('/'):
+            raise ValueError(f"URL_path should start with '/', please add '/' before '{URL_path}'")
         self.URL_path = URL_path or '/' + name
         self._unique_identifier = None # type: typing.Optional[str]
         self._owner = None  # type: typing.Optional[Parameterized]

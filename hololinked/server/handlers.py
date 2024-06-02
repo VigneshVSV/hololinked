@@ -259,7 +259,7 @@ class EventHandler(BaseHandler):
         called by GET method and handles the event.
         """
         try:                        
-            event_consumer_cls = AsyncEventConsumer if isinstance(self.owner._zmq_event_context, zmq.asyncio.Context) else EventConsumer
+            event_consumer_cls = EventConsumer if hasattr(self.owner, '_zmq_event_context') else AsyncEventConsumer
             # synchronous context with INPROC pub or asynchronous context with IPC or TCP pub, we handle both in async 
             # fashion as HTTP server should be running purely sync(or normal) python method.
             event_consumer = event_consumer_cls(self.resource.unique_identifier, self.resource.socket_address, 
@@ -277,10 +277,10 @@ class EventHandler(BaseHandler):
         
         while True:
             try:
-                if isinstance(self.owner, zmq.asyncio.Context):
-                    data = await self.event_consumer.receive(timeout=10000, deserialize=False)
+                if isinstance(event_consumer, AsyncEventConsumer):
+                    data = await event_consumer.receive(timeout=10000, deserialize=False)
                 else:
-                    data = await event_loop.run_in_executor(None, self.receive_blocking_event, args=(event_consumer,))
+                    data = await event_loop.run_in_executor(None, self.receive_blocking_event, event_consumer)
                 if data:
                     # already JSON serialized 
                     self.write(data_header % data)

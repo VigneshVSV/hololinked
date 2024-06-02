@@ -54,14 +54,16 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
                 if URL_path == USE_OBJECT_NAME: 
                     obj._remote_info.URL_path = f'/{obj_name[1]}'
                 else:
-                    assert URL_path.startswith('/'), f"URL_path should start with '/', please add '/' before '{URL_path}'"
+                    if not URL_path.startswith('/'):
+                        raise ValueError(f"URL_path should start with '/', please add '/' before '{URL_path}'")
                     obj._remote_info.URL_path = URL_path
                 obj._remote_info.obj_name = obj_name[1] 
             elif len(obj_name) == 1 and isinstance(obj, FunctionType):  # normal unbound function - used by HTTPServer instance
                 if URL_path is USE_OBJECT_NAME:
                     obj._remote_info.URL_path = '/{}'.format(obj_name[0])
                 else:
-                    assert URL_path.startswith('/'), f"URL_path should start with '/', please add '/' before '{URL_path}'"
+                    if not URL_path.startswith('/'):
+                        raise ValueError(f"URL_path should start with '/', please add '/' before '{URL_path}'")
                     obj._remote_info.URL_path = URL_path
                 obj._remote_info.obj_name = obj_name[0] 
             else:
