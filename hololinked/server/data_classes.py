@@ -457,7 +457,7 @@ def get_organised_resources(instance):
     if instance._owner is not None: 
         instance._full_URL_path_prefix = f'{instance._owner._full_URL_path_prefix}/{instance.instance_name}' 
     else:
-        instance._full_URL_path_prefix = f'/{instance.instance_name}'
+        instance._full_URL_path_prefix = f'/{instance.instance_name}' # leading '/' was stripped at init
     
     # First add methods and callables
     # properties
@@ -482,7 +482,7 @@ def get_organised_resources(instance):
                                                 **{ 
                                                     read_http_method : f"{fullpath}/read",
                                                     write_http_method : f"{fullpath}/write"
-                                                },
+                                                }
                                             )
             rpc_resources[fullpath] = RPCResource(
                             what=ResourceTypes.PROPERTY, 
@@ -500,6 +500,15 @@ def get_organised_resources(instance):
             instance_resources[f"{fullpath}/read"] = data_cls
             instance_resources[f"{fullpath}/write"] = data_cls  
             # instance_resources[f"{fullpath}/delete"] = data_cls  
+            if prop.observable:
+                event_data_cls = ServerSentEvent(
+                            name=prop._observable_event.name,
+                            obj_name='_observable_event', # not used in client, so fill it with something
+                            what=ResourceTypes.EVENT,
+                            unique_identifier=f"{instance._full_URL_path_prefix}{prop._observable_event.URL_path}",
+                        )
+                prop._observable_event._remote_info = event_data_cls
+                httpserver_resources[fullpath] = event_data_cls
     # Methods
     for name, resource in inspect._getmembers(instance, inspect.ismethod, getattr_without_descriptor_read): 
         if hasattr(resource, '_remote_info'):

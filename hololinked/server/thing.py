@@ -303,10 +303,11 @@ class Thing(Parameterized, metaclass=ThingMeta):
     def _get_properties(self, **kwargs) -> typing.Dict[str, typing.Any]:
         """
         """
-        if len(kwargs) == 0:
-            return self.properties.descriptors.keys()
         data = {}
-        if 'names' in kwargs:
+        if len(kwargs) == 0:
+            for parameter in self.properties.descriptors.keys():
+                data[parameter] = self.properties[parameter].__get__(self, type(self))
+        elif 'names' in kwargs:
             names = kwargs.get('names')
             if not isinstance(names, (list, tuple, str)):
                 raise TypeError(f"Specify properties to be fetched as a list, tuple or comma separated names. Givent type {type(names)}")
@@ -318,10 +319,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
                 data[requested_parameter] = self.properties[requested_parameter].__get__(self, type(self))
         elif len(kwargs.keys()) != 0:
             for rename, requested_parameter in kwargs.items():
-                data[rename] = self.properties[requested_parameter].__get__(self, type(self))              
-        else:
-            for parameter in self.properties.descriptors.keys():
-                data[parameter] = self.properties[parameter].__get__(self, type(self))
+                data[rename] = self.properties[requested_parameter].__get__(self, type(self))                   
         return data 
     
     @action(URL_path='/properties', http_method=HTTP_METHODS.PATCH)
@@ -386,26 +384,20 @@ class Thing(Parameterized, metaclass=ThingMeta):
         """
         if not hasattr(self, 'db_engine'):
             return
+        for name, resource in inspect._getmembers(self, lambda o : isinstance(o, Thing), getattr_without_descriptor_read): 
+            if name == '_owner':
+                continue
+        missing_properties = self.db_engine.create_missing_properties(self.__class__.properties.db_init_objects,
+                                                                    get_missing_properties=True)
+        # 4. read db_init and db_persist objects
+        for db_param in self.db_engine.get_all_properties():
+            try:
+                if db_param.name not in missing_properties:
+                    setattr(obj, db_param.name, db_param.value) # type: ignore
+            except Exception as ex:
+                self.logger.error(f"could not set attribute {db_param.name} due to error {str(ex)}")
+
         
-        def recursively_load_properties_from_DB(obj : Thing) -> None:
-            nonlocal self
-            for name, resource in inspect._getmembers(obj, lambda o : isinstance(o, Thing), getattr_without_descriptor_read): 
-                if name == '_owner':
-                    continue
-                recursively_load_properties_from_DB(resource) # load from the lower up
-            missing_properties = self.db_engine.create_missing_properties(obj.__class__.properties.db_init_objects,
-                                                                        get_missing_properties=True)
-            # 4. read db_init and db_persist objects
-            for db_param in obj.db_engine.get_all_properties():
-                try:
-                    if db_param.name not in missing_properties:
-                        setattr(obj, db_param.name, db_param.value) # type: ignore
-                except Exception as ex:
-                    obj.logger.error(f"could not set attribute {db_param.name} due to error {str(ex)}")
-
-        recursively_load_properties_from_DB(self)
-
-   
     @action(URL_path='/resources/postman-collection', http_method=HTTP_METHODS.GET)
     def get_postman_collection(self, domain_prefix : str = None):
         """

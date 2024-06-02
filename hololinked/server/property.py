@@ -189,6 +189,8 @@ class Property(Parameter):
                 if self._remote_info.URL_path == USE_OBJECT_NAME:
                     self._remote_info.URL_path = '/' + self.name
                 elif not self._remote_info.URL_path.startswith('/'): 
+                    raise ValueError(f"URL_path should start with '/', please add '/' before '{self._remote_info.URL_path}'")
+                else:
                     self._remote_info.URL_path = f'/{self._remote_info.URL_path}',
                 self._remote_info.obj_name = self.name
             if self.observable:
@@ -214,6 +216,13 @@ class Property(Parameter):
             elif old_value != value:
                 self._observable_event.push(value)
         return super()._post_value_set(obj, value)
+    
+    def comparator(self, func : typing.Callable) -> typing.Callable:
+        """
+        Register a getter method by using this as a decorator.
+        """
+        self.fcomparator = func 
+        return func
     
     
     
