@@ -24,7 +24,6 @@ SOFTWARE.
 """
 import json
 import pickle
-import serpent
 from msgspec import json, msgpack 
 import json as pythonjson
 import inspect
@@ -34,18 +33,19 @@ import uuid
 import decimal
 import typing
 import warnings
-from enum import Enum, StrEnum
+from enum import Enum
 from collections import deque
 
 from ..param.parameters import TypeConstrainedList, TypeConstrainedDict, TypedKeyMappingsConstrainedDict
 from .constants import JSONSerializable, Serializers
-from .webserver_utils import format_exception_as_json
+from .utils import format_exception_as_json
+
 
 
 class BaseSerializer(object):
     """
     Base class for (de)serializer implementations. All serializers must inherit this class 
-    and overloads dumps() and loads() to be usable by the ZMQ message brokers. Any serializer 
+    and overload dumps() and loads() to be usable by the ZMQ message brokers. Any serializer 
     that returns bytes when serialized and a python object on deserialization will be accepted. 
     Serialization and deserialization errors will be passed as invalid message type 
     (see ZMQ messaging contract) from server side and a exception will be raised on the client.  
@@ -76,7 +76,7 @@ class BaseSerializer(object):
 dict_keys = type(dict().keys())
 
 class JSONSerializer(BaseSerializer):
-    "(de)serializer that wraps the msgspec json serialization protocol, default serializer for HTTP clients."
+    "(de)serializer that wraps the msgspec JSON serialization protocol, default serializer for all clients."
 
     _type_replacements = {}
 
@@ -133,7 +133,7 @@ class JSONSerializer(BaseSerializer):
 
 
 class PythonBuiltinJSONSerializer(JSONSerializer):
-    "(de)serializer that wraps the python builtin json serialization protocol."
+    "(de)serializer that wraps the python builtin JSON serialization protocol."
 
     def __init__(self) -> None:
         super().__init__() 
@@ -173,38 +173,13 @@ class PickleSerializer(BaseSerializer):
         return pickle.loads(self.convert_to_bytes(data))
     
 
-class SerpentSerializer(BaseSerializer):
-    """(de)serializer that wraps the serpent serialization protocol."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.type = serpent
-
-    def dumps(self, data) -> bytes:
-        "method called by ZMQ message brokers to serialize data"
-        return serpent.dumps(data, module_in_classname=True)
-
-    def loads(self, data) -> typing.Any:
-        "method called by ZMQ message brokers to deserialize data"
-        return serpent.loads(self.convert_to_bytes(data))
-
-    @classmethod
-    def register_type_replacement(cls, object_type, replacement_function) -> None:
-        "register custom serialization function for a particular type"
-        def custom_serializer(obj, serpent_serializer, outputstream, indentlevel):
-            replaced = replacement_function(obj)
-            if replaced is obj:
-                serpent_serializer.ser_default_class(replaced, outputstream, indentlevel)
-            else:
-                serpent_serializer._serialize(replaced, outputstream, indentlevel)
-
-        if object_type is type or not inspect.isclass(object_type):
-            raise ValueError("refusing to register replacement for a non-type or the type 'type' itself")
-        serpent.register_class(object_type, custom_serializer)
-
 
 class MsgpackSerializer(BaseSerializer):
-    "(de)serializer that wraps the msgspec MessagePack serialization protocol, default serializer for RPC clients."
+    """
+    (de)serializer that wraps the msgspec MessagePack serialization protocol, recommended serializer for ZMQ based 
+    high speed applications. Set an instance of this serializer to both ``Thing.rpc_serializer`` and 
+    ``hololinked.client.ObjectProxy``.
+    """
 
     def __init__(self) -> None:
         super().__init__()
@@ -216,15 +191,49 @@ class MsgpackSerializer(BaseSerializer):
     def loads(self, value) -> typing.Any:
         return msgpack.decode(self.convert_to_bytes(value))
     
-
-
 serializers = {
     None      : JSONSerializer,
     'json'    : JSONSerializer, 
     'pickle'  : PickleSerializer,
-    'serpent' : SerpentSerializer,
     'msgpack' : MsgpackSerializer,
 }
+    
+
+try:
+    import serpent
+
+    class SerpentSerializer(BaseSerializer):
+        """(de)serializer that wraps the serpent serialization protocol."""
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.type = serpent
+
+        def dumps(self, data) -> bytes:
+            "method called by ZMQ message brokers to serialize data"
+            return serpent.dumps(data, module_in_classname=True)
+
+        def loads(self, data) -> typing.Any:
+            "method called by ZMQ message brokers to deserialize data"
+            return serpent.loads(self.convert_to_bytes(data))
+
+        @classmethod
+        def register_type_replacement(cls, object_type, replacement_function) -> None:
+            "register custom serialization function for a particular type"
+            def custom_serializer(obj, serpent_serializer, outputstream, indentlevel):
+                replaced = replacement_function(obj)
+                if replaced is obj:
+                    serpent_serializer.ser_default_class(replaced, outputstream, indentlevel)
+                else:
+                    serpent_serializer._serialize(replaced, outputstream, indentlevel)
+
+            if object_type is type or not inspect.isclass(object_type):
+                raise ValueError("refusing to register replacement for a non-type or the type 'type' itself")
+            serpent.register_class(object_type, custom_serializer)
+
+    serializers['serpent'] = SerpentSerializer,
+except ImportError:
+    pass
 
 
 
@@ -243,7 +252,9 @@ def _get_serializer_from_user_given_options(
         rpc_serializer = rpc_serializer 
         if isinstance(rpc_serializer, PickleSerializer) or rpc_serializer.type == pickle:
             warnings.warn("using pickle serializer which is unsafe, consider another like msgpack.", UserWarning)
-    elif isinstance(rpc_serializer, str) or rpc_serializer is None: 
+    elif rpc_serializer == 'json' or rpc_serializer is None:
+        rpc_serializer = json_serializer
+    elif isinstance(rpc_serializer, str): 
         rpc_serializer = serializers.get(rpc_serializer, JSONSerializer)()
     else:
         raise ValueError("invalid rpc serializer option : {}".format(rpc_serializer))    
@@ -251,5 +262,5 @@ def _get_serializer_from_user_given_options(
 
 
 
-__all__ = ['JSONSerializer', 'SerpentSerializer', 'PickleSerializer', 'MsgpackSerializer', 
+__all__ = ['JSONSerializer', 'PickleSerializer', 'MsgpackSerializer', 
         'serializers', 'BaseSerializer']

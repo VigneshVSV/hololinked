@@ -27,24 +27,24 @@ class postman_collection:
 
     @classmethod
     def build(cls, instance, domain_prefix : str) -> Dict[str, Any]:
-        from .remote_object import RemoteObject
+        from .thing import Thing
         from .data_classes import HTTPResource, RemoteResource
-        assert isinstance(instance, RemoteObject) # type definition
+        assert isinstance(instance, Thing) # type definition
         try:
             return instance._postman_collection
         except AttributeError:
             pass 
-        parameters_folder = postman_itemgroup(name = 'parameters')
-        methods_folder = postman_itemgroup(name = 'methods')
-        events_folder = postman_itemgroup(name = 'events')
+        properties_folder = postman_itemgroup(name='properties')
+        methods_folder = postman_itemgroup(name='methods')
+        events_folder = postman_itemgroup(name='events')
 
         collection = postman_collection(
             info = postman_collection_info(
                 name = instance.__class__.__name__,
-                description = "API endpoints available for Remote Object", 
+                description = "API endpoints available for Thing", 
             ),
             item = [ 
-                parameters_folder,
+                properties_folder,
                 methods_folder                
             ]
         )
@@ -57,8 +57,8 @@ class postman_collection:
                     try:
                         scada_info = instance.instance_resources[httpserver_data.instruction]
                     except KeyError:
-                        parameter_path_without_RW = httpserver_data.instruction.rsplit('/', 1)[0]
-                        scada_info = instance.instance_resources[parameter_path_without_RW]
+                        property_path_without_RW = httpserver_data.instruction.rsplit('/', 1)[0]
+                        scada_info = instance.instance_resources[property_path_without_RW]
                     item = postman_item(
                         name = scada_info.obj_name,
                         request = postman_http_request(
@@ -67,8 +67,8 @@ class postman_collection:
                             method=http_method,
                         )
                     )
-                    if scada_info.isparameter:
-                        parameters_folder.add_item(item)
+                    if scada_info.isproperty:
+                        properties_folder.add_item(item)
                     elif scada_info.iscallable:
                         methods_folder.add_item(item)
         

@@ -1,6 +1,4 @@
-import datetime
 import sys
-import uuid
 import logging
 import re 
 import asyncio
@@ -8,22 +6,54 @@ import inspect
 import typing
 import asyncio
 import types
+import traceback
+import typing
+import ifaddr
 
 
-def uuid4_in_bytes() -> bytes:
-    """
-    uuid.uuid4() in bytes
-    """
-    return bytes(str(uuid.uuid4()), encoding = 'utf-8')
 
+def get_IP_from_interface(interface_name : str = 'Ethernet', adapter_name = None) -> str:
+    """
+    Get IP address of specified interface. Generally necessary when connected to the network
+    through multiple adapters and a server binds to only one adapter at a time. 
 
-def current_datetime_ms_str():
+    Parameters
+    ----------
+    interface_name: str
+        Ethernet, Wifi etc. 
+    adapter_name: optional, str
+        name of the adapter if available
+
+    Returns
+    -------
+    str: 
+        IP address of the interface
     """
-    default: YYYY-mm-dd_HH:MM:SS.fff e.g. 2022-12-01 13:00:00.123 
-    This default is (almost) ISO8601 compatible and is natively recognized by Pandas
+    adapters = ifaddr.get_adapters(include_unconfigured=True)
+    for adapter in adapters:
+        if not adapter_name:
+            for ip in adapter.ips:
+                if interface_name == ip.nice_name:
+                    if ip.is_IPv4:
+                        return ip.ip
+        elif adapter_name == adapter.nice_name:
+            for ip in adapter.ips:
+                if interface_name == ip.nice_name:
+                    if ip.is_IPv4:
+                        return ip.ip
+    raise ValueError(f"interface name {interface_name} not found in system interfaces.")
+            
+
+def format_exception_as_json(exc : Exception) -> typing.Dict[str, typing.Any]: 
     """
-    curtime = datetime.datetime.now()
-    return curtime.strftime('%Y%m%d_%H%M%S') + '{:03d}'.format(int(curtime.microsecond /1000))
+    return exception as a JSON serializable dictionary
+    """
+    return {
+        "message" : str(exc),
+        "type" : repr(exc).split('(', 1)[0],
+        "traceback" : traceback.format_exc().splitlines(),
+        "notes" : exc.__notes__ if hasattr(exc, "__notes__") else None 
+    }
 
 
 def pep8_to_dashed_URL(word : str) -> str: 
@@ -130,7 +160,6 @@ def get_signature(callable : typing.Callable) -> typing.Tuple[typing.List[str], 
     return arg_names, arg_types
 
 
-
 def getattr_without_descriptor_read(instance, key):
     """
     supply to inspect._get_members (not inspect.get_members) to avoid calling 
@@ -153,8 +182,8 @@ def getattr_without_descriptor_read(instance, key):
 
 
 __all__ = [
-    uuid4_in_bytes.__name__,
-    current_datetime_ms_str.__name__,
+    get_IP_from_interface.__name__,
+    format_exception_as_json.__name__,
     pep8_to_dashed_URL.__name__,
     get_default_logger.__name__,
     run_coro_sync.__name__,

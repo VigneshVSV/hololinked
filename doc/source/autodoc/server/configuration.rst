@@ -1,5 +1,5 @@
-Configuration
-=============
+``Configuration``
+=================
 
 .. autoclass:: hololinked.server.config.Configuration
     :members: 

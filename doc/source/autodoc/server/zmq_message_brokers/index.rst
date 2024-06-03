@@ -1,4 +1,4 @@
-ZMQ Message Brokers
+ZMQ message brokers
 ===================
 
 ``hololinked`` uses ZMQ under the hood to implement a RPC server. All requests, either coming through a HTTP 

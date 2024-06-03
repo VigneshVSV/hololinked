@@ -1,4 +1,4 @@
-Serializers
+serializers
 -----------
 
 .. autoclass:: hololinked.server.serializers.BaseSerializer

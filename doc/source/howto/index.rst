@@ -2,17 +2,15 @@
  
 .. |module-highlighted| replace:: ``hololinked``
 
-.. |br| raw:: html
-
-    <br />
-
 .. toctree::
     :hidden:
     :maxdepth: 2
     
     Expose Python Classes <self>
-    parameters/index
+    clients
+    properties/index
     methods/index
+    serializers
     eventloop
 
     
@@ -21,85 +19,60 @@ Expose Python Classes
 
 Since |module-highlighted| is object oriented, one can start by creating a class to encapsulate 
 instrumentation properties and the desirable commands to be issued. Python objects visible
-on the network or to other processes are made by subclassing from ``RemoteObject``: 
+on the network or to other processes are made by subclassing from ``Thing``: 
 
 .. literalinclude:: code/remote_object_inheritance.py
     :language: python
     :linenos:
 
 ``instance_name`` is a unique name recognising the instantiated object. It allows multiple 
-instruments of same type to be connected to the same computer without overlapping the exposed interface. 
-This is mandatory to be supplied to the ``RemoteObject`` parent.  
+instruments of same type to be connected to the same computer without overlapping the exposed interface and is therefore a 
+mandatory argument to be supplied to the ``Thing`` parent. When maintained unique within the network, it allows 
+identification of the hardware itself. Non-experts may use strings composed of 
+characters, numbers, dashes and forward slashes, which looks like part of a browser URL, but the general definition is 
+that ``instance_name`` should be a URI compatible string.
 
 For attributes (like serial number above), if one requires them to be exposed on the network, one should 
-use "parameters" defined in ``hololinked.server.remote_parameters`` to "parameterize" the object. 
+use "properties" defined in ``hololinked.server.properties`` to "parameterize" the object. 
 
-.. literalinclude:: code/rpc.py
+.. literalinclude:: code/thing_with_http_server.py
     :language: python
     :linenos:
-    :lines: 2, 6-18
+    :lines: 2, 5-19
 
-Only parameters can be exposed to the network, not normal python attributes.
+Only properties defined in ``hololinked.server.properties`` or subclass of ``Property`` object (note the captial 'P') 
+can be exposed to the network, not normal python attributes or python's own ``property``.
 
-For methods to be exposed on the network, one can use the ``remote_method`` decorator. 
+For methods to be exposed on the network, one can use the ``action`` decorator: 
 
-.. literalinclude:: code/rpc.py
+.. literalinclude:: code/thing_with_http_server.py
     :language: python
     :linenos:
-    :lines: 3-9, 14-18, 20-28
+    :lines: 3-9, 15-19, 21-28
 
-Arbitrary signature is permitted and arguments are loosely typed in general. 
+Arbitrary signature is permitted. Arguments are loosely typed and may need to be constrained with a schema, based 
+on the robustness the developer is expecting in their application. However, a schema is optional and it only matters that 
+the method signature is matching when requested from a client. 
 
-To start a ``RemoteObject`` server, one can call the ``run()`` method 
+To start a HTTP server for the ``Thing``, one can call the ``run_with_http_server()`` method after instantiating the 
+``Thing``. The supplied ``URL_path`` to the actions and properties are used by this HTTP server: 
 
-.. literalinclude:: code/rpc.py
+.. literalinclude:: code/thing_with_http_server.py
     :language: python
     :linenos:
-    :lines: 5-9, 42-46
+    :lines: 6-9, 42-47
 
 
-By default, this starts a server which listens at three levels - a TCP socket, 
-interprocess communication (ZMQ's IPC) & intra-process communication (ZMQ's INPROC). 
-Because the speed of message passing is different for each transport method, these three 
-possibilities are available & one can select one's requirements. 
+By default, this starts a server a HTTP server and an INPROC zmq socket (GIL constrained intra-process as far as python is
+concerned) for the HTTP server to direct the requests to the ``Thing`` object. All requests are queued by default as the
+ domain of operation under the hood is remote procedure calls (RPC).  
 
-To connect to the server to invoke the methods & read-write parameters, one can use an object proxy 
-available in ``hololinked.client``:
+One can store captured data in properties & push events to supply clients with the measured data:
 
-.. literalinclude:: code/rpc_client.py
-    :language: python
-    :linenos: 
-    :lines: 1-20
-
-
-One would be making such remote procedure calls from a PyQt graphical interface or custom acquisition scripts 
-which may be running in the same or a different computer on the network.
-
-If one needs type definitions for the client because the client does not know 
-the server to which it is connected, one can import the server script ``RemoteObject`` and set 
-it as the type of the client. 
-
-.. literalinclude:: code/rpc_client.py 
-    :language: python
-    :linenos: 
-    :lines: 22-28
-
-For python to python, an interface definition language is not necessary as the client attributes, methods etc.
-will be constructed dynamically after locating the server. It is suggested to use type definitions instead.  
-
-.. image:: ../_static/type-definitions-withoutIDL.png
-  
-|br|
-One can store captured data in parameters & push events to supply clients with the measured data:
-
-.. literalinclude:: code/rpc.py 
+.. literalinclude:: code/thing_with_http_server.py 
     :language: python   
     :linenos:
-    :lines: 6-16, 19, 28-40
+    :lines: 6-10, 15-20, 29-41
 
-On the client side, one can subscribe to the event to receive the data:
-
-.. literalinclude:: code/rpc_client.py 
-    :language: python 
-    :linenos: 
-    :lines: 22-32
+Events can be defined as class or instance attributes and will be tunnelled as HTTP server sent events without any additional 
+serialization overhead. 

@@ -7,6 +7,8 @@
  
 .. |module-highlighted| replace:: ``hololinked``
 
+.. |base-class-highlighted| replace:: ``Thing``
+
 |module| - Pythonic Supervisory Control & Data Acquisition / Internet of Things
 ===============================================================================
 
@@ -24,14 +26,14 @@ based tools. |module-highlighted| is being developed with the following features
 
 In short - to use it in your home/hobby, in a lab or in a research facility & industry.
 
-|module-highlighted| is primarily object oriented & the building block is the ``RemoteObject`` class. Your instrument 
+|module-highlighted| is primarily object oriented & the building block is the |base-class-highlighted| class. Your instrument 
 class (i.e. the python object that controls the hardware) should inherit this class. Each such class provides remote 
 methods, remote attributes (also called remote parameters) & events which become accessible on the network through HTTP 
 and/or TCP after implementation by the |module-highlighted| developer. Interprocess communication (ZMQ's IPC) is 
 available for restriction to single-computer applications. Remote methods can be used to run control and measurement 
 operations on your instruments or arbitrary python logic. Remote parameters are type-checked object attributes with 
 getter-setter options (identical to python ``property`` with added network access). Events allow to asynchronously push 
-arbitrary data to clients. Once such a ``RemoteObject`` is instantiated, it can be connected with a server of choice (one or many). 
+arbitrary data to clients. Once such a |base-class-highlighted| is instantiated, it can be connected with a server of choice (one or many). 
 
 Please follow the documentation for examples & tutorials, how-to's and API reference.
 

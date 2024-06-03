@@ -1,7 +1,7 @@
-Database
+database
 ========
 
-.. autoclass:: hololinked.server.database.RemoteObjectDB
+.. autoclass:: hololinked.server.database.ThingDB
     :members: 
     :show-inheritance:
 
@@ -9,4 +9,5 @@ Database
     :hidden:
     :maxdepth: 1
 
-    base_DB
+    helpers
+    baseDB

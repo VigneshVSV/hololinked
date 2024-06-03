@@ -34,7 +34,8 @@ from .serializers import PythonBuiltinJSONSerializer
 class Configuration:
     """
     Allows to auto apply common settings used throughout the package,
-    instead of passing these settings as arguments. 
+    instead of passing these settings as arguments. Import ``global_config`` variable
+    instead of instantitation this class. 
 
     Supports loading configuration from a JSON file whose path is specified 
     under environment variable HOLOLINKED_CONFIG. 
@@ -61,8 +62,7 @@ class Configuration:
     PWD_HASHER_MEMORY_COST - system view server password authentication memory cost. 
     Refer argon2-cffi docs.
 
-    USE_UVLOOP - signicantly faster event loop for Linux systems. Reads data from network faster. 
-                default False. 
+    USE_UVLOOP - signicantly faster event loop for Linux systems. Reads data from network faster. default False. 
 
     Parameters
     ----------

@@ -6,7 +6,6 @@ import uuid
 import zmq
 
 from ..server.constants import JSON, CommonRPC, ServerMessage, ResourceTypes, ZMQ_PROTOCOLS
-from ..server.utils import current_datetime_ms_str
 from ..server.serializers import BaseSerializer
 from ..server.data_classes import RPCResource, ServerSentEvent
 from ..server.zmq_message_brokers import AsyncZMQClient, SyncZMQClient, EventConsumer, PROXY

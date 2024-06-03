@@ -1,7 +1,6 @@
-from hololinked.server import RemoteObject
+from hololinked.server import Thing, Property, action, Event
 
-
-class Spectrometer(RemoteObject):
+class Spectrometer(Thing):
     """
     add class doc here
     """
@@ -13,5 +12,5 @@ class Spectrometer(RemoteObject):
 
     def connect(self):
         # implemenet logic to connect
-        return
+        pass
     

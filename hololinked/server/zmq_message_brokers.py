@@ -12,10 +12,7 @@ from collections import deque
 from enum import Enum
 from zmq.utils.monitor import parse_monitor_message
 
-
-
 from .utils import *
-from .webserver_utils import format_exception_as_json
 from .config import global_config
 from .constants import JSON, ZMQ_PROTOCOLS, CommonRPC, ServerTypes, ZMQSocketType, ZMQ_EVENT_MAP
 from .serializers import BaseSerializer, JSONSerializer, _get_serializer_from_user_given_options
@@ -97,7 +94,7 @@ class BaseZMQ:
     Parameters
     ----------
     instance_name: str
-        instance name of the serving ``RemoteObject``
+        instance name of the serving ``Thing``
     server_type: Enum
         metadata about the nature of the server
     json_serializer: hololinked.server.serializers.JSONSerializer
@@ -133,7 +130,7 @@ class BaseZMQ:
         Parameters
         ----------
         identity: str
-            especially useful for clients to have a different ID other than the ``instance_name`` of the ``RemoteObject``.
+            especially useful for clients to have a different ID other than the ``instance_name`` of the ``Thing``.
             For servers, supplying the ``instance_name`` is sufficient.
         bind: bool
             whether to bind (server) or connect (client)
@@ -205,7 +202,8 @@ class BaseZMQ:
                 self.socket.connect(socket_address)
         else:
             raise NotImplementedError("protocols other than IPC, TCP & INPROC are not implemented now for {}".format(
-                                                                                                    self.__class__))
+                                                                                                    self.__class__) + 
+                                            f" Given protocol {protocol}.")
         self.socket_address = socket_address
         if not self.logger:
             self.logger = get_default_logger('{}|{}|{}|{}'.format(self.__class__.__name__, 
@@ -650,7 +648,7 @@ class AsyncPollingZMQServer(AsyncZMQServer):
     Parameters
     ----------
     instance_name: str
-        ``instance_name`` of the RemoteObject which the server serves
+        ``instance_name`` of the Thing which the server serves
     server_type: str
         server type metadata - currently not useful/important
     context: Optional, zmq.asyncio.Context
@@ -797,7 +795,7 @@ class ZMQServerPool(BaseZMQServer):
         Parameters
         ----------
         instance_name : str
-            instance name of the ``RemoteObject`` or in this case, the ZMQ server. 
+            instance name of the ``Thing`` or in this case, the ZMQ server. 
         """
         return await self.pool[instance_name].async_recv_instruction()
      
@@ -808,7 +806,7 @@ class ZMQServerPool(BaseZMQServer):
         Parameters
         ----------
         instance_name : str
-            instance name of the ``RemoteObject`` or in this case, the ZMQ server. 
+            instance name of the ``Thing`` or in this case, the ZMQ server. 
         """
         return await self.pool[instance_name].async_recv_instructions()
    
@@ -820,7 +818,7 @@ class ZMQServerPool(BaseZMQServer):
         Parameters
         ----------
         instance_name : str
-            instance name of the ``RemoteObject`` or in this case, the ZMQ server. 
+            instance name of the ``Thing`` or in this case, the ZMQ server. 
         original_client_message: List[bytes]
             instruction for which reply is being given
         data: Any
@@ -882,12 +880,12 @@ class ZMQServerPool(BaseZMQServer):
     
 class RPCServer(BaseZMQServer):
     """
-    Top level ZMQ RPC server used by ``RemoteObject`` and ``Eventloop``. 
+    Top level ZMQ RPC server used by ``Thing`` and ``Eventloop``. 
 
     Parameters
     ----------
     instance_name: str
-        ``instance_name`` of the RemoteObject which the server serves
+        ``instance_name`` of the Thing which the server serves
     server_type: str
         server type metadata - currently not useful/important
     context: Optional, zmq.asyncio.Context
@@ -969,7 +967,7 @@ class RPCServer(BaseZMQServer):
 
     async def handshake_complete(self):
         """
-        handles inproc client's handshake with ``RemoteObject``'s inproc server
+        handles inproc client's handshake with ``Thing``'s inproc server
         """
         await self.inner_inproc_client.handshake_complete()
 
@@ -981,7 +979,7 @@ class RPCServer(BaseZMQServer):
         """
         eventloop = asyncio.get_event_loop()
         eventloop.call_soon(lambda : asyncio.create_task(self.poll()))
-        eventloop.call_soon(lambda : asyncio.create_task(self.tunnel_message_to_remote_objects()))
+        eventloop.call_soon(lambda : asyncio.create_task(self.tunnel_message_to_things()))
 
 
     @property
@@ -1012,7 +1010,7 @@ class RPCServer(BaseZMQServer):
 
     async def poll(self):
         """
-        poll for instructions and append them to instructions list to pass them to ``Eventloop``/``RemoteObject``'s inproc 
+        poll for instructions and append them to instructions list to pass them to ``Eventloop``/``Thing``'s inproc 
         server using an inner inproc client. Registers the messages for timeout calculation.
         """
         self.stop_poll = False
@@ -1057,7 +1055,7 @@ class RPCServer(BaseZMQServer):
             self._instructions_event.set()
            
 
-    async def tunnel_message_to_remote_objects(self):
+    async def tunnel_message_to_things(self):
         """
         message tunneler between external sockets and interal inproc client
         """
@@ -1143,7 +1141,7 @@ class BaseZMQClient(BaseZMQ):
     Parameters
     ----------
     server_instance_name: str
-        The instance name of the server (or ``RemoteObject``)
+        The instance name of the server (or ``Thing``)
     client_type: str
         RPC or HTTP Server
     **kwargs:
@@ -1359,7 +1357,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
     Parameters
     ----------
     server_instance_name: str
-        The instance name of the server (or ``RemoteObject``)
+        The instance name of the server (or ``Thing``)
     identity: str 
         Unique identity of the client to receive messages from the server. Each client connecting to same server must 
         still have unique ID. 
@@ -1416,7 +1414,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         Parameters
         ----------
         instruction: str
-            unique str identifying a server side or ``RemoteObject`` resource. These values corresponding 
+            unique str identifying a server side or ``Thing`` resource. These values corresponding 
             to automatically extracted name from the object name or the URL_path prepended with the instance name. 
         arguments: Dict[str, Any]
             if the instruction invokes a method, arguments of that method. 
@@ -1429,8 +1427,8 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             a byte representation of message id
         """
         message = self.craft_instruction_from_arguments(instruction, arguments, invokation_timeout, context)
-        if argument_schema:
-            jsonschema.validate(arguments, argument_schema)
+        # if argument_schema:
+        #     jsonschema.validate(arguments, argument_schema)
         self.socket.send_multipart(message)
         self.logger.debug(f"sent instruction '{instruction}' to server '{self.instance_name}' with msg-id '{message[SM_INDEX_MESSAGE_ID]}'")
         return message[SM_INDEX_MESSAGE_ID]
@@ -1445,7 +1443,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         Parameters
         ----------
         raise_client_side_exception: bool, default False
-            if True, any exceptions raised during execution inside ``RemoteObject`` instance will be raised on the client.
+            if True, any exceptions raised during execution inside ``Thing`` instance will be raised on the client.
             See docs of ``raise_local_exception()`` for info on exception 
         """
         while True:
@@ -1477,7 +1475,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         Parameters
         ----------
         instruction: str
-            unique str identifying a server side or ``RemoteObject`` resource. These values corresponding 
+            unique str identifying a server side or ``Thing`` resource. These values corresponding 
             to automatically extracted name from the object name or the URL_path prepended with the instance name. 
         arguments: Dict[str, Any]
             if the instruction invokes a method, arguments of that method. 
@@ -1610,7 +1608,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         Parameters
         ----------
         instruction: str
-            unique str identifying a server side or ``RemoteObject`` resource. These values corresponding 
+            unique str identifying a server side or ``Thing`` resource. These values corresponding 
             to automatically extracted name from the object name or the URL_path prepended with the instance name. 
         arguments: Dict[str, Any]
             if the instruction invokes a method, arguments of that method. 
@@ -1623,8 +1621,8 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             a byte representation of message id
         """
         message = self.craft_instruction_from_arguments(instruction, arguments, invokation_timeout, context) 
-        if argument_schema:
-            jsonschema.validate(arguments, argument_schema)
+        # if argument_schema:
+        #     jsonschema.validate(arguments, argument_schema)
         await self.socket.send_multipart(message)
         self.logger.debug(f"sent instruction '{instruction}' to server '{self.instance_name}' with msg-id {message[SM_INDEX_MESSAGE_ID]}")
         return message[SM_INDEX_MESSAGE_ID]
@@ -1640,7 +1638,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         Parameters
         ----------
         raise_client_side_exception: bool, default False
-            if True, any exceptions raised during execution inside ``RemoteObject`` instance will be raised on the client.
+            if True, any exceptions raised during execution inside ``Thing`` instance will be raised on the client.
             See docs of ``raise_local_exception()`` for info on exception 
         """
         while True:
@@ -1672,7 +1670,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         Parameters
         ----------
         instruction: str
-            unique str identifying a server side or ``RemoteObject`` resource. These values corresponding 
+            unique str identifying a server side or ``Thing`` resource. These values corresponding 
             to automatically extracted name from the object name or the URL_path prepended with the instance name. 
         arguments: Dict[str, Any]
             if the instruction invokes a method, arguments of that method. 
@@ -1865,7 +1863,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         instance_name: str
             instance name of the server
         instruction: str
-            unique str identifying a server side or ``RemoteObject`` resource. These values corresponding 
+            unique str identifying a server side or ``Thing`` resource. These values corresponding 
             to automatically extracted name from the object name or the URL_path prepended with the instance name. 
         arguments: Dict[str, Any]
             if the instruction invokes a method, arguments of that method. 
@@ -1951,7 +1949,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         instance_name: str
             instance name of the server
         instruction: str
-            unique str identifying a server side or ``RemoteObject`` resource. These values corresponding 
+            unique str identifying a server side or ``Thing`` resource. These values corresponding 
             to automatically extracted name from the object name or the URL_path prepended with the instance name. 
         arguments: Dict[str, Any]
             if the instruction invokes a method, arguments of that method. 
@@ -1992,7 +1990,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                         invokation_timeout : typing.Optional[float] = 5, execution_timeout : typing.Optional[float] = None, 
                     ) -> typing.Dict[str, typing.Any]:
         """
-        execute a specified instruction in all remote object including eventloops
+        execute a specified instruction in all Thing including eventloops
         """
         if not instance_names:
             instance_names = self.pool.keys()
@@ -2006,15 +2004,15 @@ class MessageMappedZMQClientPool(BaseZMQClient):
             replies[instance_name] = reply
         return replies  
     
-    async def async_execute_in_all_remote_objects(self, instruction : str, arguments : typing.Dict[str, typing.Any] = EMPTY_DICT, 
+    async def async_execute_in_all_things(self, instruction : str, arguments : typing.Dict[str, typing.Any] = EMPTY_DICT, 
                         context : typing.Dict[str, typing.Any] = EMPTY_DICT, 
                         invokation_timeout : typing.Optional[float] = 5, execution_timeout : typing.Optional[float] = None, 
                        ) -> typing.Dict[str, typing.Any]: #  raise_client_side_exception = False
         """
-        execute the same instruction in all remote objects, eventloops are excluded. 
+        execute the same instruction in all Things, eventloops are excluded. 
         """
         return await self.async_execute_in_all(instruction=instruction, 
-                        instance_names=[instance_name for instance_name, client in self.pool.items() if client.server_type == ServerTypes.REMOTE_OBJECT],
+                        instance_names=[instance_name for instance_name, client in self.pool.items() if client.server_type == ServerTypes.THING],
                         arguments=arguments, context=context, invokation_timeout=invokation_timeout, 
                         execution_timeout=execution_timeout)
     
@@ -2032,7 +2030,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
 
     async def ping_all_servers(self):
         """
-        ping all servers connected to the client pool, calls ping() on RemoteObject
+        ping all servers connected to the client pool, calls ping() on Thing
         """
         return await self.async_execute_in_all(instruction=CommonRPC.PING)
         
@@ -2098,7 +2096,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
 
     def __init__(self, instance_name : str, protocol : str, 
                     context : typing.Union[zmq.Context, None] = None, **kwargs) -> None:
-        super().__init__(instance_name=instance_name, server_type=ServerTypes.REMOTE_OBJECT.value, 
+        super().__init__(instance_name=instance_name, server_type=ServerTypes.THING.value, 
                             **kwargs)
         self.create_socket(identity=f'{instance_name}/event-publisher', bind=True, context=context,
                            protocol=protocol, socket_type=zmq.PUB, **kwargs)
@@ -2113,7 +2111,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         Parameters
         ----------
         event: ``Event``
-            ``Event`` object that needs to be registered. Events created at ``__init__()`` of RemoteObject are 
+            ``Event`` object that needs to be registered. Events created at ``__init__()`` of Thing are 
             automatically registered. 
         """
         if event._unique_identifier in self.events and event not in self.events:
@@ -2194,7 +2192,7 @@ class BaseEventConsumer(BaseZMQClient):
         rpc_serializer: BaseSerializer
             serializer for RPC clients
         server_instance_name: str
-            instance name of the remote object publishing the event
+            instance name of the Thing publishing the event
     """
 
     def __init__(self, unique_identifier : str, socket_address : str, 
@@ -2269,7 +2267,7 @@ class AsyncEventConsumer(BaseEventConsumer):
         rpc_serializer: BaseSerializer
             serializer for RPC clients
         server_instance_name: str
-            instance name of the remote object publishing the event
+            instance name of the Thing publishing the event
     """
 
     def __init__(self, unique_identifier : str, socket_address : str, identity : str, client_type = b'HTTP_SERVER', 
@@ -2348,7 +2346,7 @@ class EventConsumer(BaseEventConsumer):
         rpc_serializer: BaseSerializer
             serializer for RPC clients
         server_instance_name: str
-            instance name of the remote object publishing the event
+            instance name of the Thing publishing the event
     """
 
     def __init__(self, unique_identifier : str, socket_address : str, identity : str, client_type = b'HTTP_SERVER', 
@@ -2409,5 +2407,14 @@ class EventConsumer(BaseEventConsumer):
 from .events import Event
 
 
-__all__ = ['AsyncZMQServer', 'AsyncPollingZMQServer', 'ZMQServerPool', 'RPCServer', 'SyncZMQClient', 
-        'AsyncZMQClient', 'MessageMappedZMQClientPool', 'AsyncEventConsumer', 'EventConsumer']
+__all__ = [
+    AsyncZMQServer.__name__, 
+    AsyncPollingZMQServer.__name__, 
+    ZMQServerPool.__name__, 
+    RPCServer.__name__, 
+    SyncZMQClient.__name__, 
+    AsyncZMQClient.__name__, 
+    MessageMappedZMQClientPool.__name__, 
+    AsyncEventConsumer.__name__, 
+    EventConsumer.__name__
+]

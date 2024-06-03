@@ -1,8 +1,14 @@
-EventLoop
-=========
+``EventLoop``
+=============
 
-.. autoclass:: hololinked.server.eventloop.EventLoop
-    :members: instance_name, remote_objects, run, exit, run_remote_object_executor, 
-            run_external_message_listener, run_single_target, execute_once, import_remote_object, 
-            instantiate, get_async_loop,
+.. autoclass:: hololinked.server.eventloop.EventLoop()
+    :members: instance_name, things
     :show-inheritance:
+
+.. automethod:: hololinked.server.eventloop.EventLoop.__init__
+
+.. automethod:: hololinked.server.eventloop.EventLoop.run
+    
+.. automethod:: hololinked.server.eventloop.EventLoop.exit
+    
+.. automethod:: hololinked.server.eventloop.EventLoop.get_async_loop

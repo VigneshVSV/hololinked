@@ -6,10 +6,10 @@ from .serializers import *
 from .config import *
 from .zmq_message_brokers import *
 from .events import *
-from .decorators import *
-from .remote_parameter import *
+from .action import *
+from .property import *
 from .database import *
-from .remote_object import *
+from .thing import *
 from .eventloop import *
 from .HTTPServer import *
 

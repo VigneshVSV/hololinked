@@ -1,5 +1,5 @@
-RPCHandler
-==========
+``RPCHandler``
+==============
 
 .. autoclass:: hololinked.server.handlers.RPCHandler
     :members: 

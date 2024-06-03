@@ -1,5 +1,6 @@
-import zmq
 import asyncio
+import zmq
+import zmq.asyncio
 import logging
 import socket
 import ssl
@@ -8,95 +9,124 @@ from tornado import ioloop
 from tornado.web import Application
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
-import zmq.asyncio
-
 # from tornado_http2.server import Server as TornadoHTTP2Server 
-
 
 from ..param import Parameterized
 from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector, TypedList, String)
 from .constants import CommonRPC, HTTPServerTypes, ResourceTypes, ServerMessage
-from .webserver_utils import get_IP_from_interface
+from .utils import get_IP_from_interface
 from .data_classes import HTTPResource, ServerSentEvent
 from .utils import get_default_logger, run_coro_sync
 from .serializers import JSONSerializer
-from .database import RemoteObjectInformation
+from .database import ThingInformation
 from .zmq_message_brokers import  AsyncZMQClient, MessageMappedZMQClientPool
-from .handlers import RPCHandler, BaseHandler, EventHandler, RemoteObjectsHandler
+from .handlers import RPCHandler, BaseHandler, EventHandler, ThingsHandler
+
 
 
 class HTTPServer(Parameterized):
     """
-    HTTP(s) server to route requests to ``RemoteObject``. Only one HTTPServer per process supported.
+    HTTP(s) server to route requests to ``Thing``.
     """
-
-    address = IPAddress(default='0.0.0.0', 
-                    doc="set custom IP address, default is localhost (0.0.0.0)") # type: str
+    
+    things = TypedList(item_type=str, default=None, allow_None=True, 
+                       doc="instance name of the things to be served by the HTTP server." ) # type: typing.List[str]
     port = Integer(default=8080, bounds=(1, 65535),  
-                    doc="the port at which the server should be run (unique)" ) # ytype: int
-    protocol_version = Selector(objects=[1, 1.1, 2], default=2, 
-                    doc="for HTTP 2, SSL is mandatory. HTTP2 is recommended. \
-                    When no SSL configurations are provided, defaults to 1.1" ) # type: float
+                    doc="the port at which the server should be run" ) # type: int
+    address = IPAddress(default='0.0.0.0', 
+                    doc="IP address") # type: str
+    # protocol_version = Selector(objects=[1, 1.1, 2], default=2, 
+    #                 doc="for HTTP 2, SSL is mandatory. HTTP2 is recommended. \
+    #                 When no SSL configurations are provided, defaults to 1.1" ) # type: float
     logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, 
-                    doc="Supply a custom logger here or set log_level parameter to a valid value" ) # type: logging.Logger
+                    doc="logging.Logger" ) # type: logging.Logger
     log_level = Selector(objects=[logging.DEBUG, logging.INFO, logging.ERROR, logging.CRITICAL, logging.ERROR], 
                     default=logging.INFO, 
-                    doc="Alternative to logger, this creates an internal logger with the specified log level" ) # type: int
-    remote_objects = TypedList(item_type=str, default=None, allow_None=True, 
-                       doc="Remote Objects to be served by the HTTP server" ) # type: typing.List[str]
+                    doc="""alternative to logger, this creates an internal logger with the specified log level 
+                    along with a IO stream handler.""" ) # type: int
+    serializer = ClassSelector(class_=JSONSerializer,  default=None, allow_None=True,
+                    doc="""json serializer used by the server""" ) # type: JSONSerializer
+    ssl_context = ClassSelector(class_=ssl.SSLContext, default=None, allow_None=True, 
+                    doc="SSL context to provide encrypted communication") # type: typing.Optional[ssl.SSLContext]    
+    certfile = String(default=None, allow_None=True, 
+                    doc="""alternative to SSL context, provide certificate file & key file to allow the server to 
+                        create a SSL context""") # type: str
+    keyfile = String(default=None, allow_None=True, 
+                    doc="""alternative to SSL context, provide certificate file & key file to allow the server to 
+                        create a SSL context""") # type: str
+    allowed_clients = TypedList(item_type=str,
+                            doc="""Serves request and sets CORS only from these clients, other clients are rejected with 403. 
+                                Unlike pure CORS, the server resource is not even executed if the client is not 
+                                an allowed client. if None any client is served.""")
     host = String(default=None, allow_None=True, 
                 doc="Host Server to subscribe to coordinate starting sequence of remote objects & web GUI" ) # type: str
-    serializer = ClassSelector(class_=JSONSerializer,  default=None, allow_None=True,
-                    doc="optionally, supply your own JSON serializer for custom types" ) # type: JSONSerializer
-    ssl_context = ClassSelector(class_=ssl.SSLContext, default=None, allow_None=True, 
-                    doc="use it for highly customized SSL context to provide encrypted communication") # type: typing.Optional[ssl.SSLContext]    
-    certfile = String(default=None, allow_None=True, 
-                    doc="alternative to SSL context, provide certificate file & key file to allow the server \
-                        to create a SSL connection on its own") # type: str
-    keyfile = String(default=None, allow_None=True, 
-                    doc="alternative to SSL context, provide certificate file & key file to allow the server \
-                            to create a SSL connection on its own") # type: str
-    network_interface = String(default='Ethernet',  
-                            doc="Currently there is no logic to detect the IP addresss (as externally visible) correctly, \
-                            therefore please send the network interface name to retrieve the IP. If a DNS server is present, \
-                            you may leave this field" ) # type: str
+    # network_interface = String(default='Ethernet',  
+    #                         doc="Currently there is no logic to detect the IP addresss (as externally visible) correctly, \
+    #                         therefore please send the network interface name to retrieve the IP. If a DNS server is present, \
+    #                         you may leave this field" ) # type: str
     request_handler = ClassSelector(default=RPCHandler, class_=RPCHandler, isinstance=False, 
-                            doc="custom web request handler of your choice" ) # type: RPCHandler
+                            doc="custom web request handler of your choice for property read-write & action execution" ) # type: typing.Union[BaseHandler, RPCHandler]
     event_handler = ClassSelector(default=EventHandler, class_=(EventHandler, BaseHandler), isinstance=False, 
                             doc="custom event handler of your choice for handling events") # type: typing.Union[BaseHandler, EventHandler]
-    allowed_clients = TypedList(item_type=str,
-                            doc="serves request and sets CORS only from these clients, other clients are reject with 403")
-
-    def __init__(self, remote_objects : typing.List[str], *, port : int = 8080, address : str = '0.0.0.0', 
-                host : str = None, logger : typing.Optional[logging.Logger] = None, log_level : int = logging.INFO, 
-                certfile : str = None, keyfile : str = None, serializer : JSONSerializer = None,
-                allowed_clients : typing.Union[str, typing.Iterable[str]] = None,   
-                ssl_context : ssl.SSLContext = None, protocol_version : int = 1, 
-                network_interface : str = 'Ethernet', request_handler : RPCHandler = RPCHandler, 
-                event_handler : typing.Union[BaseHandler, EventHandler] = EventHandler,
-                zmq_protocol : str = 'IPC', context : zmq.asyncio.Context = None) -> None:
+    
+    def __init__(self, things : typing.List[str], *, port : int = 8080, address : str = '0.0.0.0', 
+                host : typing.Optional[str] = None, logger : typing.Optional[logging.Logger] = None, log_level : int = logging.INFO, 
+                serializer : typing.Optional[JSONSerializer] = None, ssl_context : typing.Optional[ssl.SSLContext] = None, 
+                certfile : str = None, keyfile : str = None, # protocol_version : int = 1, network_interface : str = 'Ethernet', 
+                allowed_clients : typing.Optional[typing.Union[str, typing.Iterable[str]]] = None,   
+                **kwargs) -> None:
+        """
+        Parameters
+        ----------
+        things: List[str]
+            instance name of the things to be served as a list.
+        port: int, default 8080
+            the port at which the server should be run
+        address: str, default 0.0.0.0
+            IP address
+        logger: logging.Logger, optional
+            logging.Logger instance
+        log_level: int
+            alternative to logger, this creates an internal logger with the specified log level along with a IO stream handler. 
+        serializer: JSONSerializer, optional
+            json serializer used by the server
+        ssl_context: ssl.SSLContext
+            SSL context to provide encrypted communication
+        certfile: str
+            alternative to SSL context, provide certificate file & key file to allow the server to create a SSL context 
+        keyfile: str
+            alternative to SSL context, provide certificate file & key file to allow the server to create a SSL context 
+        allowed_clients: List[str] 
+            serves request and sets CORS only from these clients, other clients are reject with 403. Unlike pure CORS
+            feature, the server resource is not even executed if the client is not an allowed client.
+        **kwargs:
+            rpc_handler: RPCHandler | BaseHandler, optional
+                custom web request handler of your choice for property read-write & action execution
+            event_handler: EventHandler | BaseHandler, optional
+                custom event handler of your choice for handling events
+        """
         super().__init__(
-            remote_objects=remote_objects,
+            things=things,
             port=port, 
             address=address, 
             host=host,
             logger=logger, 
             log_level=log_level,
             serializer=serializer or JSONSerializer(), 
-            protocol_version=protocol_version,
+            # protocol_version=1, 
             certfile=certfile, 
             keyfile=keyfile,
             ssl_context=ssl_context,
-            network_interface=network_interface,
-            request_handler=request_handler,
-            event_handler=event_handler,
+            # network_interface='Ethernet',# network_interface,
+            request_handler=kwargs.get('request_handler', RPCHandler),
+            event_handler=kwargs.get('event_handler', EventHandler),
             allowed_clients=allowed_clients if allowed_clients is not None else []
         )
-        self._type = HTTPServerTypes.REMOTE_OBJECT_SERVER
-        self._lost_remote_objects = dict() # see update_router_with_remote_object
-        self._zmq_protocol = zmq_protocol
-        self._zmq_socket_context = context
-        self._zmq_event_context = context
+        self._type = HTTPServerTypes.THING_SERVER
+        self._lost_things = dict() # see update_router_with_thing
+        # self._zmq_protocol = zmq_protocol
+        # self._zmq_socket_context = context
+        # self._zmq_event_context = context
  
     @property
     def all_ok(self) -> bool:
@@ -107,27 +137,27 @@ class HTTPServer(Parameterized):
                                             self.log_level)
             
         self.app = Application(handlers=[
-            (r'/remote-objects', RemoteObjectsHandler, dict(request_handler=self.request_handler, 
+            (r'/remote-objects', ThingsHandler, dict(request_handler=self.request_handler, 
                                                         event_handler=self.event_handler))
         ])
         
-        self.zmq_client_pool = MessageMappedZMQClientPool(self.remote_objects, identity=self._IP, 
+        self.zmq_client_pool = MessageMappedZMQClientPool(self.things, identity=self._IP, 
                                                     deserialize_server_messages=False, handshake=False,
                                                     json_serializer=self.serializer, context=self._zmq_socket_context,
                                                     protocol=self._zmq_protocol)
     
         event_loop = asyncio.get_event_loop()
-        event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_remote_objects()))
+        event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
         event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
         event_loop.call_soon(lambda : asyncio.create_task(self.zmq_client_pool.poll()) )
         for client in self.zmq_client_pool:
             event_loop.call_soon(lambda : asyncio.create_task(client._handshake(timeout=60000)))
         
-        if self.protocol_version == 2:
-            raise NotImplementedError("Current HTTP2 is not implemented.")
-            self.tornado_instance = TornadoHTTP2Server(self.app, ssl_options=self.ssl_context)
-        else:
-            self.tornado_instance = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)
+        # if self.protocol_version == 2:
+        #     raise NotImplementedError("Current HTTP2 is not implemented.")
+        #     self.tornado_instance = TornadoHTTP2Server(self.app, ssl_options=self.ssl_context)
+        # else:
+        self.tornado_instance = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)
         return True
     
 
@@ -166,6 +196,10 @@ class HTTPServer(Parameterized):
 
 
     def listen(self) -> None:
+        """
+        Start HTTP server. This method is blocking, async event loops intending to schedule the HTTP server should instead use  
+        the inner tornado instance's (``HTTPServer.tornado_instance``) listen() method. 
+        """
         assert self.all_ok, 'HTTPServer all is not ok before starting' # Will always be True or cause some other exception   
         self.event_loop = ioloop.IOLoop.current()
         self.tornado_instance.listen(port=self.port, address=self.address)    
@@ -178,18 +212,18 @@ class HTTPServer(Parameterized):
         self.event_loop.close()    
 
 
-    async def update_router_with_remote_objects(self)-> None:
+    async def update_router_with_things(self) -> None:
         """
-        updates HTTP router with paths from newly instantiated ``RemoteObject``s
+        updates HTTP router with paths from ``Thing`` (s)
         """
-        await asyncio.gather(*[self.update_router_with_remote_object(client) for client in self.zmq_client_pool])
+        await asyncio.gather(*[self.update_router_with_thing(client) for client in self.zmq_client_pool])
 
         
-    async def update_router_with_remote_object(self, client : AsyncZMQClient):
-        if client.instance_name in self._lost_remote_objects:
+    async def update_router_with_thing(self, client : AsyncZMQClient):
+        if client.instance_name in self._lost_things:
             # Just to avoid duplication of this call as we proceed at single client level and not message mapped level
             return 
-        self._lost_remote_objects[client.instance_name] = client
+        self._lost_things[client.instance_name] = client
         self.logger.info(f"attempting to update router with remote object {client.instance_name}.")
         while True:
             try:
@@ -203,7 +237,7 @@ class HTTPServer(Parameterized):
 
                 handlers = []
                 for instruction, http_resource in resources.items():
-                    if http_resource["what"] in [ResourceTypes.PARAMETER, ResourceTypes.CALLABLE] :
+                    if http_resource["what"] in [ResourceTypes.PROPERTY, ResourceTypes.ACTION] :
                         resource = HTTPResource(**http_resource)
                         handlers.append((resource.fullpath, self.request_handler, dict(
                                                                 resource=resource, 
@@ -256,7 +290,7 @@ class HTTPServer(Parameterized):
                         instruction=CommonRPC.object_info_read(client.instance_name), 
                         raise_client_side_exception=True
                     ))[ServerMessage.DATA]
-            object_info = RemoteObjectInformation(**reply)
+            object_info = ThingInformation(**reply)
             object_info.http_server ="{}://{}:{}".format("https" if self.ssl_context is not None else "http", 
                                                 socket.gethostname(), self.port)
     
@@ -269,9 +303,9 @@ class HTTPServer(Parameterized):
             self.logger.error(f"error while trying to update remote object with HTTP server details - {str(ex)}. " +
                                 "Trying again in 5 seconds")
         self.zmq_client_pool.poller.register(client.socket, zmq.POLLIN)
-        self._lost_remote_objects.pop(client.instance_name)
+        self._lost_things.pop(client.instance_name)
                
     
-
-
-__all__ = ['HTTPServer']
+__all__ = [
+    HTTPServer.__name__
+]

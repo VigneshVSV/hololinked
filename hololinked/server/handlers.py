@@ -1,15 +1,12 @@
 import asyncio
 import zmq.asyncio
 import typing
-import logging
 import uuid
 from tornado.web import RequestHandler, StaticFileHandler
 from tornado.iostream import StreamClosedError
 
-
 from .data_classes import HTTPResource, ServerSentEvent
-from .serializers import JSONSerializer
-from .webserver_utils import *
+from .utils import *
 from .zmq_message_brokers import AsyncEventConsumer, EventConsumer
 
 
@@ -18,8 +15,15 @@ class BaseHandler(RequestHandler):
     Base request handler for RPC operations
     """
 
-    def initialize(self, resource : typing.Union[HTTPResource, ServerSentEvent],
-                                owner = None) -> None:
+    def initialize(self, resource : typing.Union[HTTPResource, ServerSentEvent], owner = None) -> None:
+        """
+        Parameters
+        ----------
+        resource: HTTPResource | ServerSentEvent
+            resource representation of Thing's exposed object using a dataclass
+        owner: HTTPServer
+            owner ``hololinked.server.HTTPServer.HTTPServer`` instance
+        """
         from .HTTPServer import HTTPServer
         assert isinstance(owner, HTTPServer)
         self.resource = resource
@@ -29,17 +33,18 @@ class BaseHandler(RequestHandler):
         self.logger = self.owner.logger
         self.allowed_clients = self.owner.allowed_clients
        
-    def set_headers(self):
+    def set_headers(self) -> None:
         """
         override this to set custom headers without having to reimplement entire handler
         """
         raise NotImplementedError("implement set headers in child class to automatically call it" +
-                            " after directing the request to RemoteObject")
+                            " after directing the request to Thing")
     
     def get_execution_parameters(self) -> typing.Tuple[typing.Dict[str, typing.Any], 
                                                 typing.Dict[str, typing.Any], typing.Union[float, int, None]]:
         """
-        merges all arguments to a single JSON body and retrieves execution context and timeouts
+        merges all arguments to a single JSON body and retrieves execution context (like oneway calls, fetching executing
+        logs) and timeouts
         """
         if len(self.request.body) > 0:
             arguments = self.serializer.loads(self.request.body)
@@ -59,17 +64,19 @@ class BaseHandler(RequestHandler):
             if self.resource.request_as_argument:
                 arguments['request'] = self.request
             return arguments, context, timeout
-        return arguments, dict(), 5 # arguments, context is empty, 5 seconds invokation timeout
+        return arguments, dict(), 5 # arguments, context is empty, 5 seconds invokation timeout, hardcoded needs to be fixed
     
     @property
-    def has_access_control(self):
+    def has_access_control(self) -> bool:
         """
-        For credential login, access control allow origin cannot be '*',
-        See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
+        Checks if a client is an allowed client. Requests from un-allowed clients are reject without execution. Custom
+        web handlers can use this property to check if a client has access control on the server or ``Thing``.
         """
         if len(self.allowed_clients) == 0:
             self.set_header("Access-Control-Allow-Origin", "*")
             return True
+        # For credential login, access control allow origin cannot be '*',
+        # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
         origin = self.request.headers.get("Origin")
         if origin is not None and (origin in self.allowed_clients or origin + '/' in self.allowed_clients):
             self.set_header("Access-Control-Allow-Origin", origin)
@@ -78,8 +85,9 @@ class BaseHandler(RequestHandler):
     
     def set_access_control_allow_headers(self) -> None:
         """
-        For credential login, access control allow headers cannot be '*'. 
-        See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
+        For credential login, access control allow headers cannot be a wildcard '*'. 
+        Some requests require exact list of allowed headers for the client to access the response. 
+        Use this method in set_headers() override if necessary. 
         """
         headers = ", ".join(self.request.headers.keys())
         if self.request.headers.get("Access-Control-Request-Headers", None):
@@ -90,52 +98,56 @@ class BaseHandler(RequestHandler):
 
 class RPCHandler(BaseHandler):
     """
-    Handler for parameter read-write and method calls
+    Handler for property read-write and method calls
     """
 
-    async def get(self):
+    async def get(self) -> None:
         """
-        get method
+        runs property or action if accessible by 'GET' method. Default for property reads. 
         """
-        await self.handle_through_remote_object('GET')    
+        await self.handle_through_thing('GET')    
 
-    async def post(self):
+    async def post(self) -> None:
         """
-        post method
+        runs property or action if accessible by 'POST' method. Default for action execution.
         """
-        await self.handle_through_remote_object('POST')
+        await self.handle_through_thing('POST')
     
-    async def patch(self):
+    async def patch(self) -> None:
         """
-        patch method
+        runs property or action if accessible by 'PATCH' method.
         """
-        await self.handle_through_remote_object('PATCH')        
+        await self.handle_through_thing('PATCH')        
     
-    async def put(self):
+    async def put(self) -> None:
         """
-        put method
+        runs property or action if accessible by 'PUT' method. Default for property writes.
         """
-        await self.handle_through_remote_object('PUT')        
+        await self.handle_through_thing('PUT')        
     
-    async def delete(self):
+    async def delete(self) -> None:
         """
-        delete method
+        runs property or action if accessible by 'DELETE' method. Default for property deletes. 
         """
-        await self.handle_through_remote_object('DELETE')  
+        await self.handle_through_thing('DELETE')  
        
-    def set_headers(self):
+    def set_headers(self) -> None:
         """
-        default headers for RPC.
+        sets default headers for RPC (property read-write and action execution). The general headers are listed as follows:
 
-        content-type: application/json
-        access-control-allow-credentials: true
+        .. code-block:: http 
+
+            Content-Type: application/json
+            Access-Control-Allow-Credentials: true
+            Access-Control-Allow-Origin: <client>
         """
         self.set_header("Content-Type" , "application/json")    
         self.set_header("Access-Control-Allow-Credentials", "true")
     
-    async def options(self):
+    async def options(self) -> None:
         """
-        options for the resource
+        Options for the resource. Main functionality is to inform the client is a specific HTTP method is supported by 
+        the property or the action (Access-Control-Allow-Methods).
         """
         if self.has_access_control:
             self.set_status(204)
@@ -147,9 +159,9 @@ class RPCHandler(BaseHandler):
         self.finish()
     
 
-    async def handle_through_remote_object(self, http_method : str) -> None:
+    async def handle_through_thing(self, http_method : str) -> None:
         """
-        handles the RPC call
+        handles the actual RPC call, called by each of the HTTP methods with their name as the argument. 
         """
         if not self.has_access_control:
             self.set_status(401, "forbidden")    
@@ -175,11 +187,11 @@ class RPCHandler(BaseHandler):
             except ConnectionAbortedError as ex:
                 self.set_status(503, str(ex))
                 event_loop = asyncio.get_event_loop()
-                event_loop.call_soon(lambda : asyncio.create_task(self.owner.update_router_with_remote_object(
+                event_loop.call_soon(lambda : asyncio.create_task(self.owner.update_router_with_thing(
                                                                     self.zmq_client_pool[self.resource.instance_name])))
             except ConnectionError as ex:
-                await self.owner.update_router_with_remote_object(self.zmq_client_pool[self.resource.instance_name])
-                await self.handle_through_remote_object(http_method) # reschedule
+                await self.owner.update_router_with_thing(self.zmq_client_pool[self.resource.instance_name])
+                await self.handle_through_thing(http_method) # reschedule
                 return 
             except Exception as ex:
                 self.logger.error(f"error while scheduling RPC call - {str(ex)}")
@@ -195,19 +207,21 @@ class RPCHandler(BaseHandler):
         
 class EventHandler(BaseHandler):
     """
-    handles events based on PUB-SUB
+    handles events emitted by ``Thing`` and tunnels them as HTTP SSE. 
     """
- 
-    def initialize(self, resource : ServerSentEvent, owner = None) -> None:
-        from .HTTPServer import HTTPServer
-        assert isinstance(owner, HTTPServer)
-        self.resource = resource
-        self.owner = owner
-        self.serializer = self.owner.serializer
-        self.logger = self.owner.logger
-        self.allowed_clients = self.owner.allowed_clients
 
     def set_headers(self) -> None:
+        """
+        sets default headers for event handling. The general headers are listed as follows:
+
+        .. code-block:: http 
+
+            Content-Type: text/event-stream
+            Cache-Control: no-cache
+            Connection: keep-alive
+            Access-Control-Allow-Credentials: true
+            Access-Control-Allow-Origin: <client>
+        """
         self.set_header("Content-Type", "text/event-stream")
         self.set_header("Cache-Control", "no-cache")
         self.set_header("Connection", "keep-alive")
@@ -215,7 +229,7 @@ class EventHandler(BaseHandler):
 
     async def get(self):
         """
-        get method
+        events are support only with GET method.
         """
         if self.has_access_control:
             self.set_headers()
@@ -226,7 +240,7 @@ class EventHandler(BaseHandler):
 
     async def options(self):
         """
-        options for the resource
+        options for the resource.
         """
         if self.has_access_control:
             self.set_status(204)
@@ -237,33 +251,36 @@ class EventHandler(BaseHandler):
             self.set_status(401, "forbidden")
         self.finish()
 
-    def receive_blocking_event(self):
-        return self.event_consumer.receive(timeout=10000, deserialize=False)
+    def receive_blocking_event(self, event_consumer : EventConsumer):
+        return event_consumer.receive(timeout=10000, deserialize=False)
 
     async def handle_datastream(self) -> None:    
         """
-        handles the event
+        called by GET method and handles the event.
         """
         try:                        
-            data_header = b'data: %s\n\n'
-            event_consumer_cls = AsyncEventConsumer if isinstance(self.owner._zmq_event_context, zmq.asyncio.Context) else EventConsumer
-            self.event_consumer = event_consumer_cls(self.resource.unique_identifier, self.resource.socket_address, 
+            event_consumer_cls = EventConsumer if hasattr(self.owner, '_zmq_event_context') else AsyncEventConsumer
+            # synchronous context with INPROC pub or asynchronous context with IPC or TCP pub, we handle both in async 
+            # fashion as HTTP server should be running purely sync(or normal) python method.
+            event_consumer = event_consumer_cls(self.resource.unique_identifier, self.resource.socket_address, 
                                             identity=f"{self.resource.unique_identifier}|HTTPEvent|{uuid.uuid4()}",
                                             logger=self.logger, json_serializer=self.serializer, 
                                             context=self.owner._zmq_event_context if self.resource.socket_address.startswith('inproc') else None)
+            event_loop = asyncio.get_event_loop()
+            data_header = b'data: %s\n\n'
+            self.set_status(200)
         except Exception as ex:
             self.logger.error(f"error while subscribing to event - {str(ex)}")
-            self.set_status(500, "could not subscribe to event source from remote object")
-            self.write(data_header % self.serializer.dumps({"exception" : format_exception_as_json(ex)}))
+            self.set_status(500, "could not subscribe to event source from thing")
+            self.write(self.serializer.dumps({"exception" : format_exception_as_json(ex)}))
             return
-        self.set_status(200)
-        event_loop = asyncio.get_event_loop()
+        
         while True:
             try:
-                if isinstance(self.owner, zmq.asyncio.Context):
-                    data = await self.event_consumer.receive(timeout=10000, deserialize=False)
+                if isinstance(event_consumer, AsyncEventConsumer):
+                    data = await event_consumer.receive(timeout=10000, deserialize=False)
                 else:
-                    data = await event_loop.run_in_executor(None, self.receive_blocking_event)
+                    data = await event_loop.run_in_executor(None, self.receive_blocking_event, event_consumer)
                 if data:
                     # already JSON serialized 
                     self.write(data_header % data)
@@ -279,15 +296,14 @@ class EventHandler(BaseHandler):
                     {"exception" : format_exception_as_json(ex)}))
         try:
             if isinstance(self.owner._zmq_event_context, zmq.asyncio.Context):
-                self.event_consumer.exit()
-            self.event_consumer = None
+                event_consumer.exit()
         except Exception as ex:
             self.logger.error(f"error while closing event consumer - {str(ex)}" )
 
 
 class ImageEventHandler(EventHandler):
     """
-    handles events with images with jpeg data header
+    handles events with images with image data header
     """
 
     async def handle_datastream(self) -> None:
@@ -345,9 +361,9 @@ class FileHandler(StaticFileHandler):
     
 
 
-class RemoteObjectsHandler(BaseHandler):
+class ThingsHandler(BaseHandler):
     """
-    add or remove remote objects
+    add or remove things
     """
 
     async def get(self):
@@ -361,7 +377,7 @@ class RemoteObjectsHandler(BaseHandler):
             try:
                 instance_name = ""
                 await self.zmq_client_pool.create_new(server_instance_name=instance_name)
-                await self.owner.update_router_with_remote_object(self.zmq_client_pool[instance_name])
+                await self.owner.update_router_with_thing(self.zmq_client_pool[instance_name])
                 self.set_status(204, "ok")
             except Exception as ex:
                 self.set_status(500, str(ex))

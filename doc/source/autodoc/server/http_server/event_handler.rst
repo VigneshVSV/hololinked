@@ -1,5 +1,5 @@
-EventHandler
-============
+``EventHandler``
+================
 
 .. autoclass:: hololinked.server.handlers.EventHandler
     :members: 
