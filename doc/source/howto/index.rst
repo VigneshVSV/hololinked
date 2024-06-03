@@ -65,7 +65,7 @@ To start a HTTP server for the ``Thing``, one can call the ``run_with_http_serve
 
 By default, this starts a server a HTTP server and an INPROC zmq socket (GIL constrained intra-process as far as python is
 concerned) for the HTTP server to direct the requests to the ``Thing`` object. All requests are queued by default as the
- domain of operation under the hood is remote procedure calls (RPC).  
+domain of operation under the hood is remote procedure calls (RPC).  
 
 One can store captured data in properties & push events to supply clients with the measured data:
 
