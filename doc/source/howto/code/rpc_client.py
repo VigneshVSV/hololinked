@@ -1,6 +1,7 @@
 from hololinked.client import ObjectProxy
 
-spectrometer_proxy = ObjectProxy(instance_name='spectrometer', protocol='IPC') 
+spectrometer_proxy = ObjectProxy(instance_name='spectrometer', 
+                                serializer='msgpack', protocol='IPC') 
 # setting and getting property
 spectrometer_proxy.serial_number = 'USB2+H15897'
 print(spectrometer_proxy.serial_number)
@@ -15,7 +16,7 @@ from hololinked.client import ObjectProxy
 from oceanoptics_spectrometer import OceanOpticsSpectrometer
 
 spectrometer_proxy = ObjectProxy(instance_name='spectrometer', protocol='TCP', 
-        socket_address="tcp://192.168.0.100:6539") # type: OceanOpticsSpectrometer
+        serializer='msgpack', socket_address="tcp://192.168.0.100:6539") # type: OceanOpticsSpectrometer
 spectrometer_proxy.serial_number = 'USB2+H15897'
 spectrometer_proxy.connect() # provides type definitions corresponding to server
 

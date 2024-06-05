@@ -17,10 +17,12 @@ or, camera images or video streaming with raw pixel density & no compression, th
 up the data transfer rate. Especially one may use a different serializer like MessagePack instead of JSON. 
 JSON is the default, and currently the only supported serializer for HTTP applications and is still meant to be used 
 to interface such data-heavy devices with HTTP clients. Nevertheless, ZMQ transport is simultaneously possible along 
-with using HTTP, also with a different serializer based on requirement. 
+with using HTTP. 
 |br|
 To use a ZMQ client from a different python process other than the ``Thing``'s running process, one needs to start the 
-``Thing`` server using TCP or IPC (inter-process communication) transport methods and **not** with ``run_with_http_server()`` method:
+``Thing`` server using TCP or IPC (inter-process communication) transport methods and **not** with ``run_with_http_server()`` 
+method (which allows only INPROC/intra-process communication). Use the ``run()`` method instead and specify the desired 
+ZMQ transport layers:
 
 .. literalinclude:: code/rpc.py
     :language: python
@@ -35,6 +37,14 @@ the object it serves:
     :linenos: 
     :lines: 1-9
 
+The exposed properties, actions and events become available on the client. One can use get-set on properties, function 
+calls on actions and subscribe to events with a callback which is executed once an event arrives:
+
+.. literalinclude:: code/rpc_client.py 
+    :language: python 
+    :linenos: 
+    :lines: 22-27
+
 One would be making such remote procedure calls from a PyQt graphical interface, custom acquisition scripts or 
 measurement scan routines which may be running in the same or a different computer on the network. Use TCP ZMQ transport 
 to be accessible from network clients.
@@ -44,7 +54,14 @@ to be accessible from network clients.
     :linenos: 
     :lines: 58, 67-70
 
-Irrespective of client's request origin, requests are always queued before executing. 
+Irrespective of client's request origin, whether TCP, IPC or INPROC, requests are always queued before executing. To repeat:
+
+* TCP - raw TCP transport facilitated by ZMQ (therefore, without details of HTTP) for clients on the network. You might 
+  need to open your firewall. Currently, neither encryption nor user authorization security is provided, use HTTP if you 
+  need these features. 
+* IPC - interprocess communication for accessing by other process within the same computer. One can use this instead of 
+  using TCP with firewall or single computer applications.
+* INPROC - only clients from the same python process can access the server. 
 
 If one needs type definitions for the client because the client does not know the server to which it is connected, one 
 can import the server script ``Thing`` and set it as the type of the client as a quick-hack. 
@@ -54,14 +71,7 @@ can import the server script ``Thing`` and set it as the type of the client as a
     :linenos: 
     :lines: 14-20
 
-Apart from property read-write and action execution on the client side, one can subscribe to the event to receive data:
-
-.. literalinclude:: code/rpc_client.py 
-    :language: python 
-    :linenos: 
-    :lines: 22-27
-
-Serializer customization is discussed in :doc:`Serializer How-To <serializers>`
+Serializer customization is discussed further in :doc:`Serializer How-To <serializers>`.
 
 Using ``node-wot`` client
 -------------------------

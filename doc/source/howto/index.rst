@@ -75,4 +75,14 @@ One can store captured data in properties & push events to supply clients with t
     :lines: 6-10, 15-20, 29-41
 
 Events can be defined as class or instance attributes and will be tunnelled as HTTP server sent events without any additional 
-serialization overhead. 
+serialization overhead. Events are to be used to asynchronously push data to clients.
+
+It can be summarized that the three main building blocks of a network exposed object, or a hardware ``Thing`` are:
+
+* properties - use them to model settings of instrumentation (both hardware and software-only),
+  expose general class/instance attributes, captured & computed data
+* actions - use them to issue commands to instruments like start and stop acquisition, connect/disconnect etc.
+* events - push measured data, create alerts/alarms, inform availability of certain type of data etc.
+
+Each are separately discussed in depth in their respective sections within the doc found on the section navigation.
+

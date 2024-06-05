@@ -8,7 +8,7 @@ long_description = (this_directory / "README.md").read_text()
 
 setuptools.setup(
     name="hololinked",
-    version="0.1.2",
+    version="0.1.1",
     author="Vignesh Vaidyanathan",
     author_email="vignesh.vaidyanathan@hololinked.dev",
     description="A ZMQ-based Object Oriented RPC tool-kit with HTTP support for instrument control/data acquisition or controlling generic python objects.",
@@ -48,6 +48,9 @@ setuptools.setup(
         "SQLAlchemy>=2.0.21",
         "SQLAlchemy_Utils>=0.41.1",
         "tornado>=6.3.3"
-    ]
+    ],
+    license="BSD-3-Clause",
+    license_files=('license.txt', 'licenses/param-LICENSE.txt', 'licenses/pyro-LICENSE.txt'),
+    keywords=["data-acquisition", "zmq-rpc", "SCADA/IoT", "Web of Things"]
 )
  
