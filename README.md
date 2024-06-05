@@ -20,8 +20,8 @@ In `hololinked`, the base class which enables this classification is the `Thing`
 
 ```python
 
-from hololinked.wot import Thing, Property, action, Event
-from hololinked.wot.properties import String, Integer, Number, List
+from hololinked.server import Thing, Property, action, Event
+from hololinked.server.properties import String, Integer, Number, List
 ```
 
 #### Definition of one's own hardware controlling class
@@ -263,8 +263,9 @@ To know more about client side scripting, please look into the documentation [Ho
 
 ### To Install
 
-clone the repository and install in develop mode `pip install -e .` for convenience. The conda env hololinked.yml can also help. There is no release to pip available right now.  
+Clone the repository and install in develop mode `pip install -e .` for convenience. The conda env hololinked.yml can also help. 
 
+From pip - ``pip install hololinked``
 
 ### Currently Supported
 
