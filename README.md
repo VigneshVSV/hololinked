@@ -7,6 +7,20 @@ For beginners - `hololinked` is a server side pythonic package suited for instru
 For those familiar with RPC & web development - `hololinked` is a ZeroMQ-based Object Oriented RPC toolkit with customizable HTTP end-points. 
 The main goal is to develop a pythonic & pure python modern package for instrumentation control and data acquisition through network (SCADA), along with "reasonable" HTTP support for web development.  
 
+<p align="left">
+
+[![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest) 
+
+[![Maintainability](https://api.codeclimate.com/v1/badges/913f4daa2960b711670a/maintainability)](https://codeclimate.com/github/VigneshVSV/hololinked/maintainability)
+
+![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)
+
+![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked)
+
+</p>
+
+
+
 ### Usage/Quickstart
 
 `hololinked` is compatible with the [Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software. Each device or thing can be controlled systematically when their design in software is segregated into properties, actions and events. In object oriented terms for data acquisition:
@@ -252,11 +266,6 @@ One may use the HTTP API according to one's beliefs (including letting the packa
 To know more about client side scripting, please look into the documentation [How-To](https://hololinked.readthedocs.io/en/latest/howto/index.html) section.
 
 ##### NOTE - The package is under active development. Contributors welcome. 
-
-
-[![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest)
-
-[![Maintainability](https://api.codeclimate.com/v1/badges/913f4daa2960b711670a/maintainability)](https://codeclimate.com/github/VigneshVSV/hololinked/maintainability)
 
 - [example repository](https://github.com/VigneshVSV/hololinked-examples) - detailed examples for both clients and servers
 - [helper GUI](https://github.com/VigneshVSV/hololinked-portal) - view & interact with your object's methods, properties and events. 
