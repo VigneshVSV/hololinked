@@ -1,0 +1,32 @@
+{
+    "dashboards" : {
+        "deleteWithoutAsking" : true,
+        "showRecentlyUsed" : true,
+        "use" : true
+    }, 
+    "login" : {
+        "footer" : "",
+        "footerLink" : "",
+        "displayFooter" : true
+    },
+    "servers" : {
+        "allowHTTP" : false
+    },     
+    "remoteObjectViewer" : {
+        "console" : {
+            "stringifyOutput" : false,
+            "defaultMaxEntries" : 15,
+            "defaultWindowSize" : 500, 
+            "defaultFontSize" : 16
+        },
+        "logViewer" : {
+            "defaultMaxEntries" : 10,
+            "defaultWindowSize" : 500,
+            "defaultFontSize" : 16,
+            "defaultInterval" : 2
+        }
+    },
+    "others" : {
+        "WOTTerminology" : false 
+    }
+}

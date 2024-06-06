@@ -1,38 +1,351 @@
-# routing ideas from https://www.tornadoweb.org/en/branch6.3/routing.html
-import traceback
+import asyncio
+import zmq.asyncio
 import typing
-from typing import List, Dict, Any, Union, Callable, Tuple
-from types import FunctionType
+import uuid
 from tornado.web import RequestHandler, StaticFileHandler
 from tornado.iostream import StreamClosedError
-from tornado.httputil import HTTPServerRequest
-from time import perf_counter
 
-from .constants import (IMAGE_STREAM, EVENT, CALLABLE, ATTRIBUTE, FILE)
-from .serializers import JSONSerializer
-from .path_converter import extract_path_parameters
-from .zmq_message_brokers import MessageMappedZMQClientPool, EventConsumer
-from .webserver_utils import log_request
-from .remote_object import RemoteObject
-from .eventloop import EventLoop
-from .utils import current_datetime_ms_str
-from .data_classes import (HTTPServerResourceData, HTTPServerEventData,
-                            HTTPServerResourceData, FileServerData)
-
-UnknownHTTPServerData = HTTPServerResourceData(
-    what = 'unknown', 
-    instance_name = 'unknown',
-    fullpath='unknown',
-    instruction = 'unknown'
-)
+from .data_classes import HTTPResource, ServerSentEvent
+from .utils import *
+from .zmq_message_brokers import AsyncEventConsumer, EventConsumer
 
 
+class BaseHandler(RequestHandler):
+    """
+    Base request handler for RPC operations
+    """
 
-class FileHandlerResource(StaticFileHandler):
+    def initialize(self, resource : typing.Union[HTTPResource, ServerSentEvent], owner = None) -> None:
+        """
+        Parameters
+        ----------
+        resource: HTTPResource | ServerSentEvent
+            resource representation of Thing's exposed object using a dataclass
+        owner: HTTPServer
+            owner ``hololinked.server.HTTPServer.HTTPServer`` instance
+        """
+        from .HTTPServer import HTTPServer
+        assert isinstance(owner, HTTPServer)
+        self.resource = resource
+        self.owner = owner
+        self.zmq_client_pool = self.owner.zmq_client_pool 
+        self.serializer = self.owner.serializer
+        self.logger = self.owner.logger
+        self.allowed_clients = self.owner.allowed_clients
+       
+    def set_headers(self) -> None:
+        """
+        override this to set custom headers without having to reimplement entire handler
+        """
+        raise NotImplementedError("implement set headers in child class to automatically call it" +
+                            " after directing the request to Thing")
+    
+    def get_execution_parameters(self) -> typing.Tuple[typing.Dict[str, typing.Any], 
+                                                typing.Dict[str, typing.Any], typing.Union[float, int, None]]:
+        """
+        merges all arguments to a single JSON body and retrieves execution context (like oneway calls, fetching executing
+        logs) and timeouts
+        """
+        if len(self.request.body) > 0:
+            arguments = self.serializer.loads(self.request.body)
+        else:
+            arguments = dict()
+        if isinstance(arguments, dict):
+            if len(self.request.query_arguments) >= 1:
+                for key, value in self.request.query_arguments.items():
+                    if len(value) == 1:
+                        arguments[key] = self.serializer.loads(value[0]) 
+                    else:
+                        arguments[key] = [self.serializer.loads(val) for val in value]
+            context = dict(fetch_execution_logs=arguments.pop('fetch_execution_logs', False))
+            timeout = arguments.pop('timeout', None)
+            if timeout is not None and timeout < 0:
+                timeout = None
+            if self.resource.request_as_argument:
+                arguments['request'] = self.request
+            return arguments, context, timeout
+        return arguments, dict(), 5 # arguments, context is empty, 5 seconds invokation timeout, hardcoded needs to be fixed
+    
+    @property
+    def has_access_control(self) -> bool:
+        """
+        Checks if a client is an allowed client. Requests from un-allowed clients are reject without execution. Custom
+        web handlers can use this property to check if a client has access control on the server or ``Thing``.
+        """
+        if len(self.allowed_clients) == 0:
+            self.set_header("Access-Control-Allow-Origin", "*")
+            return True
+        # For credential login, access control allow origin cannot be '*',
+        # See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
+        origin = self.request.headers.get("Origin")
+        if origin is not None and (origin in self.allowed_clients or origin + '/' in self.allowed_clients):
+            self.set_header("Access-Control-Allow-Origin", origin)
+            return True
+        return False
+    
+    def set_access_control_allow_headers(self) -> None:
+        """
+        For credential login, access control allow headers cannot be a wildcard '*'. 
+        Some requests require exact list of allowed headers for the client to access the response. 
+        Use this method in set_headers() override if necessary. 
+        """
+        headers = ", ".join(self.request.headers.keys())
+        if self.request.headers.get("Access-Control-Request-Headers", None):
+            headers += ", " + self.request.headers["Access-Control-Request-Headers"]
+        self.set_header("Access-Control-Allow-Headers", headers)
+
+
+
+class RPCHandler(BaseHandler):
+    """
+    Handler for property read-write and method calls
+    """
+
+    async def get(self) -> None:
+        """
+        runs property or action if accessible by 'GET' method. Default for property reads. 
+        """
+        await self.handle_through_thing('GET')    
+
+    async def post(self) -> None:
+        """
+        runs property or action if accessible by 'POST' method. Default for action execution.
+        """
+        await self.handle_through_thing('POST')
+    
+    async def patch(self) -> None:
+        """
+        runs property or action if accessible by 'PATCH' method.
+        """
+        await self.handle_through_thing('PATCH')        
+    
+    async def put(self) -> None:
+        """
+        runs property or action if accessible by 'PUT' method. Default for property writes.
+        """
+        await self.handle_through_thing('PUT')        
+    
+    async def delete(self) -> None:
+        """
+        runs property or action if accessible by 'DELETE' method. Default for property deletes. 
+        """
+        await self.handle_through_thing('DELETE')  
+       
+    def set_headers(self) -> None:
+        """
+        sets default headers for RPC (property read-write and action execution). The general headers are listed as follows:
+
+        .. code-block:: http 
+
+            Content-Type: application/json
+            Access-Control-Allow-Credentials: true
+            Access-Control-Allow-Origin: <client>
+        """
+        self.set_header("Content-Type" , "application/json")    
+        self.set_header("Access-Control-Allow-Credentials", "true")
+    
+    async def options(self) -> None:
+        """
+        Options for the resource. Main functionality is to inform the client is a specific HTTP method is supported by 
+        the property or the action (Access-Control-Allow-Methods).
+        """
+        if self.has_access_control:
+            self.set_status(204)
+            self.set_access_control_allow_headers()
+            self.set_header("Access-Control-Allow-Credentials", "true")
+            self.set_header("Access-Control-Allow-Methods", ', '.join(self.resource.instructions.supported_methods()))
+        else:
+            self.set_status(401, "forbidden")
+        self.finish()
+    
+
+    async def handle_through_thing(self, http_method : str) -> None:
+        """
+        handles the actual RPC call, called by each of the HTTP methods with their name as the argument. 
+        """
+        if not self.has_access_control:
+            self.set_status(401, "forbidden")    
+        elif http_method not in self.resource.instructions:
+            self.set_status(404, "not found")
+        else:
+            reply = None
+            try:
+                arguments, context, timeout = self.get_execution_parameters()
+                reply = await self.zmq_client_pool.async_execute(
+                                        instance_name=self.resource.instance_name, 
+                                        instruction=self.resource.instructions.__dict__[http_method], 
+                                        arguments=arguments,
+                                        context=context, 
+                                        raise_client_side_exception=False, 
+                                        invokation_timeout=timeout, 
+                                        execution_timeout=None, 
+                                        argument_schema=self.resource.argument_schema
+                                    ) # type: ignore
+                # message mapped client pool currently strips the data part from return message
+                # and provides that as reply directly 
+                self.set_status(200, "ok")
+            except ConnectionAbortedError as ex:
+                self.set_status(503, str(ex))
+                event_loop = asyncio.get_event_loop()
+                event_loop.call_soon(lambda : asyncio.create_task(self.owner.update_router_with_thing(
+                                                                    self.zmq_client_pool[self.resource.instance_name])))
+            except ConnectionError as ex:
+                await self.owner.update_router_with_thing(self.zmq_client_pool[self.resource.instance_name])
+                await self.handle_through_thing(http_method) # reschedule
+                return 
+            except Exception as ex:
+                self.logger.error(f"error while scheduling RPC call - {str(ex)}")
+                self.logger.debug(f"traceback - {ex.__traceback__}")
+                self.set_status(500, "error while scheduling RPC call")
+                reply = self.serializer.dumps({"exception" : format_exception_as_json(ex)})
+            self.set_headers()
+            if reply:
+                self.write(reply)
+        self.finish()
+        
+    
+        
+class EventHandler(BaseHandler):
+    """
+    handles events emitted by ``Thing`` and tunnels them as HTTP SSE. 
+    """
+
+    def set_headers(self) -> None:
+        """
+        sets default headers for event handling. The general headers are listed as follows:
+
+        .. code-block:: http 
+
+            Content-Type: text/event-stream
+            Cache-Control: no-cache
+            Connection: keep-alive
+            Access-Control-Allow-Credentials: true
+            Access-Control-Allow-Origin: <client>
+        """
+        self.set_header("Content-Type", "text/event-stream")
+        self.set_header("Cache-Control", "no-cache")
+        self.set_header("Connection", "keep-alive")
+        self.set_header("Access-Control-Allow-Credentials", "true")
+
+    async def get(self):
+        """
+        events are support only with GET method.
+        """
+        if self.has_access_control:
+            self.set_headers()
+            await self.handle_datastream()
+        else:
+            self.set_status(401, "forbidden")
+        self.finish()
+
+    async def options(self):
+        """
+        options for the resource.
+        """
+        if self.has_access_control:
+            self.set_status(204)
+            self.set_access_control_allow_headers()
+            self.set_header("Access-Control-Allow-Credentials", "true")
+            self.set_header("Access-Control-Allow-Methods", 'GET')
+        else:
+            self.set_status(401, "forbidden")
+        self.finish()
+
+    def receive_blocking_event(self, event_consumer : EventConsumer):
+        return event_consumer.receive(timeout=10000, deserialize=False)
+
+    async def handle_datastream(self) -> None:    
+        """
+        called by GET method and handles the event.
+        """
+        try:                        
+            event_consumer_cls = EventConsumer if hasattr(self.owner, '_zmq_event_context') else AsyncEventConsumer
+            # synchronous context with INPROC pub or asynchronous context with IPC or TCP pub, we handle both in async 
+            # fashion as HTTP server should be running purely sync(or normal) python method.
+            event_consumer = event_consumer_cls(self.resource.unique_identifier, self.resource.socket_address, 
+                                            identity=f"{self.resource.unique_identifier}|HTTPEvent|{uuid.uuid4()}",
+                                            logger=self.logger, json_serializer=self.serializer, 
+                                            context=self.owner._zmq_event_context if self.resource.socket_address.startswith('inproc') else None)
+            event_loop = asyncio.get_event_loop()
+            data_header = b'data: %s\n\n'
+            self.set_status(200)
+        except Exception as ex:
+            self.logger.error(f"error while subscribing to event - {str(ex)}")
+            self.set_status(500, "could not subscribe to event source from thing")
+            self.write(self.serializer.dumps({"exception" : format_exception_as_json(ex)}))
+            return
+        
+        while True:
+            try:
+                if isinstance(event_consumer, AsyncEventConsumer):
+                    data = await event_consumer.receive(timeout=10000, deserialize=False)
+                else:
+                    data = await event_loop.run_in_executor(None, self.receive_blocking_event, event_consumer)
+                if data:
+                    # already JSON serialized 
+                    self.write(data_header % data)
+                    await self.flush()
+                    self.logger.debug(f"new data sent - {self.resource.name}")
+                else:
+                    self.logger.debug(f"found no new data")
+            except StreamClosedError:
+                break 
+            except Exception as ex:
+                self.logger.error(f"error while pushing event - {str(ex)}")
+                self.write(data_header % self.serializer.dumps(
+                    {"exception" : format_exception_as_json(ex)}))
+        try:
+            if isinstance(self.owner._zmq_event_context, zmq.asyncio.Context):
+                event_consumer.exit()
+        except Exception as ex:
+            self.logger.error(f"error while closing event consumer - {str(ex)}" )
+
+
+class ImageEventHandler(EventHandler):
+    """
+    handles events with images with image data header
+    """
+
+    async def handle_datastream(self) -> None:
+        try:
+            event_consumer = AsyncEventConsumer(self.resource.unique_identifier, self.resource.socket_address, 
+                            f"{self.resource.unique_identifier}|HTTPEvent|{uuid.uuid4()}", 
+                            json_serializer=self.serializer, logger=self.logger,
+                            context=self.owner._zmq_event_context if self.resource.socket_address.startswith('inproc') else None)         
+            self.set_header("Content-Type", "application/x-mpegURL")
+            self.write("#EXTM3U\n")
+            delimiter = "#EXTINF:{},\n"
+            data_header = b'data:image/jpeg;base64,%s\n'
+            while True:
+                try:
+                    data = await event_consumer.receive(timeout=10000, deserialize=False)
+                    if data:
+                        # already serialized 
+                        self.write(delimiter)
+                        self.write(data_header % data)
+                        await self.flush()
+                        self.logger.debug(f"new image sent - {self.resource.name}")
+                    else:
+                        self.logger.debug(f"found no new data")
+                except StreamClosedError:
+                    break 
+                except Exception as ex:
+                    self.logger.error(f"error while pushing event - {str(ex)}")
+                    self.write(data_header % self.serializer.dumps(
+                        {"exception" : format_exception_as_json(ex)}))
+            event_consumer.exit()
+        except Exception as ex:
+            self.write(data_header % self.serializer.dumps(
+                        {"exception" : format_exception_as_json(ex)}))
+    
+
+
+class FileHandler(StaticFileHandler):
 
     @classmethod
     def get_absolute_path(cls, root: str, path: str) -> str:
-        """Returns the absolute location of ``path`` relative to ``root``.
+        """
+        Returns the absolute location of ``path`` relative to ``root``.
 
         ``root`` is the path configured for this `StaticFileHandler`
         (in most cases the ``static_path`` `Application` setting).
@@ -48,363 +361,38 @@ class FileHandlerResource(StaticFileHandler):
     
 
 
-class BaseRequestHandler(RequestHandler):
+class ThingsHandler(BaseHandler):
     """
-    Defines functions common to Request Handlers
-    """  
-    zmq_client_pool : Union[MessageMappedZMQClientPool, None] = None 
-    json_serializer : JSONSerializer
-    resources       : Dict[str, Dict[str, Union[HTTPServerResourceData, HTTPServerEventData, 
-                                               FileServerData]]]
-    own_resources   : dict 
-    local_objects   : Dict[str, RemoteObject]
-   
-    def initialize(self, client_address : str, start_time : float) -> None:
-        self.client_address = client_address
-        self.start_time = start_time
-
-    async def handle_client(self) -> None:
-        pass 
-
-    def prepare_arguments(self, path_arguments : typing.Optional[typing.Dict] = None) -> Dict[str, Any]:
-        arguments = {}
-        for key, value in self.request.query_arguments.items():
-            if len(value) == 1:
-                arguments[key] = self.json_serializer.loads(value[0]) 
-            else:
-                arguments[key] = [self.json_serializer.loads(val) for val in value]
-        if len(self.request.body) > 0:
-            arguments.update(self.json_serializer.loads(self.request.body))
-        if path_arguments is not None:
-            arguments.update(path_arguments)
-        print(arguments)
-        return arguments
-
-    async def handle_func(self, instruction : Tuple[Callable, bool], arguments):
-        func, iscoroutine = instruction, instruction.scada_info.iscoroutine
-        if iscoroutine:
-            return self.json_serializer.dumps({
-                "responseStatusCode" : 200, 
-                "returnValue"        : await func(**arguments)  
-            }) 
-        else:
-            return self.json_serializer.dumps({
-                "responseStatusCode" : 200, 
-                "returnValue"        : func(**arguments) 
-            })
-       
-    async def handle_bound_method(self, info : HTTPServerResourceData, arguments):
-        instance = self.local_objects[info.instance_name]
-        return self.json_serializer.dumps({
-                "responseStatusCode" : 200,
-                "returnValue" : await EventLoop.execute_once(info.instance_name, instance, 
-                                                                    info.instruction, arguments),
-                "state"       : {
-                    info.instance_name : instance.state_machine.current_state if instance.state_machine is not None else None
-                }
-            })
-            
-    async def handle_instruction(self, info : HTTPServerResourceData, path_arguments : typing.Optional[typing.Dict] = None) -> None:
-        self.set_status(202)
-        self.add_header("Access-Control-Allow-Origin", self.client_address)
-        self.set_header("Content-Type" , "application/json")  
-        try:
-            arguments = self.prepare_arguments(path_arguments)
-            context = dict(fetch_execution_logs = arguments.pop('fetch_execution_logs', False))
-            timeout = arguments.pop('timeout', 3)
-            if info.http_request_as_argument:
-                arguments['request'] = self.request
-            if isinstance(info.instruction, FunctionType):
-                reply = await self.handle_func(info.instruction, arguments) # type: ignore
-            elif info.instance_name in self.local_objects: 
-                reply = await self.handle_bound_method(info, arguments)         
-            elif self.zmq_client_pool is None:
-                raise AttributeError("wrong resource finding logic - contact developer.")
-            else:
-                # let the body be decoded on the remote object side
-                reply = await self.zmq_client_pool.async_execute(info.instance_name, info.instruction, arguments,
-                                                            context, False, timeout) # type: ignore
-        except Exception as E:
-            reply = self.json_serializer.dumps({
-                "responseStatusCode" : 500,
-                "exception" : {
-                    "message" : str(E),
-                    "type"    : repr(E).split('(', 1)[0],
-                    "traceback" : traceback.format_exc().splitlines(),
-                    "notes"   : E.__notes__ if hasattr(E, "__notes__") else None # type: ignore
-                }
-            })    
-        if reply:
-            self.write(reply)
-        self.add_header("Execution-Time", f"{((perf_counter()-self.start_time)*1000.0):.4f}")
-        self.finish()
-
-    async def handled_through_remote_object(self, info : HTTPServerRequest) -> bool:     
-        data = self.resources["STATIC_ROUTES"].get(self.request.path, UnknownHTTPServerData)
-        if data.what == CALLABLE or data.what == ATTRIBUTE: 
-            # Cannot use 'is' operator like 'if what is CALLABLE' because the remote object from which 
-            # CALLABLE string was fetched is in another process
-            await self.handle_instruction(data) # type: ignore
-            return True 
-        if data.what == EVENT:
-            return False
-        
-        for route in self.resources["DYNAMIC_ROUTES"].values():
-            arguments = extract_path_parameters(self.request.path, route.path_regex, route.param_convertors)
-            if arguments and route.what != FILE:
-                await self.handle_instruction(route, arguments)
-                return True                
-        return False
-        
-    async def handled_as_datastream(self, request : HTTPServerRequest) -> bool:                             
-        event_info = self.resources["STATIC_ROUTES"].get(self.request.path, UnknownHTTPServerData)
-        if event_info.what == EVENT: 
-            try:
-                event_consumer = EventConsumer(request.path, event_info.socket_address, 
-                                            f"{request.path}_HTTPEvent@"+current_datetime_ms_str())
-            except Exception as E:
-                reply = self.json_serializer.dumps({
-                    "responseStatusCode" : 500,
-                    "exception" : {
-                        "message" : str(E),
-                        "type"    : repr(E).split('(', 1)[0],
-                        "traceback" : traceback.format_exc().splitlines(),
-                        "notes"   : E.__notes__ if hasattr(E, "__notes__") else None # type: ignore
-                    }
-                })    
-                self.set_status(404)
-                self.add_header('Access-Control-Allow-Origin', self.client_address)
-                self.add_header('Content-Type' , 'application/json')  
-                self.write(reply)
-                self.finish()
-                return True 
-            
-            self.set_status(200)
-            self.set_header('Access-Control-Allow-Origin', self.client_address)
-            self.set_header("Content-Type", "text/event-stream")
-            self.set_header("Cache-Control", "no-cache")
-            self.set_header("Connection", "keep-alive")
-            # Need to check if this helps as events with HTTP alone is not reliable
-            # self.set_header("Content-Security-Policy", "connect-src 'self' http://localhost:8085;")
-            data_header = b'data: %s\n\n'
-            while True:
-                try:
-                    data = await event_consumer.receive_event()
-                    if data:
-                        # already JSON serialized 
-                        print(f"data sent")
-                        self.write(data_header % data)
-                        await self.flush()
-                except StreamClosedError:
-                    break 
-                except Exception as E:
-                    print({
-                        "responseStatusCode" : 500,
-                        "exception" : {
-                            "message" : str(E),
-                            "type"    : repr(E).split('(', 1)[0],
-                            "traceback" : traceback.format_exc().splitlines(),
-                            "notes"   : E.__notes__ if hasattr(E, "__notes__") else None # type: ignore
-                    }})
-            self.finish()
-            event_consumer.exit()
-            return True 
-        return False
-    
-    async def handled_as_imagestream(self, request : HTTPServerRequest) -> bool:
-        event_info = self.resources["STATIC_ROUTES"].get(self.request.path, UnknownHTTPServerData)
-        if event_info.what == IMAGE_STREAM: 
-            try:
-                event_consumer = EventConsumer(request.path, event_info.socket_address, 
-                                            f"{request.path}_HTTPEvent@"+current_datetime_ms_str())
-            except Exception as E:
-                reply = self.json_serializer.dumps({
-                    "responseStatusCode" : 500,
-                    "exception" : {
-                        "message" : str(E),
-                        "type"    : repr(E).split('(', 1)[0],
-                        "traceback" : traceback.format_exc().splitlines(),
-                        "notes"   : E.__notes__ if hasattr(E, "__notes__") else None # type: ignore
-                    }
-                })    
-                self.set_status(404)
-                self.add_header('Access-Control-Allow-Origin', self.client_address)
-                self.add_header('Content-Type' , 'application/json')  
-                self.write(reply)
-                self.finish()
-                return True 
-            
-            self.set_status(200)
-            self.set_header('Access-Control-Allow-Origin', self.client_address)
-            self.set_header("Content-Type", "application/x-mpegURL")
-            self.set_header("Cache-Control", "no-cache")
-            self.set_header("Connection", "keep-alive")
-            self.write("#EXTM3U\n")
-            # Need to check if this helps as events with HTTP alone is not reliable
-            delimiter = "#EXTINF:{},\n"
-            data_header = b'data:image/jpeg;base64,%s\n'
-            while True:
-                try:
-                    data = await event_consumer.receive_event()
-                    if data:
-                        # already JSON serialized 
-                        self.write(delimiter)
-                        self.write(data_header % data)
-                        print(f"image data sent {data[0:100]}")
-                        await self.flush()
-                except StreamClosedError:
-                    break 
-                except Exception as E:
-                    print({
-                        "responseStatusCode" : 500,
-                        "exception" : {
-                            "message" : str(E),
-                            "type"    : repr(E).split('(', 1)[0],
-                            "traceback" : traceback.format_exc().splitlines(),
-                            "notes"   : E.__notes__ if hasattr(E, "__notes__") else None # type: ignore
-                    }})
-            self.finish()
-            event_consumer.exit()
-            return True 
-        return False
-
-
- 
-
-class GetResource(BaseRequestHandler):
-
-    async def handled_as_filestream(self, request : HTTPServerRequest) -> bool:
-        """this method is wrong and does not work"""
-        for route in self.resources["DYNAMIC_ROUTES"].values():
-            arguments = extract_path_parameters(self.request.path, route.path_regex, route.param_convertors)
-            if arguments and route.what == FILE:
-                file_handler = FileHandler(self.application, request, path=route.directory)
-                # file_handler.initialize(data.directory) # type: ignore
-                await file_handler.get(arguments["filename"])
-                return True
-        return False 
+    add or remove things
+    """
 
     async def get(self):
-        # log_request(self.request)
-        if (await self.handled_through_remote_object(self.request)):           
-            return  
-       
-        elif (await self.handled_as_datastream(self.request)):
-            return 
-        
-        elif (await self.handled_as_imagestream(self.request)):
-            return 
-        
-        elif self.request.path in self.own_resources:
-            func = self.own_resources[self.request.path]
-            body = self.prepare_arguments()
-            func(self, body)
-            return
-
         self.set_status(404)
-        self.add_header("Access-Control-Allow-Origin", self.client_address)
         self.finish()
-
-    def paths(self, body):
-        self.set_status(200)
-        self.add_header("Access-Control-Allow-Origin", self.client_address)
-        self.add_header("Content-Type" , "application/json")
-        resources = dict(
-            GET     = {
-                "STATIC_ROUTES" : GetResource.resources["STATIC_ROUTES"].keys(),
-                "DYNAMIC_ROUTES" : GetResource.resources["DYNAMIC_ROUTES"].keys()
-            },
-            POST    = {
-                "STATIC_ROUTES" : PostResource.resources["STATIC_ROUTES"].keys(),
-                "DYNAMIC_ROUTES" : PostResource.resources["DYNAMIC_ROUTES"].keys()
-            },
-            PUT     = {
-                "STATIC_ROUTES" : PutResource.resources["STATIC_ROUTES"].keys(),
-                "DYNAMIC_ROUTES" : PutResource.resources["DYNAMIC_ROUTES"].keys()
-            }, 
-            DELETE  = {
-                "STATIC_ROUTES" : DeleteResource.resources["STATIC_ROUTES"].keys(),
-                "DYNAMIC_ROUTES" : DeleteResource.resources["DYNAMIC_ROUTES"].keys()
-            },
-            OPTIONS = {
-                "STATIC_ROUTES" : OptionsResource.resources["STATIC_ROUTES"].keys(),
-                "DYNAMIC_ROUTES" : OptionsResource.resources["DYNAMIC_ROUTES"].keys()
-            },
-        ) 
-        self.write(self.json_serializer.dumps(resources))
-        self.finish()
-        
-    own_resources = {
-        '/paths' : paths,
-    }
-
-
-              
-class PostResource(BaseRequestHandler):
     
-    async def post(self):      
-        # log_request(self.request)
-        if (await self.handled_through_remote_object(self.request)):           
-            return  
-        
-        # elif self.request.path in self.own_resources:
-        #     func = self.own_resources[self.request.path]
-        #     body = self.decode_body(self.request.body)
-        #     func(self, body)
-        #     return
-
-        self.set_status(404)
-        self.add_header("Access-Control-Allow-Origin", self.client_address)
+    async def post(self):
+        if not self.has_access_control:
+            self.set_status(401, 'forbidden')
+        else:
+            try:
+                instance_name = ""
+                await self.zmq_client_pool.create_new(server_instance_name=instance_name)
+                await self.owner.update_router_with_thing(self.zmq_client_pool[instance_name])
+                self.set_status(204, "ok")
+            except Exception as ex:
+                self.set_status(500, str(ex))
+            self.set_headers()
         self.finish()
 
-    
-
-class PutResource(BaseRequestHandler):
-    
-    async def put(self):      
-
-        if (await self.handled_through_remote_object(self.request)):           
-            return  
-
-        self.set_status(404)
-        self.add_header("Access-Control-Allow-Origin", self.client_address)
-        self.finish()
- 
-
-class PatchResource(BaseRequestHandler):
-    
-    async def patch(self):      
-
-        if (await self.handled_through_remote_object(self.request)):           
-            return  
-
-        self.set_status(404)
-        self.add_header("Access-Control-Allow-Origin", self.client_address)
-        self.finish()
- 
-
-
-class DeleteResource(BaseRequestHandler):
-    
-    async def delete(self):      
-
-        if (await self.handled_through_remote_object(self.request)):           
-            return  
-
-        self.set_status(404)
-        self.add_header("Access-Control-Allow-Origin", self.client_address)
+    async def options(self):
+        if self.has_access_control:
+            self.set_status(204)
+            self.set_access_control_allow_headers()
+            self.set_header("Access-Control-Allow-Credentials", "true")
+            self.set_header("Access-Control-Allow-Methods", 'GET, POST')
+        else:
+            self.set_status(401, "forbidden")
         self.finish()
 
 
 
-class OptionsResource(BaseRequestHandler):
-    """
-    this is wrong philosophically
-    """
-
-    async def options(self):        
-        self.set_status(204)
-        self.set_header("Access-Control-Allow-Origin", "*")
-        self.set_header("Access-Control-Allow-Headers", "*")
-        self.set_header("Access-Control-Allow-Methods", 'GET, POST, PUT, DELETE, OPTIONS')
-        self.finish()

@@ -1,263 +1,351 @@
+import sys 
+import os
+import warnings
 import subprocess
 import asyncio
-import traceback
 import importlib
 import typing 
+import threading
+import logging
+from uuid import uuid4
 
-
-from .utils import unique_id, wrap_text
-from .constants import *
-from .remote_parameters import TypedDict
+from .constants import HTTP_METHODS
+from .utils import format_exception_as_json
+from .config import global_config
+from .zmq_message_brokers import ServerTypes 
 from .exceptions import *
-from .decorators import post, get
-from .remote_object import *
-from .zmq_message_brokers import AsyncPollingZMQServer, ZMQServerPool, ServerTypes
-from .remote_parameter import RemoteParameter
-from ..param.parameters import Boolean, ClassSelector, TypedList, List as PlainList
+from .thing import Thing, ThingMeta
+from .property import Property
+from .properties import ClassSelector, TypedList, List, Boolean, TypedDict
+from .action import action as remote_method
+from .logger import ListHandler
 
+
+def set_event_loop_policy():
+    if sys.platform.lower().startswith('win'):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    if global_config.USE_UVLOOP:
+        if sys.platform.lower() in ['linux', 'darwin', 'linux2']:
+            import uvloop
+            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+        else:
+            warnings.warn("uvloop not supported for windows, using default windows selector loop.", RuntimeWarning)
+
+set_event_loop_policy()
 
 
 class Consumer:
-    consumer = ClassSelector(default=None, allow_None=True, class_=RemoteObject, isinstance=False)
-    args = PlainList(default=None, allow_None=True, accept_tuple=True)
-    kwargs = TypedDict(default=None, allow_None=True, key_type=str)
+    """
+    Container class for Thing to pass to eventloop for multiprocessing applications in case 
+    of rare needs. 
+    """
+    object_cls = ClassSelector(default=None, allow_None=True, class_=Thing, isinstance=False,
+                            remote=False)
+    args = List(default=None, allow_None=True, accept_tuple=True, remote=False)
+    kwargs = TypedDict(default=None, allow_None=True, key_type=str, remote=False)
    
-    def __init__(self, consumer : typing.Type[RemoteObject], args : typing.Tuple = tuple(), **kwargs) -> None:
-        if consumer is not None:
-            self.consumer = consumer
-        else:
-            raise ValueError("consumer cannot be None, please assign a subclass of RemoteObject")
+    def __init__(self, object_cls : typing.Type[Thing], args : typing.Tuple = tuple(), **kwargs) -> None:
+        self.object_cls = object_cls
         self.args = args 
         self.kwargs = kwargs
 
 
+RemoteObject = Thing # reading convenience
 
 class EventLoop(RemoteObject):
     """
     The EventLoop class implements a infinite loop where zmq ROUTER sockets listen for messages. Each consumer of the 
-    event loop (an instance of RemoteObject) listen on their own ROUTER socket and execute methods or allow read and write
+    event loop (an instance of Thing) listen on their own ROUTER socket and execute methods or allow read and write
     of attributes upon receiving instructions. Socket listening is implemented in an async (asyncio) fashion. 
     """
     server_type = ServerTypes.EVENTLOOP
 
-    remote_objects = TypedList(item_type=(RemoteObject, Consumer), bounds=(0,100), allow_None=True, default=None,
-                        doc="""list of RemoteObjects which are being executed""")
-    threaded = Boolean(default=False, doc="""by default False, set to True to use thread pool executor instead of 
-                        of simple asyncio. Default executor is a single-threaded asyncio loop. Thread pool executor creates 
-                        each thread with its own asyncio loop.""" )
-    # Remote Parameters
-    uninstantiated_remote_objects = TypedDict(default=None, allow_None=True, key_type=str,
-                        item_type=(Consumer, str)) #, URL_path = '/uninstantiated-remote-objects')
+    expose = Boolean(default=True, remote=False,
+                     doc="""set to False to use the object locally to avoid alloting network resources 
+                        of your computer for this object""")
 
-    def __new__(cls, **kwargs):
-        obj = super().__new__(cls, **kwargs)
-        obj._internal_fixed_attributes.append('_message_broker_pool')
-        return obj
+    things = TypedList(item_type=(Thing, Consumer), bounds=(0,100), allow_None=True, default=None,
+                        doc="list of Things which are being executed", remote=False) #type: typing.List[Thing]
+    
+    threaded = Boolean(default=False, remote=False, 
+                        doc="set True to run each thing in its own thread")
+  
 
-    def __init__(self, *, instance_name : str, 
-                remote_objects : typing.Union[RemoteObject, Consumer, typing.List[typing.Union[RemoteObject, Consumer]]] = list(), # type: ignore - requires covariant types
-                log_level : int = logging.INFO, **kwargs) -> None:
-        super().__init__(instance_name=instance_name, remote_objects=remote_objects, log_level=log_level, **kwargs)
-        self._message_broker_pool : ZMQServerPool = ZMQServerPool(instance_names=None, 
-                    # create empty pool as message brokers are already created
-                    proxy_serializer=self.proxy_serializer, json_serializer=self.json_serializer) 
-        remote_objects : typing.List[RemoteObject] = [self]
-        if self.remote_objects is not None:
-            for consumer in self.remote_objects:
-                if isinstance(consumer, RemoteObject):
-                    remote_objects.append(consumer)
-                    consumer.object_info.eventloop_name = self.instance_name
-                    self._message_broker_pool.register_server(consumer.message_broker)
+    def __init__(self, *, 
+                instance_name : str, 
+                things : typing.Union[Thing, Consumer, typing.List[typing.Union[Thing, Consumer]]] = list(), # type: ignore - requires covariant types
+                log_level : int = logging.INFO, 
+                **kwargs
+            ) -> None:
+        """
+        Parameters
+        ----------
+        instance_name: str
+            instance name of the event loop
+        things: List[Thing]
+            things to be run/served
+        log_level: int
+            log level of the event loop logger
+        """
+        super().__init__(instance_name=instance_name, things=things, log_level=log_level, **kwargs)
+        things = [] # type: typing.List[Thing]
+        if self.expose:
+            things.append(self) 
+        if self.things is not None:
+            for consumer in self.things:
+                if isinstance(consumer, Thing):
+                    things.append(consumer)
+                    consumer.object_info.eventloop_instance_name = self.instance_name
                 elif isinstance(consumer, Consumer):
-                    instance = consumer.consumer(*consumer.args, **consumer.kwargs, 
-                                            eventloop_name = self.instance_name)
-                    self._message_broker_pool.register_server(instance.message_broker)                            
-                    remote_objects.append(instance) 
-        self.remote_objects = remote_objects # re-assign the instantiated objects as well
-        self.uninstantiated_remote_objects = {}
-      
+                    instance = consumer.object_cls(*consumer.args, **consumer.kwargs, 
+                                            eventloop_name=self.instance_name)
+                    things.append(instance) 
+        self.things = things # re-assign the instantiated objects as well
+        self.uninstantiated_things = dict()
+        self._message_listener_methods = []
+
     def __post_init__(self):
         super().__post_init__()
         self.logger.info("Event loop with name '{}' can be started using EventLoop.run().".format(self.instance_name))   
         return 
 
-    @property 
-    def message_broker_pool(self):
-        return self._message_broker_pool 
-     
-    @get('/remote-objects')
-    def servers(self):
-        return {
-            instance.__class__.__name__ : instance.instance_name for instance in self.remote_objects 
-        }
-    
     # example of overloading
-    @post('/exit')
+    @remote_method()
     def exit(self):
+        """
+        Stops the event loop and all its things. Generally, this leads
+        to exiting the program unless some code follows the ``run()`` method.  
+        """
         raise BreakAllLoops
     
+
+    uninstantiated_things = TypedDict(default=None, allow_None=True, key_type=str,
+                        item_type=(Consumer, str), URL_path='/things/uninstantiated')
+    
+    
     @classmethod
-    def import_remote_object(cls, file_name : str, object_name : str):
-        module_name = file_name.split('\\')[-1]
-        spec = importlib.util.spec_from_file_location(module_name, file_name) # type: ignore
+    def _import_thing(cls, file_name : str, object_name : str):
+        """
+        import a thing specified by ``object_name`` from its 
+        script or module. 
+
+        Parameters
+        ----------
+        file_name : str
+            file or module path 
+        object_name : str
+            name of ``Thing`` class to be imported
+        """
+        module_name = file_name.split(os.sep)[-1]
+        spec = importlib.util.spec_from_file_location(module_name, file_name)
         if spec is not None:
-            module = importlib.util.module_from_spec(spec) # type: ignore
+            module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
         else:     
-            module = importlib.import_module(module_name, file_name.split('\\')[0])
-
+            module = importlib.import_module(module_name, file_name.split(os.sep)[0])
         consumer = getattr(module, object_name) 
-        if issubclass(consumer, RemoteObject):
+        if issubclass(consumer, Thing):
             return consumer 
         else:
-            raise ValueError(wrap_text(f"""object name {object_name} in {file_name} not a subclass of RemoteObject. 
-                            Only subclasses are accepted (not even instances). Given object : {consumer}"""))
-
-    @post('/remote-object/import')
-    def _import_remote_object(self, file_name : str, object_name : str):
-        consumer = self.import_remote_object(file_name, object_name) 
-        id = unique_id()
-        self.uninstantiated_remote_objects[id] = consumer
-        return dict(
-            id = id, 
-            db_params = consumer.parameters.remote_objects_webgui_info(consumer.parameters.load_at_init_objects())
-        )
-
-    @post('/remote-object/instantiate')
-    def instantiate(self, file_name : str, object_name : str, kwargs : typing.Dict = {}):
-        consumer = self.import_remote_object(file_name, object_name)
-        instance = consumer(**kwargs, eventloop_name = self.instance_name)
-        self.register_new_consumer(instance)
+            raise ValueError(f"object name {object_name} in {file_name} not a subclass of Thing.", 
+                            f" Only subclasses are accepted (not even instances). Given object : {consumer}")
         
-    def register_new_consumer(self, instance : RemoteObject):
-        zmq_server = AsyncPollingZMQServer(instance_name=instance.instance_name, server_type=ServerTypes.USER_REMOTE_OBJECT,
-                    context=self.message_broker_pool.context, json_serializer=self.json_serializer, 
-                    proxy_serializer=self.proxy_serializer)
-        self.message_broker_pool.register_server(zmq_server)
-        instance.message_broker = zmq_server
-        self.remote_objects.append(instance)
-        async_loop = asyncio.get_event_loop()
-        async_loop.call_soon(lambda : asyncio.create_task(self.run_single_target(instance)))
+
+    @remote_method(URL_path='/things', http_method=HTTP_METHODS.POST)
+    def import_thing(self, file_name : str, object_name : str):
+        """
+        import thing from the specified path and return the default 
+        properties to be supplied to instantiate the object. 
+        """
+        consumer = self._import_thing(file_name, object_name) # type: ThingMeta
+        id = uuid4()
+        self.uninstantiated_things[id] = consumer
+        return id
+           
+
+    @remote_method(URL_path='/things/instantiate', 
+                http_method=HTTP_METHODS.POST) # remember to pass schema with mandatory instance name
+    def instantiate(self, id : str, kwargs : typing.Dict = {}):      
+        """
+        Instantiate the thing that was imported with given arguments 
+        and add to the event loop
+        """
+        consumer = self.uninstantiated_things[id]
+        instance = consumer(**kwargs, eventloop_name=self.instance_name) # type: Thing
+        self.things.append(instance)
+        rpc_server = instance.rpc_server
+        self.request_listener_loop.call_soon(asyncio.create_task(lambda : rpc_server.poll()))
+        self.request_listener_loop.call_soon(asyncio.create_task(lambda : rpc_server.tunnel_message_to_things()))
+        if not self.threaded:
+            self.thing_executor_loop.call_soon(asyncio.create_task(lambda : self.run_single_target(instance)))
+        else: 
+            _thing_executor = threading.Thread(target=self.run_thing_executor, args=([instance],))
+            _thing_executor.start()
 
     def run(self):
-        async_loop = asyncio.get_event_loop()
-        # while True:
-        async_loop.run_until_complete(
-            asyncio.gather(
-                *[self.run_single_target(instance) 
-                    for instance in self.remote_objects] 
-        ))
-        self.logger.info("exiting event loop {}".format(self.instance_name))
-        async_loop.close()
+        """
+        start the eventloop
+        """
+        if not self.threaded:
+            _thing_executor = threading.Thread(target=self.run_things_executor, args=(self.things,))
+            _thing_executor.start()
+        else: 
+            for thing in self.things:
+                _thing_executor = threading.Thread(target=self.run_things_executor, args=([thing],))
+                _thing_executor.start()
+        self.run_external_message_listener()
+        if not self.threaded:
+            _thing_executor.join()
+
 
     @classmethod
-    async def run_single_target(cls, instance : RemoteObject) -> None: 
+    def get_async_loop(cls):
+        """
+        get or automatically create an asnyc loop for the current thread.
+        """
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            # set_event_loop_policy() - why not?
+            asyncio.set_event_loop(loop)
+        return loop
+        
+
+    def run_external_message_listener(self):
+        """
+        Runs ZMQ's sockets which are visible to clients.
+        This method is automatically called by ``run()`` method. 
+        Please dont call this method when the async loop is already running. 
+        """
+        self.request_listener_loop = self.get_async_loop()
+        rpc_servers = [thing.rpc_server for thing in self.things]
+        for rpc_server in rpc_servers:
+            self.request_listener_loop.call_soon(lambda : asyncio.create_task(rpc_server.poll()))
+            self.request_listener_loop.call_soon(lambda : asyncio.create_task(rpc_server.tunnel_message_to_things()))
+        self.logger.info("starting external message listener thread")
+        self.request_listener_loop.run_forever()
+        self.logger.info("exiting external listener event loop {}".format(self.instance_name))
+        self.request_listener_loop.close()
+    
+
+    def run_things_executor(self, things):
+        """
+        Run ZMQ sockets which provide queued instructions to ``Thing``.
+        This method is automatically called by ``run()`` method. 
+        Please dont call this method when the async loop is already running. 
+        """
+        thing_executor_loop = self.get_async_loop()
+        self.logger.info(f"starting thing executor loop in thread {threading.get_ident()} for {[obj.instance_name for obj in things]}")
+        thing_executor_loop.run_until_complete(
+            asyncio.gather(
+                *[self.run_single_target(instance) 
+                    for instance in things] 
+        ))
+        self.logger.info(f"exiting event loop in thread {threading.get_ident()}")
+        thing_executor_loop.close()
+
+
+    @classmethod
+    async def run_single_target(cls, instance : Thing) -> None: 
         instance_name = instance.instance_name
         while True:
             instructions = await instance.message_broker.async_recv_instructions()
             for instruction in instructions:
-                client, _, client_type, _, msg_id, instruction_str, arguments, context = instruction
-                plain_reply = context.pop("plain_reply", False)
+                client, _, client_type, _, msg_id, _, instruction_str, arguments, context = instruction
+                oneway = context.pop('oneway', False)
                 fetch_execution_logs = context.pop("fetch_execution_logs", False)
-                if not plain_reply and fetch_execution_logs:
+                if fetch_execution_logs:
                     list_handler = ListHandler([])
                     list_handler.setLevel(logging.DEBUG)
                     list_handler.setFormatter(instance.logger.handlers[0].formatter)
                     instance.logger.addHandler(list_handler)
                 try:
-                    instance.logger.debug("""client {} of client type {} issued instruction {} with message id {}. 
-                                starting execution""".format(client, client_type, instruction_str, msg_id))
+                    instance.logger.debug(f"client {client} of client type {client_type} issued instruction " +
+                                f"{instruction_str} with message id {msg_id}. starting execution.")
                     return_value = await cls.execute_once(instance_name, instance, instruction_str, arguments) #type: ignore 
-                    if not plain_reply:
+                    if oneway:
+                        await instance.message_broker.async_send_reply_with_message_type(instruction, b'ONEWAY', None)
+                        continue
+                    if fetch_execution_logs:
                         return_value = {
-                            "responseStatusCode" : 200,
                             "returnValue" : return_value,
-                            "state"       : {
-                                instance_name : instance.state()
-                            }
+                            "execution_logs" : list_handler.log_list
                         }
-                        if fetch_execution_logs:
-                            return_value["logs"] = list_handler.log_list
                     await instance.message_broker.async_send_reply(instruction, return_value)
                     # Also catches exception in sending messages like serialization error
                 except (BreakInnerLoop, BreakAllLoops):
-                    instance.logger.info("Remote object {} with instance name {} exiting event loop.".format(
+                    instance.logger.info("Thing {} with instance name {} exiting event loop.".format(
                                                             instance.__class__.__name__, instance_name))
+                    if oneway:
+                        await instance.message_broker.async_send_reply_with_message_type(instruction, b'ONEWAY', None)
+                        continue
                     return_value = None
-                    if not plain_reply:
+                    if fetch_execution_logs:
                         return_value = { 
-                            "responseStatusCode" : 200,
                             "returnValue" : None,
-                            "state"       : { 
-                                instance_name : instance.state() 
-                            }
+                            "execution_logs" : list_handler.log_list
                         }
-                        if fetch_execution_logs:
-                            return_value["logs"] = list_handler.log_list    
-                                       
                     await instance.message_broker.async_send_reply(instruction, return_value)
-                    return
-                except Exception as E:
-                    instance.logger.error("RemoteObject {} with instance name {} produced error : {}.".format(
-                                                            instance.__class__.__name__, instance_name, E))
-                    return_value = {
-                            "message" : str(E),
-                            "type"    : repr(E).split('(', 1)[0],
-                            "traceback" : traceback.format_exc().splitlines(),
-                            "notes"   : E.__notes__ if hasattr(E, "__notes__") else None
-                        }
-                    if not plain_reply:    
-                        return_value = {
-                            "responseStatusCode" : 500,
-                            "exception" : return_value, 
-                            "state"     : { 
-                                instance_name : instance.state()
-                            }
-                        }          
-                        if fetch_execution_logs:
-                            return_value["logs"] = list_handler.log_list      
-                    await instance.message_broker.async_send_reply(instruction, return_value)
-                if fetch_execution_logs:
-                    instance.logger.removeHandler(list_handler)
+                    return 
+                except Exception as ex:
+                    instance.logger.error("Thing {} with instance name {} produced error : {}.".format(
+                                                            instance.__class__.__name__, instance_name, ex))
+                    if oneway:
+                        await instance.message_broker.async_send_reply_with_message_type(instruction, b'ONEWAY', None)
+                        continue
+                    return_value = dict(exception= format_exception_as_json(ex))
+                    if fetch_execution_logs:
+                        return_value["execution_logs"] = list_handler.log_list
+                    await instance.message_broker.async_send_reply_with_message_type(instruction, 
+                                                                    b'EXCEPTION', return_value)
+                finally:
+                    if fetch_execution_logs:
+                        instance.logger.removeHandler(list_handler)
 
     @classmethod
-    async def execute_once(cls, instance_name : str, instance : RemoteObject, instruction_str : str, 
+    async def execute_once(cls, instance_name : str, instance : Thing, instruction_str : str, 
                            arguments : typing.Dict[str, typing.Any]) -> typing.Dict[str, typing.Any]:
-        scadapy = instance.instance_resources[instruction_str] 
-        if scadapy.iscallable:      
-            if scadapy.state is None or (hasattr(instance, 'state_machine') and 
-                            instance.state_machine.current_state in scadapy.state):
+        resource = instance.instance_resources.get(instruction_str, None) 
+        if resource is None:
+            raise AttributeError(f"unknown remote resource represented by instruction {instruction_str}")
+        if resource.isaction:      
+            if resource.state is None or (hasattr(instance, 'state_machine') and 
+                            instance.state_machine.current_state in resource.state):
                 # Note that because we actually find the resource within __prepare_instance__, its already bound
                 # and we dont have to separately bind it. 
-                func = scadapy.obj
-                if not scadapy.http_request_as_argument:
-                    arguments.pop('request', None) 
-                if scadapy.iscoroutine:
-                    return await func(**arguments)
+                func = resource.obj
+                args = arguments.pop('__args__', tuple())
+                if resource.iscoroutine:
+                    return await func(*args, **arguments)
                 else:
-                    return func(**arguments)
+                    return func(*args, **arguments)
             else: 
-                raise StateMachineError("RemoteObject '{}' is in '{}' state, however command can be executed only in '{}' state".format(
-                        instance_name, instance.state(), scadapy.state))
+                raise StateMachineError("Thing '{}' is in '{}' state, however command can be executed only in '{}' state".format(
+                        instance_name, instance.state, resource.state))
         
-        elif scadapy.isparameter:
+        elif resource.isproperty:
             action = instruction_str.split('/')[-1]
-            parameter : RemoteParameter = scadapy.obj
-            owner_inst : RemoteSubobject = scadapy.bound_obj
-            if action == WRITE: 
-                if scadapy.state is None or (hasattr(instance, 'state_machine') and  
-                                        instance.state_machine.current_state in scadapy.state):
-                    parameter.__set__(owner_inst, arguments["value"])
+            prop = resource.obj # type: Property
+            owner_inst = resource.bound_obj # type: Thing
+            if action == "write": 
+                if resource.state is None or (hasattr(instance, 'state_machine') and  
+                                        instance.state_machine.current_state in resource.state):
+                    return prop.__set__(owner_inst, arguments["value"])
                 else: 
-                    raise StateMachineError("RemoteObject {} is in `{}` state, however attribute can be written only in `{}` state".format(
-                        instance_name, instance.state_machine.current_state, scadapy.state))
-            return parameter.__get__(owner_inst, type(owner_inst))
-        raise NotImplementedError("Unimplemented execution path for RemoteObject {} for instruction {}".format(instance_name, instruction_str))
+                    raise StateMachineError("Thing {} is in `{}` state, however attribute can be written only in `{}` state".format(
+                        instance_name, instance.state_machine.current_state, resource.state))
+            elif action == "read":
+                return prop.__get__(owner_inst, type(owner_inst))             
+            elif action == "delete":
+                return prop.deleter() # this may not be correct yet
+        raise NotImplementedError("Unimplemented execution path for Thing {} for instruction {}".format(instance_name, instruction_str))
 
 
 def fork_empty_eventloop(instance_name : str, logfile : typing.Union[str, None] = None, python_command : str = 'python',
                         condaenv : typing.Union[str, None] = None, prefix_command : typing.Union[str, None] = None):
-    command_str = '{}{}{}-c "from scadapy.server import EventLoop; E = EventLoop({}); E.run();"'.format(
+    command_str = '{}{}{}-c "from hololinked.server import EventLoop; E = EventLoop({}); E.run();"'.format(
         f'{prefix_command} ' if prefix_command is not None else '',
         f'call conda activate {condaenv} && ' if condaenv is not None else '',
         f'{python_command} ',
@@ -272,11 +360,11 @@ def fork_empty_eventloop(instance_name : str, logfile : typing.Union[str, None] 
 
 # class ForkedEventLoop:
 
-#     def __init__(self, instance_name : str, remote_objects : Union[RemoteObject, Consumer, List[Union[RemoteObject, Consumer]]], 
+#     def __init__(self, instance_name : str, things : Union[Thing, Consumer, List[Union[Thing, Consumer]]], 
 #                 log_level : int = logging.INFO, **kwargs):
 #         self.subprocess = Process(target = forked_eventloop, kwargs = dict(
 #                         instance_name = instance_name, 
-#                         remote_objects = remote_objects, 
+#                         things = things, 
 #                         log_level = log_level,
 #                         **kwargs
 #                     ))

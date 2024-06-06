@@ -1,7 +1,7 @@
 from typing import Dict, List, Any, Union
 from dataclasses import dataclass, field, asdict
 
-from .constants import POST
+from .constants import HTTP_METHODS
 from .serializers import JSONSerializer
 
 
@@ -21,9 +21,60 @@ class postman_collection:
     def json(self):
         return asdict(self)
     
-    def json_file(self, filename = 'collection.json'):
+    def save_json_file(self, filename = 'collection.json'):
         with open(filename, 'w') as file: 
-            JSONSerializer.general_dump(self.json(), file)
+            JSONSerializer.generic_dump(self.json(), file)
+
+    @classmethod
+    def build(cls, instance, domain_prefix : str) -> Dict[str, Any]:
+        from .thing import Thing
+        from .data_classes import HTTPResource, RemoteResource
+        assert isinstance(instance, Thing) # type definition
+        try:
+            return instance._postman_collection
+        except AttributeError:
+            pass 
+        properties_folder = postman_itemgroup(name='properties')
+        methods_folder = postman_itemgroup(name='methods')
+        events_folder = postman_itemgroup(name='events')
+
+        collection = postman_collection(
+            info = postman_collection_info(
+                name = instance.__class__.__name__,
+                description = "API endpoints available for Thing", 
+            ),
+            item = [ 
+                properties_folder,
+                methods_folder                
+            ]
+        )
+
+        for http_method, resource in instance.httpserver_resources.items():
+            # i.e. this information is generated only on the httpserver accessible resrouces...
+            for URL_path, httpserver_data in resource.items():
+                if isinstance(httpserver_data, HTTPResource):
+                    scada_info : RemoteResource
+                    try:
+                        scada_info = instance.instance_resources[httpserver_data.instruction]
+                    except KeyError:
+                        property_path_without_RW = httpserver_data.instruction.rsplit('/', 1)[0]
+                        scada_info = instance.instance_resources[property_path_without_RW]
+                    item = postman_item(
+                        name = scada_info.obj_name,
+                        request = postman_http_request(
+                            description=scada_info.obj.__doc__,
+                            url=domain_prefix + URL_path, 
+                            method=http_method,
+                        )
+                    )
+                    if scada_info.isproperty:
+                        properties_folder.add_item(item)
+                    elif scada_info.iscallable:
+                        methods_folder.add_item(item)
+        
+        instance._postman_collection = collection
+        return collection
+
 
 @dataclass
 class postman_collection_info:
@@ -58,7 +109,7 @@ class postman_http_request:
     url : str 
     header : Union[List[Dict[str, Any]], None] = field(default=None)  
     body : Union[Dict[str, Any], None] = field(default=None)
-    method : str = field(default=POST) 
+    method : str = field(default=HTTP_METHODS.POST) 
     description : Union[str, None] = field(default=None)
 
     def json(self):

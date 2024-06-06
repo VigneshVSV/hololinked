@@ -204,7 +204,7 @@ class Parameter(metaclass=ParameterMetaclass):
 
     __slots__ = ['default', 'doc', 'constant', 'readonly', 'allow_None',
                 'per_instance_descriptor', 'deepcopy_default', 'class_member', 'precedence', 
-                'owner', 'name', '_internal_name', 'watchers', 'overloads',
+                'owner', 'name', '_internal_name', 'watchers', 'fget', 'fset', 'fdel',
                 '_disable_post_slot_set']
 
     # Note: When initially created, a Parameter does not know which
@@ -297,9 +297,10 @@ class Parameter(metaclass=ParameterMetaclass):
         self.deepcopy_default = deepcopy_default
         self.class_member = class_member
         self.precedence = precedence
-        self.watchers : typing.Dict[str, typing.List] = {}
-        self.overloads : typing.Dict[str, typing.Union[typing.Callable, None]] = dict(fget=fget, 
-                                                                                fset=fset, fdel=fdel)
+        self.watchers = {} # typing.Dict[str, typing.List]
+        self.fget = fget # type: typing.Union[typing.Callable, None]
+        self.fset = fset # type: typing.Union[typing.Callable, None]
+        self.fdel = fdel # type: typing.Union[typing.Callable, None]
         
     def __set_name__(self, owner : typing.Any, attrib_name : str) -> None:
         self._internal_name = f"_{attrib_name}_param_value"
@@ -347,7 +348,7 @@ class Parameter(metaclass=ParameterMetaclass):
         """
         # __parent_slots__ attribute is needed for entry into this function correctly otherwise 
         # slot_attribute in __setattr__ will have wrong boolean flag
-        if slot == 'owner' and self.owner is not None:
+        if slot == 'owner' and self.owner is not None and self.fget is None:
             with disable_post_slot_set(self):
                 self.default = self.validate_and_adapt(self.default)
  
@@ -366,9 +367,8 @@ class Parameter(metaclass=ParameterMetaclass):
         """        
         if obj is None:
             return self 
-        fget = self.overloads['fget'] 
-        if fget is not None:     
-            return fget(obj) 
+        if self.fget is not None:     
+            return self.fget(obj) 
         return obj.__dict__.get(self._internal_name, self.default)
        
     @instance_descriptor
@@ -414,9 +414,8 @@ class Parameter(metaclass=ParameterMetaclass):
             old = obj.__dict__.get(self._internal_name, self.default)
 
         # The following needs to be optimised, probably through lambda functions?
-        fset = self.overloads['fset']
-        if fset is not None:
-            fset(obj, value) 
+        if self.fset is not None:
+            self.fset(obj, value) 
         else: 
             obj.__dict__[self._internal_name] = value
         
@@ -451,10 +450,9 @@ class Parameter(metaclass=ParameterMetaclass):
             
     def validate_and_adapt(self, value : typing.Any) -> typing.Any:
         """
-        modify the given value if a proper logical reasoning can be given.
-        returns modified value. Should not be mostly used unless the data stored is quite complex by structure.
+        Validate the given value and adapt it if a proper logical reasoning can be given, for example, cropping a number
+        to its bounds. Returns modified value. 
         """
-        # raise NotImplementedError("overload this function in child class to validate your value and adapt it if necessary.")
         return value
      
     def _post_value_set(self, obj : typing.Union['Parameterized', typing.Any], value : typing.Any) -> None:
@@ -492,17 +490,29 @@ class Parameter(metaclass=ParameterMetaclass):
                 setattr(self,k,v)
         
     def getter(self, func : typing.Callable) -> typing.Callable:
-        self.overloads['fget'] = func 
+        """
+        Register a getter method by using this as a decorator.
+        """
+        self.fget = func 
         return func
 
     def setter(self, func : typing.Callable) -> typing.Callable: 
-        self.overloads['fset'] = func
+        """
+        Register a setter method by using this as a decorator. Getters are mandatory if setter is defined.
+        """
+        self.fset = func
         return func
     
     def deleter(self, func : typing.Callable) -> typing.Callable: 
-        self.overloads['fdel'] = func
+        """
+        Register a deleter method by using this as a decorator. Getters & Setters are mandatory if deleter is defined.
+        """
+        self.fdel = func
         return func
     
+    def __call__(self, func: typing.Callable) -> "Parameter":
+        return self.getter(func)
+      
     @classmethod
     def serialize(cls, value : typing.Any) -> typing.Any:
         "Given the parameter value, return a Python value suitable for serialization"
@@ -1716,6 +1726,10 @@ class ParameterizedMetaclass(type):
         mcs._update_docstring_signature(dict_.get('parameterized_docstring_signature', False))
 
     def _create_param_container(mcs, mcs_members : dict):
+        """
+        overridable in ``Parameterized`` child if a subclass of ``Parameters`` 
+        was created by user. 
+        """
         mcs._param_container = ClassParameters(mcs, mcs_members) # value return when accessing cls/self.param
   
     @property

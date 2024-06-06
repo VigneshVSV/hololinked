@@ -12,9 +12,15 @@ class BreakAllLoops(Exception):
 
 class StateMachineError(Exception):
     """
-    raise to show errors while calling methods or writing parameters in wrong state
+    raise to show errors while calling actions or writing properties in wrong state
     """
     pass 
+
+class DatabaseError(Exception):
+    """
+    raise to show database related errors
+    """
+
 
 
 __all__ = ['BreakInnerLoop', 'BreakAllLoops', 'StateMachineError']

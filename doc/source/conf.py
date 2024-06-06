@@ -10,19 +10,19 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
+import os
+import sys
+sys.path.insert(0, os.path.abspath(f'..{os.sep}..'))
 
 
 # -- Project information -----------------------------------------------------
 
 project = 'hololinked'
-copyright = '2023, Vignesh Venkatasubramanian Vaidyanathan'
+copyright = '2024, Vignesh Venkatasubramanian Vaidyanathan'
 author = 'Vignesh Venkatasubramanian Vaidyanathan'
 
 # The full version, including alpha/beta/rc tags
-release = '0.1'
+release = '0.1.2'
 
 
 # -- General configuration ---------------------------------------------------
@@ -33,7 +33,9 @@ release = '0.1'
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.duration',
-    'sphinx_copybutton'
+    'sphinx_copybutton',
+    'sphinx_toolbox.collapse',
+    'numpydoc'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -55,9 +57,24 @@ html_sidebars = {
     "**": ["sidebar-nav-bs"]
 }
 
+html_theme_options = {
+    "secondary_sidebar_items": {
+        "**" : ["page-toc", "sourcelink"],
+    },
+    "navigation_with_keys" : True
+}
+
 pygments_style = 'vs'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+
+numpydoc_show_class_members = False 
+
+autodoc_member_order = 'bysource'
+
+today_fmt = '%d.%m.%Y %H:%M'
+
+

@@ -1,279 +1,311 @@
-import logging
-import ssl
 import asyncio
-from typing import Dict, List, Callable, Union, Any
-from multiprocessing import Process
-from tornado.web import Application
-from tornado.routing import Router
-from tornado.httpserver import HTTPServer as TornadoHTTP1Server
-# from tornado_http2.server import Server as TornadoHTTP2Server 
+import zmq
+import zmq.asyncio
+import logging
+import socket
+import ssl
+import typing
 from tornado import ioloop
-from tornado.httputil import HTTPServerRequest
-from time import perf_counter
+from tornado.web import Application
+from tornado.httpserver import HTTPServer as TornadoHTTP1Server
+from tornado.httpclient import AsyncHTTPClient, HTTPRequest
+# from tornado_http2.server import Server as TornadoHTTP2Server 
 
 from ..param import Parameterized
-from ..param.parameters import Integer, IPAddress, ClassSelector, Selector, TypedList, Boolean, String
-
-
-from .utils import create_default_logger
-from .decorators import get, put, post, delete, remote_method
-from .data_classes import HTTPServerResourceData
+from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector, TypedList, String)
+from .constants import CommonRPC, HTTPServerTypes, ResourceTypes, ServerMessage
+from .utils import get_IP_from_interface
+from .data_classes import HTTPResource, ServerSentEvent
+from .utils import get_default_logger, run_coro_sync
 from .serializers import JSONSerializer
-from .constants import GET, PUT, POST, OPTIONS, DELETE, USE_OBJECT_NAME, CALLABLE
-from .webserver_utils import log_resources, log_request, update_resources
-from .zmq_message_brokers import MessageMappedZMQClientPool
-from .handlers import (BaseRequestHandler, GetResource, PutResource, OptionsResource, 
-                       PostResource, DeleteResource, FileHandlerResource)
-from .remote_object import RemoteObject, RemoteObjectDB
-from .eventloop import Consumer
-from .host_utilities import HTTPServerUtilities, SERVER_INSTANCE_NAME
+from .database import ThingInformation
+from .zmq_message_brokers import  AsyncZMQClient, MessageMappedZMQClientPool
+from .handlers import RPCHandler, BaseHandler, EventHandler, ThingsHandler
 
 
-asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-
-class CustomRouter(Router):   
-    
-    def __init__(self, app : Application, logger : logging.Logger, IP : str, 
-                    file_server_paths) -> None:
-        self.app = app                
-        self.logger = logger
-        self.IP = IP
-        self.logger.info('started webserver at {}, ready to receive requests.'.format(self.IP))
-        self.file_server_paths = file_server_paths
-
-    def find_handler(self, request : HTTPServerRequest):
-        
-        start_time = perf_counter()
-        log_request(request, self.logger)
-        
-        if (request.method == GET):            
-            for path in self.file_server_paths["STATIC_ROUTES"].keys():
-                if request.path.startswith(path):
-                    print("static handler")
-                    return self.app.get_handler_delegate(request, FileHandlerResource, 
-                        target_kwargs=dict(
-                        path=self.file_server_paths["STATIC_ROUTES"][path].directory              
-                        ),
-                        path_args=[bytes(request.path.split('/')[-1], encoding='utf-8')])
-            handler = GetResource
-        elif (request.method == POST):
-            handler = PostResource
-        elif (request.method == PUT):
-            handler = PutResource
-        elif (request.method == DELETE):
-            handler = DeleteResource
-        elif (request.method == OPTIONS):
-            handler = OptionsResource
-        else:
-            handler = OptionsResource
-
-        return self.app.get_handler_delegate(request, handler, 
-                    target_kwargs=dict(
-                        client_address='*',
-                        start_time=start_time                        
-                    ))
-
-
-
-__http_methods__ = {
-    GET  : get, 
-    POST : post,
-    PUT  : put,
-    DELETE : delete
-}
 
 class HTTPServer(Parameterized):
-
-    address   = IPAddress( default = '0.0.0.0', 
-                    doc = "set custom IP address, default is localhost (0.0.0.0)" )
-    port      = Integer  ( default = 8080, bounds = (0, 65535), 
-                    doc = "the port at which the server should be run (unique)" )
-    protocol_version = Selector ( objects = [1.1, 2], default = 2, 
-                    doc = """for HTTP 2, SSL is mandatory. HTTP2 is recommended. 
-                    When no SSL configurations are provided, defaults to 1.1""" )
-    logger    = ClassSelector ( class_ = logging.Logger, default = None, allow_None = True, 
-                    doc = "Supply a custom logger here or set log_level parameter to a valid value" )
-    log_level = Selector ( objects = [logging.DEBUG, logging.INFO, logging.ERROR, logging.CRITICAL, logging.ERROR], 
-                    default = logging.INFO, 
-                    doc = "Alternative to logger, this creates an internal logger with the specified log level" )
-    consumers = TypedList ( item_type = (RemoteObject, Consumer, str), default = None, allow_None = True, 
-                    doc = "Remote Objects to be served by the HTTP server" )
-    subscription = String ( default = None, allow_None = True, 
-                    doc = "Host Server to subscribe to coordinate starting sequence of remote objects & web GUI" ) 
-    json_serializer = ClassSelector ( class_ = JSONSerializer,  default = None, allow_None = True,
-                    doc = "optionally, supply your own JSON serializer for custom types" )
-    ssl_context = ClassSelector ( class_ = ssl.SSLContext , default = None, allow_None = True, 
-                    doc = "use it for highly customized SSL context to provide encrypted communication" )    
-    certfile    = String ( default = None, allow_None = True, 
-                    doc = """alternative to SSL context, provide certificate file & key file to allow the server 
-                            to create a SSL connection on its own""" )
-    keyfile     = String ( default = None, allow_None = True, 
-                    doc = """alternative to SSL context, provide certificate file & key file to allow the server 
-                            to create a SSL connection on its own""" )
-    server_network_interface = String ( default = 'Ethernet',  
-                    doc = """Currently there is no logic to detect the IP addresss (as externally visible) correctly, therefore 
-                    please send the network interface name to retrieve the IP. If a DNS server is present or , you may leave 
-                    this field""" )
-
-    def __init__(self, consumers = None, port = 8080, address = '0.0.0.0', subscription = None, logger = None, 
-                log_level = logging.INFO, certfile = None, keyfile = None, json_serializer = None,  ssl_context = None, 
-                protocol_version = 2 ) -> None:
+    """
+    HTTP(s) server to route requests to ``Thing``.
+    """
+    
+    things = TypedList(item_type=str, default=None, allow_None=True, 
+                       doc="instance name of the things to be served by the HTTP server." ) # type: typing.List[str]
+    port = Integer(default=8080, bounds=(1, 65535),  
+                    doc="the port at which the server should be run" ) # type: int
+    address = IPAddress(default='0.0.0.0', 
+                    doc="IP address") # type: str
+    # protocol_version = Selector(objects=[1, 1.1, 2], default=2, 
+    #                 doc="for HTTP 2, SSL is mandatory. HTTP2 is recommended. \
+    #                 When no SSL configurations are provided, defaults to 1.1" ) # type: float
+    logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, 
+                    doc="logging.Logger" ) # type: logging.Logger
+    log_level = Selector(objects=[logging.DEBUG, logging.INFO, logging.ERROR, logging.CRITICAL, logging.ERROR], 
+                    default=logging.INFO, 
+                    doc="""alternative to logger, this creates an internal logger with the specified log level 
+                    along with a IO stream handler.""" ) # type: int
+    serializer = ClassSelector(class_=JSONSerializer,  default=None, allow_None=True,
+                    doc="""json serializer used by the server""" ) # type: JSONSerializer
+    ssl_context = ClassSelector(class_=ssl.SSLContext, default=None, allow_None=True, 
+                    doc="SSL context to provide encrypted communication") # type: typing.Optional[ssl.SSLContext]    
+    certfile = String(default=None, allow_None=True, 
+                    doc="""alternative to SSL context, provide certificate file & key file to allow the server to 
+                        create a SSL context""") # type: str
+    keyfile = String(default=None, allow_None=True, 
+                    doc="""alternative to SSL context, provide certificate file & key file to allow the server to 
+                        create a SSL context""") # type: str
+    allowed_clients = TypedList(item_type=str,
+                            doc="""Serves request and sets CORS only from these clients, other clients are rejected with 403. 
+                                Unlike pure CORS, the server resource is not even executed if the client is not 
+                                an allowed client. if None any client is served.""")
+    host = String(default=None, allow_None=True, 
+                doc="Host Server to subscribe to coordinate starting sequence of remote objects & web GUI" ) # type: str
+    # network_interface = String(default='Ethernet',  
+    #                         doc="Currently there is no logic to detect the IP addresss (as externally visible) correctly, \
+    #                         therefore please send the network interface name to retrieve the IP. If a DNS server is present, \
+    #                         you may leave this field" ) # type: str
+    request_handler = ClassSelector(default=RPCHandler, class_=RPCHandler, isinstance=False, 
+                            doc="custom web request handler of your choice for property read-write & action execution" ) # type: typing.Union[BaseHandler, RPCHandler]
+    event_handler = ClassSelector(default=EventHandler, class_=(EventHandler, BaseHandler), isinstance=False, 
+                            doc="custom event handler of your choice for handling events") # type: typing.Union[BaseHandler, EventHandler]
+    
+    def __init__(self, things : typing.List[str], *, port : int = 8080, address : str = '0.0.0.0', 
+                host : typing.Optional[str] = None, logger : typing.Optional[logging.Logger] = None, log_level : int = logging.INFO, 
+                serializer : typing.Optional[JSONSerializer] = None, ssl_context : typing.Optional[ssl.SSLContext] = None, 
+                certfile : str = None, keyfile : str = None, # protocol_version : int = 1, network_interface : str = 'Ethernet', 
+                allowed_clients : typing.Optional[typing.Union[str, typing.Iterable[str]]] = None,   
+                **kwargs) -> None:
+        """
+        Parameters
+        ----------
+        things: List[str]
+            instance name of the things to be served as a list.
+        port: int, default 8080
+            the port at which the server should be run
+        address: str, default 0.0.0.0
+            IP address
+        logger: logging.Logger, optional
+            logging.Logger instance
+        log_level: int
+            alternative to logger, this creates an internal logger with the specified log level along with a IO stream handler. 
+        serializer: JSONSerializer, optional
+            json serializer used by the server
+        ssl_context: ssl.SSLContext
+            SSL context to provide encrypted communication
+        certfile: str
+            alternative to SSL context, provide certificate file & key file to allow the server to create a SSL context 
+        keyfile: str
+            alternative to SSL context, provide certificate file & key file to allow the server to create a SSL context 
+        allowed_clients: List[str] 
+            serves request and sets CORS only from these clients, other clients are reject with 403. Unlike pure CORS
+            feature, the server resource is not even executed if the client is not an allowed client.
+        **kwargs:
+            rpc_handler: RPCHandler | BaseHandler, optional
+                custom web request handler of your choice for property read-write & action execution
+            event_handler: EventHandler | BaseHandler, optional
+                custom event handler of your choice for handling events
+        """
         super().__init__(
-            consumers = consumers,
-            port = port, 
-            address = address, 
-            subscription = subscription,
-            logger = logger, 
-            log_level = log_level,
-            json_serializer = json_serializer, 
-            protocol_version = protocol_version,
-            certfile = certfile, 
-            keyfile = keyfile,
-            ssl_context  = ssl_context
+            things=things,
+            port=port, 
+            address=address, 
+            host=host,
+            logger=logger, 
+            log_level=log_level,
+            serializer=serializer or JSONSerializer(), 
+            # protocol_version=1, 
+            certfile=certfile, 
+            keyfile=keyfile,
+            ssl_context=ssl_context,
+            # network_interface='Ethernet',# network_interface,
+            request_handler=kwargs.get('request_handler', RPCHandler),
+            event_handler=kwargs.get('event_handler', EventHandler),
+            allowed_clients=allowed_clients if allowed_clients is not None else []
         )
-        # functions that the server directly serves 
-        self.server_process = None
-        self.resources = dict(
-            FILE_SERVER = dict(STATIC_ROUTES = dict(), DYNAMIC_ROUTES = dict()),
-            GET     = dict(STATIC_ROUTES = dict(), DYNAMIC_ROUTES = dict()),
-            POST    = dict(STATIC_ROUTES = dict(), DYNAMIC_ROUTES = dict()),
-            PUT     = dict(STATIC_ROUTES = dict(), DYNAMIC_ROUTES = dict()),
-            DELETE  = dict(STATIC_ROUTES = dict(), DYNAMIC_ROUTES = dict()),
-            OPTIONS = dict(STATIC_ROUTES = dict(), DYNAMIC_ROUTES = dict())
-        )
-
+        self._type = HTTPServerTypes.THING_SERVER
+        self._lost_things = dict() # see update_router_with_thing
+        # self._zmq_protocol = zmq_protocol
+        # self._zmq_socket_context = context
+        # self._zmq_event_context = context
+ 
     @property
     def all_ok(self) -> bool:
-        IP = "{}:{}".format(self.address, self.port)
+        self._IP = f"{self.address}:{self.port}"
         if self.logger is None:
-            self.logger = create_default_logger('{}|{}'.format(self.__class__.__name__, IP), self.log_level)
-        UtilitiesConsumer =  Consumer(HTTPServerUtilities, logger = self.logger, db_config_file = None, 
-                        zmq_client_pool = None, instance_name = SERVER_INSTANCE_NAME,
-                        remote_object_info = None)
-        if self.consumers is None:
-            self.consumers = [UtilitiesConsumer]
-        else: 
-            self.consumers.append(UtilitiesConsumer)
+            self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, 
+                                            f"{self.address}:{self.port}"), 
+                                            self.log_level)
+            
+        self.app = Application(handlers=[
+            (r'/remote-objects', ThingsHandler, dict(request_handler=self.request_handler, 
+                                                        event_handler=self.event_handler))
+        ])
+        
+        self.zmq_client_pool = MessageMappedZMQClientPool(self.things, identity=self._IP, 
+                                                    deserialize_server_messages=False, handshake=False,
+                                                    json_serializer=self.serializer, context=self._zmq_socket_context,
+                                                    protocol=self._zmq_protocol)
+    
+        event_loop = asyncio.get_event_loop()
+        event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
+        event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
+        event_loop.call_soon(lambda : asyncio.create_task(self.zmq_client_pool.poll()) )
+        for client in self.zmq_client_pool:
+            event_loop.call_soon(lambda : asyncio.create_task(client._handshake(timeout=60000)))
+        
+        # if self.protocol_version == 2:
+        #     raise NotImplementedError("Current HTTP2 is not implemented.")
+        #     self.tornado_instance = TornadoHTTP2Server(self.app, ssl_options=self.ssl_context)
+        # else:
+        self.tornado_instance = TornadoHTTP1Server(self.app, ssl_options=self.ssl_context)
         return True
+    
 
-    def start(self) -> None:
-        assert self.all_ok, 'HTTPServer all is not ok before starting' # Will always be True or cause some other exception
-        block : bool = True # currently block feature is not working with SSLContext due to pickling limitation of SSLContext
-        if block:
-            start_server(self.address, self.port, self.logger, self.subscription, self.consumers, self.resources, #type: ignore
-                         self.ssl_context, self.json_serializer)
-        else:
-            self.server_process = Process(target = start_server, args = (self.address, self.port, self.logger, 
-                        self.subscription, self.consumers, self.resources, self.ssl_context, self.json_serializer))
-            self.server_process.start() 
+    async def subscribe_to_host(self):
+        if self.host is None:
+            return
+        client = AsyncHTTPClient()
+        for i in range(300): # try for five minutes
+            try:
+                res = await client.fetch(HTTPRequest(
+                        url=f"{self.host}/subscribers",
+                        method='POST',
+                        body=JSONSerializer.dumps(dict(
+                                hostname=socket.gethostname(),
+                                IPAddress=get_IP_from_interface(self.network_interface), 
+                                port=self.port, 
+                                type=self._type,
+                                https=self.ssl_context is not None 
+                            )),
+                        validate_cert=False,
+                        headers={"content-type" : "application/json"}
+                    ))
+            except Exception as ex:
+                self.logger.error(f"Could not subscribe to host {self.host}. error : {str(ex)}, error type : {type(ex)}.")
+                if i >= 299:
+                    raise ex from None
+            else: 
+                if res.code in [200, 201]:
+                    self.logger.info(f"subsribed successfully to host {self.host}")
+                    break
+                elif i >= 299:
+                    raise RuntimeError(f"could not subsribe to host {self.host}. response {JSONSerializer.loads(res.body)}")
+            await asyncio.sleep(1)
+        # we lose the client anyway so we close it. if we decide to reuse the client, changes needed
+        client.close() 
+
+
+    def listen(self) -> None:
+        """
+        Start HTTP server. This method is blocking, async event loops intending to schedule the HTTP server should instead use  
+        the inner tornado instance's (``HTTPServer.tornado_instance``) listen() method. 
+        """
+        assert self.all_ok, 'HTTPServer all is not ok before starting' # Will always be True or cause some other exception   
+        self.event_loop = ioloop.IOLoop.current()
+        self.tornado_instance.listen(port=self.port, address=self.address)    
+        self.logger.info(f'started webserver at {self._IP}, ready to receive requests.')
+        self.event_loop.start()
 
     def stop(self) -> None:
-        if self.server_process:
+        self.tornado_instance.stop()
+        run_coro_sync(self.tornado_instance.close_all_connections())
+        self.event_loop.close()    
+
+
+    async def update_router_with_things(self) -> None:
+        """
+        updates HTTP router with paths from ``Thing`` (s)
+        """
+        await asyncio.gather(*[self.update_router_with_thing(client) for client in self.zmq_client_pool])
+
+        
+    async def update_router_with_thing(self, client : AsyncZMQClient):
+        if client.instance_name in self._lost_things:
+            # Just to avoid duplication of this call as we proceed at single client level and not message mapped level
+            return 
+        self._lost_things[client.instance_name] = client
+        self.logger.info(f"attempting to update router with remote object {client.instance_name}.")
+        while True:
             try:
-                self.server_process.close() 
-            except ValueError:
-                self.server_process.kill() 
-            self.server_process = None
+                await client.handshake_complete()
+                resources = dict() # type: typing.Dict[str, HTTPResource]
+                reply = (await client.async_execute(
+                                instruction=CommonRPC.http_resource_read(client.instance_name), 
+                                raise_client_side_exception=True
+                            ))[ServerMessage.DATA]
+                resources.update(reply)
 
-    def http_method_decorator(self, http_method : str, URL_path = USE_OBJECT_NAME):
-        def decorator(given_func):
-            func = remote_method(URL_path=decorator.URL_path, 
-                            http_method=decorator.http_method)(given_func)
-            self.resources[http_method]["STATIC_ROUTES"][decorator.URL_path] = HTTPServerResourceData (
-                                            what=CALLABLE,
-                                            instance_name='',
-                                            instruction=func,
-                                            fullpath=decorator.URL_path,
-                                        )
+                handlers = []
+                for instruction, http_resource in resources.items():
+                    if http_resource["what"] in [ResourceTypes.PROPERTY, ResourceTypes.ACTION] :
+                        resource = HTTPResource(**http_resource)
+                        handlers.append((resource.fullpath, self.request_handler, dict(
+                                                                resource=resource, 
+                                                                owner=self                                                     
+                                                            )))
+                    elif http_resource["what"] == ResourceTypes.EVENT:
+                        resource = ServerSentEvent(**http_resource)
+                        handlers.append((instruction, self.event_handler, dict(
+                                                                resource=resource,
+                                                                owner=self 
+                                                            )))
+                    """
+                    for handler based tornado rule matcher, the Rule object has following
+                    signature
+                    
+                    def __init__(
+                        self,
+                        matcher: "Matcher",
+                        target: Any,
+                        target_kwargs: Optional[Dict[str, Any]] = None,
+                        name: Optional[str] = None,
+                    ) -> None:
+
+                    matcher - based on route
+                    target - handler
+                    target_kwargs - given to handler's initialize
+                    name - ...
+
+                    len == 2 tuple is route + handler
+                    len == 3 tuple is route + handler + target kwargs
                 
-            return func
-        decorator.http_method = http_method 
-        decorator.URL_path = URL_path
-        return decorator
-
-    def get(self, URL_path = USE_OBJECT_NAME):
-        return self.http_method_decorator(GET, URL_path)
-    
-    def post(self, URL_path = USE_OBJECT_NAME):
-        return self.http_method_decorator(POST, URL_path)
-    
-    def put(self, URL_path = USE_OBJECT_NAME):
-        return self.http_method_decorator(PUT, URL_path)
-
-    def delete(self, URL_path = USE_OBJECT_NAME):
-        return self.http_method_decorator(DELETE, URL_path)
-                        
-
-
-def start_server(address : str, port : int, logger : logging.Logger, subscription : str, 
-            consumers : List[Union[Consumer, RemoteObject, str]], resources : Dict[str, Any], ssl_context : ssl.SSLContext, 
-            json_serializer : JSONSerializer) -> None:
-    """
-    A separate function exists to start the server to be able to fork from current process
-    """
-    event_loop = ioloop.IOLoop.current()
-    event_loop.run_sync(lambda : _setup_server(address, port, logger, subscription, consumers, resources, ssl_context, 
-                                               json_serializer))
-    # written as async function because zmq client is async, therefore run_sync for current use
-    if BaseRequestHandler.zmq_client_pool is not None:
-        event_loop.add_callback(BaseRequestHandler.zmq_client_pool.poll)
-    event_loop.start()
-
-
-async def _setup_server(address : str, port : int, logger : logging.Logger, subscription : str, 
-                consumers : List[Union[Consumer, RemoteObject, str]], resources : Dict[str, Dict[str, Any]], 
-                ssl_context : ssl.SSLContext, json_serializer  : JSONSerializer, version : float = 2) -> None:
-    IP = "{}:{}".format(address, port)
-    instance_names = []
-    server_remote_objects = {}
-    remote_object_info = []
-    if consumers is not None:
-        for consumer in consumers:
-            if isinstance(consumer, RemoteObject):
-                server_remote_objects[consumer.instance_name] = consumer
-                update_resources(resources, consumer.httpserver_resources) 
-                remote_object_info.append(consumer.object_info) 
-            elif isinstance(consumer, Consumer): 
-                instance = consumer.consumer(*consumer.args, **consumer.kwargs)
-                server_remote_objects[instance.instance_name] = instance
-                update_resources(resources, instance.httpserver_resources)
-                remote_object_info.append(instance.object_info) 
-            else:
-                instance_names.append(consumer)
-   
-    zmq_client_pool = MessageMappedZMQClientPool(instance_names, IP, json_serializer = json_serializer)
-    for client in zmq_client_pool:
-        await client.handshake_complete() 
-        _, _, _, _, _, reply = await client.read_attribute('/'+client.server_instance_name + '/resources/http', raise_client_side_exception = True)
-        update_resources(resources, reply["returnValue"]) # type: ignore
-        _, _, _, _, _, reply = await client.read_attribute('/'+client.server_instance_name + '/object-info', raise_client_side_exception = True)
-        remote_object_info.append(RemoteObjectDB.RemoteObjectInfo(**reply["returnValue"])) # Should raise an exception if returnValue key is not found for some reason. 
-    
-    for RO in server_remote_objects.values():
-        if isinstance(RO, HTTPServerUtilities):
-            RO.zmq_client_pool = zmq_client_pool
-            RO.remote_object_info = remote_object_info
-            RO._httpserver_resources = resources
-            if subscription:
-                await RO.subscribe_to_host(subscription, port)
+                    so we give (path, RPCHandler, {'resource' : HTTPResource})
+                    
+                    path is extracted from remote_method(URL_path='....')
+                    RPCHandler is the base handler of this package for RPC purposes
+                    resource goes into target kwargs as the HTTPResource generated by 
+                        remote_method and RemoteParamater contains all the info given 
+                        to make RPCHandler work
+                    """
+                self.app.wildcard_router.add_rules(handlers)
+                self.logger.info(f"updated router with remote object {client.instance_name}.")
                 break
+            except Exception as ex:
+                self.logger.error(f"error while trying to update router with remote object - {str(ex)}. " +
+                                  "Trying again in 5 seconds")
+                await asyncio.sleep(5)
+       
+        try:
+            reply = (await client.async_execute(
+                        instruction=CommonRPC.object_info_read(client.instance_name), 
+                        raise_client_side_exception=True
+                    ))[ServerMessage.DATA]
+            object_info = ThingInformation(**reply)
+            object_info.http_server ="{}://{}:{}".format("https" if self.ssl_context is not None else "http", 
+                                                socket.gethostname(), self.port)
     
-    BaseRequestHandler.zmq_client_pool = zmq_client_pool
-    BaseRequestHandler.json_serializer = zmq_client_pool.json_serializer
-    BaseRequestHandler.local_objects   = server_remote_objects
-    GetResource.resources = resources.get(GET,  dict())        
-    PostResource.resources = resources.get(POST, dict()) 
-    PutResource.resources = resources.get(PUT,  dict()) 
-    DeleteResource.resources = resources.get(DELETE, dict())
-    OptionsResource.resources = resources.get(OPTIONS, dict())
-    # log_resources(logger, resources)   
-    Router = CustomRouter(Application(), logger, IP, resources.get('FILE_SERVER'))   
-    # if version == 2:   
-    #     S = TornadoHTTP2Server(Router, ssl_options=ssl_context)
-    # else: 
-    S = TornadoHTTP1Server(Router, ssl_options=ssl_context)    
-    S.listen(port = port, address = address) 
-
-
-__all__ = ['HTTPServer']
+            await client.async_execute(
+                        instruction=CommonRPC.object_info_write(client.instance_name),
+                        arguments=dict(value=object_info), 
+                        raise_client_side_exception=True
+                    )
+        except Exception as ex:
+            self.logger.error(f"error while trying to update remote object with HTTP server details - {str(ex)}. " +
+                                "Trying again in 5 seconds")
+        self.zmq_client_pool.poller.register(client.socket, zmq.POLLIN)
+        self._lost_things.pop(client.instance_name)
+               
+    
+__all__ = [
+    HTTPServer.__name__
+]
