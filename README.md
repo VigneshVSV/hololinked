@@ -9,6 +9,13 @@ The main goal is to develop a pythonic & pure python modern package for instrume
 
 [![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest) [![Maintainability](https://api.codeclimate.com/v1/badges/913f4daa2960b711670a/maintainability)](https://codeclimate.com/github/VigneshVSV/hololinked/maintainability) ![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package) ![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked)
 
+### To Install
+
+From pip - ``pip install hololinked``
+
+Or, clone the repository and install in develop mode `pip install -e .` for convenience. The conda env hololinked.yml can also help. 
+
+
 ### Usage/Quickstart
 
 `hololinked` is compatible with the [Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software. Each device or thing can be controlled systematically when their design in software is segregated into properties, actions and events. In object oriented terms for data acquisition:
@@ -257,12 +264,6 @@ To know more about client side scripting, please look into the documentation [Ho
 
 - [example repository](https://github.com/VigneshVSV/hololinked-examples) - detailed examples for both clients and servers
 - [helper GUI](https://github.com/VigneshVSV/hololinked-portal) - view & interact with your object's methods, properties and events. 
-
-### To Install
-
-Clone the repository and install in develop mode `pip install -e .` for convenience. The conda env hololinked.yml can also help. 
-
-From pip - ``pip install hololinked``
 
 ### Currently Supported
 
