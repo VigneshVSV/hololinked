@@ -1,7 +1,7 @@
-Remote Methods In-Depth
-=======================
+Actions (or remote methods)
+===========================
 
-Only methods decorated with ``remote_method()`` are exposed to clients. 
+Only methods decorated with ``action()`` are exposed to clients. 
 
 .. literalinclude:: ../code/4.py 
     :lines: 1-10, 26-36

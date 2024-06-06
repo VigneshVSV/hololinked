@@ -1,16 +1,19 @@
 .. |module-highlighted| replace:: ``hololinked``
 
-Installation
-============
+Installation & Examples
+=======================
 
-As |module-highlighted| is still in idealogical & development state, it is only possible to clone it from github & install 
-directly (in develop mode). 
+.. code:: shell 
+
+    pip install hololinked
+
+One may also clone it from github & install directly (in develop mode). 
 
 .. code:: shell 
 
     git clone https://github.com/VigneshVSV/hololinked.git
 
-Since there is no requirements files yet, one could setup a conda environment from the included ``hololinked.yml`` file 
+Either install the dependencies in requirements file or one could setup a conda environment from the included ``hololinked.yml`` file 
 
 .. code:: shell 
 
@@ -31,7 +34,7 @@ Also check out:
      - repository containing example code discussed in this documentation
    * - hololinked-portal 
      - https://github.com/VigneshVSV/hololinked-portal.git
-     - GUI to access RemoteObjects & Data Visualization helper. 
+     - GUI to access ``Thing``s and interact with their properties, actions and events. 
 
 To build & host docs locally, in top directory:
 

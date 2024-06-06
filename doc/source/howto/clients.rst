@@ -27,7 +27,7 @@ ZMQ transport layers:
 .. literalinclude:: code/rpc.py
     :language: python
     :linenos: 
-    :lines: 1-3, 7-11, 45-64
+    :lines: 1-2, 9-13, 74-81
 
 Then, import the ``ObjectProxy`` and specify the ZMQ transport method and ``instance_name`` to connect to the server and 
 the object it serves: 
@@ -43,7 +43,7 @@ calls on actions and subscribe to events with a callback which is executed once 
 .. literalinclude:: code/rpc_client.py 
     :language: python 
     :linenos: 
-    :lines: 22-27
+    :lines: 23-27
 
 One would be making such remote procedure calls from a PyQt graphical interface, custom acquisition scripts or 
 measurement scan routines which may be running in the same or a different computer on the network. Use TCP ZMQ transport 
@@ -52,7 +52,7 @@ to be accessible from network clients.
 .. literalinclude:: code/rpc.py 
     :language: python
     :linenos: 
-    :lines: 58, 67-70
+    :lines: 75, 84-87
 
 Irrespective of client's request origin, whether TCP, IPC or INPROC, requests are always queued before executing. To repeat:
 
@@ -69,7 +69,7 @@ can import the server script ``Thing`` and set it as the type of the client as a
 .. literalinclude:: code/rpc_client.py 
     :language: python 
     :linenos: 
-    :lines: 14-20
+    :lines: 15-20
 
 Serializer customization is discussed further in :doc:`Serializer How-To <serializers>`.
 

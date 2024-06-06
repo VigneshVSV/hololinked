@@ -14,7 +14,7 @@ setuptools.setup(
     description="A ZMQ-based Object Oriented RPC tool-kit with HTTP support for instrument control/data acquisition or controlling generic python objects.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/VigneshVSV/hololinked",
+    url="https://hololinked.readthedocs.io/en/latest/index.html",
     packages=[
         'hololinked',
         'hololinked.server',

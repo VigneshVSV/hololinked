@@ -8,20 +8,14 @@
     
     Expose Python Classes <self>
     clients
-    properties/index
-    methods/index
-    serializers
-    eventloop
 
     
 Expose Python Classes
 =====================
 
-Since |module-highlighted| is object oriented, one can start by creating a class to encapsulate 
-instrumentation properties and the desirable commands to be issued. Python objects visible
-on the network or to other processes are made by subclassing from ``Thing``: 
+Python objects visible on the network or to other processes are made by subclassing from ``Thing``: 
 
-.. literalinclude:: code/remote_object_inheritance.py
+.. literalinclude:: code/thing_inheritance.py
     :language: python
     :linenos:
 
@@ -33,7 +27,7 @@ characters, numbers, dashes and forward slashes, which looks like part of a brow
 that ``instance_name`` should be a URI compatible string.
 
 For attributes (like serial number above), if one requires them to be exposed on the network, one should 
-use "properties" defined in ``hololinked.server.properties`` to "parameterize" the object. 
+use "properties" defined in ``hololinked.server.properties`` to "type define" (in a python sense) attributes of the object. 
 
 .. literalinclude:: code/thing_with_http_server.py
     :language: python
@@ -48,7 +42,7 @@ For methods to be exposed on the network, one can use the ``action`` decorator:
 .. literalinclude:: code/thing_with_http_server.py
     :language: python
     :linenos:
-    :lines: 3-9, 15-19, 21-28
+    :lines: 2-3, 7-19, 24-31
 
 Arbitrary signature is permitted. Arguments are loosely typed and may need to be constrained with a schema, based 
 on the robustness the developer is expecting in their application. However, a schema is optional and it only matters that 
@@ -60,7 +54,7 @@ To start a HTTP server for the ``Thing``, one can call the ``run_with_http_serve
 .. literalinclude:: code/thing_with_http_server.py
     :language: python
     :linenos:
-    :lines: 6-9, 42-47
+    :lines: 93-96
 
 
 By default, this starts a server a HTTP server and an INPROC zmq socket (GIL constrained intra-process as far as python is
@@ -72,10 +66,10 @@ One can store captured data in properties & push events to supply clients with t
 .. literalinclude:: code/thing_with_http_server.py 
     :language: python   
     :linenos:
-    :lines: 6-10, 15-20, 29-41
+    :lines: 2-3, 5-19, 64-82
 
-Events can be defined as class or instance attributes and will be tunnelled as HTTP server sent events without any additional 
-serialization overhead. Events are to be used to asynchronously push data to clients.
+Events can be defined as class or instance attributes and will be tunnelled as HTTP server sent events. 
+Events are to be used to asynchronously push data to clients.
 
 It can be summarized that the three main building blocks of a network exposed object, or a hardware ``Thing`` are:
 

@@ -15,8 +15,8 @@ class OceanOpticsSpectrometer(Thing):
                         doc="serial number of the spectrometer") # type: str
 
     def __init__(self, instance_name, serial_number, autoconnect, **kwargs):
-        super().__init__(instance_name=instance_name, **kwargs)
-        self.serial_number = serial_number
+        super().__init__(instance_name=instance_name, serial_number=serial_number,
+                        **kwargs)
         if autoconnect and self.serial_number is not None:
             self.connect(trigger_mode=0, integration_time=int(1e6)) # let's say, by default
         self._acquisition_thread = None

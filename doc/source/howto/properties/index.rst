@@ -1,8 +1,8 @@
-Parameters In-Depth
+Properties In-Depth
 ===================
 
-Parameters expose python attributes to clients & support custom get-set functions. 
-``hololinked`` uses ``param`` under the hood to implement parameters. 
+Properties expose python attributes to clients & support custom get-set(-delete) functions. 
+``hololinked`` uses ``param`` under the hood to implement properties. 
 
 .. toctree::
     :hidden:
@@ -11,43 +11,43 @@ Parameters expose python attributes to clients & support custom get-set function
     arguments
     extending
 
-Untyped Parameter 
+Untyped Property 
 -----------------
 
-To make a parameter take any value, use the base class ``RemoteParameter``
+To make a property take any value, use the base class ``Property``
 
-.. literalinclude:: ../code/parameters/untyped.py
+.. literalinclude:: ../code/properties/untyped.py
     :language: python
     :linenos:
     :lines: 1-11
   
-The descriptor object (instance of ``RemoteParameter``) that performs the get-set operations & auto-allocation 
-of an internal instance variable for the parameter can be accessed by the instance under 
-``self.parameters.descriptors["<parameter name>"]``. Expectedly, the value of the parameter must 
+The descriptor object (instance of ``Property``) that performs the get-set operations & auto-allocation 
+of an internal instance variable for the property can be accessed by the instance under 
+``self.properties.descriptors["<property name>"]``. Expectedly, the value of the property must 
 be serializable to be read by the clients. Read the serializer section for further details & customization. 
 
 Custom Typed
 ------------
 
 To support custom get & set methods so that an internal instance variable is not created automatically, 
-use the getter & setter decorator or pass a method to the fget & fset arguments of the parameter:
+use the getter & setter decorator or pass a method to the fget & fset arguments of the property:
 
-.. literalinclude:: ../code/parameters/untyped.py
+.. literalinclude:: ../code/properties/untyped.py
     :language: python
     :linenos:
     :lines: 1-30
 
 
-Typed Parameters
+Typed Properties
 ----------------
 
-Certain typed parameters are already available in ``hololinked.server.remote_parameters``, 
+Certain typed properties are already available in ``hololinked.server.properties``, 
 defined by ``param``. 
 
 .. list-table::
 
     *   - type 
-        - parameter class  
+        - property class  
         - options 
     *   - str
         - ``String``
@@ -94,10 +94,10 @@ defined by ``param``.
 
 As an example:
 
-.. literalinclude:: ../code/parameters/typed.py 
+.. literalinclude:: ../code/properties/typed.py 
     :language: python
     :linenos:
 
-When providing a custom setter for typed parameters, the value is internally validated before 
+When providing a custom setter for typed properties, the value is internally validated before 
 passing to the setter method. The return value of getter method is never validated and 
 is left to the programmer's choice. 
