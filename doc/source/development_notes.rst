@@ -63,7 +63,7 @@ for properties and events. Further, HTTP request methods may be mapped as follow
      - change partial value of a resource which is difficult to factor into a property or change settings of a property with custom logic 
      - not applicable
 
-If you dont agree with the table above, use `Thing Description <https://www.w3.org/TR/wot-thing-description11/#http-binding-assertions>` 
+If you dont agree with the table above, use `Thing Description <https://www.w3.org/TR/wot-thing-description11/#http-binding-assertions>`_ 
 standard instead, which is pretty close. Considering an example device like a spectrometer, the table above may dictate the following:
 
 .. list-table:: 

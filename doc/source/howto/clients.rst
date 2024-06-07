@@ -27,7 +27,7 @@ ZMQ transport layers:
 .. literalinclude:: code/rpc.py
     :language: python
     :linenos: 
-    :lines: 1-2, 9-13, 74-81
+    :lines: 1-2, 9-13, 62-81
 
 Then, import the ``ObjectProxy`` and specify the ZMQ transport method and ``instance_name`` to connect to the server and 
 the object it serves: 

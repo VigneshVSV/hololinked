@@ -16,11 +16,13 @@ class OceanOpticsSpectrometer(Thing):
 
     def __init__(self, instance_name, serial_number, autoconnect, **kwargs):
         super().__init__(instance_name=instance_name, serial_number=serial_number,
-                        **kwargs)
+                        **kwargs) 
+        # you can also pass properties to init to auto-set (optional)
         if autoconnect and self.serial_number is not None:
             self.connect(trigger_mode=0, integration_time=int(1e6)) # let's say, by default
         self._acquisition_thread = None
-        self.measurement_event = Event(name='intensity-measurement')
+        self.measurement_event = Event(name='intensity-measurement', 
+                                URL_path='/intensity/measurement-event')
 
     @action(URL_path='/connect')
     def connect(self, trigger_mode, integration_time):
@@ -30,9 +32,9 @@ class OceanOpticsSpectrometer(Thing):
         if integration_time:
             self.device.integration_time_micros(integration_time)
 
-    integration_time = Number(default=1000, bounds=(0.001, None), crop_to_bounds=True, 
-                            URL_path='/integration-time', 
-                            doc="integration time of measurement in milliseconds")
+    integration_time = Number(default=1000, bounds=(0.001, 1e6), crop_to_bounds=True, 
+                            doc="""integration time of measurement in milliseconds,
+                                1μs (min) or 1s (max) """)
     
     @integration_time.setter 
     def apply_integration_time(self, value : float):
@@ -47,8 +49,8 @@ class OceanOpticsSpectrometer(Thing):
             return self.parameters["integration_time"].default 
         
     trigger_mode = Selector(objects=[0, 1, 2, 3, 4], default=0, URL_path='/trigger-mode', 
-                        doc="""0 = normal/free running, 1 = Software trigger, 2 = Ext. Trigger Level,
-                         3 = Ext. Trigger Synchro/ Shutter mode, 4 = Ext. Trigger Edge""")
+                    doc="""0 = normal/free running, 1 = Software trigger, 2 = Ext. Trigger Level,
+                        3 = Ext. Trigger Synchro/ Shutter mode, 4 = Ext. Trigger Edge""")
     
     @trigger_mode.setter 
     def apply_trigger_mode(self, value : int):
@@ -63,6 +65,7 @@ class OceanOpticsSpectrometer(Thing):
             return self.parameters["trigger_mode"].default 
               
     intensity = List(default=None, allow_None=True, doc="captured intensity", 
+                    URL_path='/intensity',
                     readonly=True, fget=lambda self: self._intensity.tolist())       
 
     def capture(self):
@@ -75,22 +78,23 @@ class OceanOpticsSpectrometer(Thing):
             self.measurement_event.push(self._intensity.tolist())
             self.logger.debug(f"pushed measurement event")
 
-    @action(URL_path='/acquisition/start', http_method=HTTP_METHODS.POST)
+    @action(URL_path='/acquisition/start', http_method="POST")
     def start_acquisition(self):
         if self._acquisition_thread is None:
             self._acquisition_thread = threading.Thread(target=self.capture) 
             self._acquisition_thread.start()
         
-    @action(URL_path='/acquisition/stop', http_method=HTTP_METHODS.POST)
+    @action()
     def stop_acquisition(self):
         if self._acquisition_thread is not None:
-            self.logger.debug(f"stopping acquisition thread with thread-ID {self._acquisition_thread.ident}")
+            self.logger.debug(f"""stopping acquisition thread with 
+                            thread-ID {self._acquisition_thread.ident}""")
             self._run = False # break infinite loop
             self._acquisition_thread.join()
             self._acquisition_thread = None 
 
-    
 if __name__ == '__main__':
     spectrometer = OceanOpticsSpectrometer(instance_name='spectrometer', 
-                        serial_number='S14155', autoconnect=True, log_level=logging.DEBUG)
+                        serial_number='S14155', autoconnect=True, 
+                        log_level=logging.DEBUG)
     spectrometer.run_with_http_server(port=3569)

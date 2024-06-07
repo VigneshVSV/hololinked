@@ -77,7 +77,7 @@ if __name__ == "__main__":
     Process(target=start_https_server).start()
     
     spectrometer = OceanOpticsSpectrometer(instance_name='spectrometer', 
-                        serial_number=None, autoconnect=False)
+                        serializer='msgpack', serial_number=None, autoconnect=False)
     spectrometer.run(zmq_protocols="IPC")
 
     # example code, but will never reach here unless exit() is called by the client

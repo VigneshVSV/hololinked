@@ -25,16 +25,6 @@ Either install the dependencies in requirements file or one could setup a conda 
     conda activate hololinked
     pip install -e .
 
-Also check out:
-
-.. list-table:: 
-  
-   * - hololinked-examples  
-     - https://github.com/VigneshVSV/hololinked-examples.git 
-     - repository containing example code discussed in this documentation
-   * - hololinked-portal 
-     - https://github.com/VigneshVSV/hololinked-portal.git
-     - GUI to access ``Thing``s and interact with their properties, actions and events. 
 
 To build & host docs locally, in top directory:
 
@@ -51,3 +41,18 @@ To open the docs in the default browser, one can also issue the following instea
 .. code:: shell 
 
     make host-doc
+
+
+Check out:
+
+.. list-table:: 
+  
+   * - hololinked-examples  
+     - https://github.com/VigneshVSV/hololinked-examples.git 
+     - repository containing example code discussed in this documentation
+   * - hololinked-portal 
+     - https://github.com/VigneshVSV/hololinked-portal.git
+     - GUI to access ``Thing``s and interact with their properties, actions and events. 
+
+
+
