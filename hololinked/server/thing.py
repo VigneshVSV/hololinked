@@ -303,26 +303,38 @@ class Thing(Parameterized, metaclass=ThingMeta):
     def _get_properties(self, **kwargs) -> typing.Dict[str, typing.Any]:
         """
         """
+        skip_props = ["httpserver_resources", "rpc_resources", "gui_resources", "GUI", "object_info"]
+        for prop_name in skip_props:
+            if prop_name in kwargs:
+                raise RuntimeError("GUI, httpserver resources, RPC resources etc. cannot be queried using multiple property fetch.")
         data = {}
         if len(kwargs) == 0:
-            for parameter in self.properties.descriptors.keys():
-                data[parameter] = self.properties[parameter].__get__(self, type(self))
+            for name, prop in self.properties.descriptors.items():
+                if name in skip_props or not isinstance(prop, Property):
+                    continue
+                if prop._remote_info is None:
+                    continue
+                data[name] = prop.__get__(self, type(self))
         elif 'names' in kwargs:
             names = kwargs.get('names')
             if not isinstance(names, (list, tuple, str)):
                 raise TypeError(f"Specify properties to be fetched as a list, tuple or comma separated names. Givent type {type(names)}")
             if isinstance(names, str):
                 names = names.split(',')
-            for requested_parameter in names:
-                if not isinstance(requested_parameter, str):
-                    raise TypeError(f"parameter name must be a string. Given type {type(requested_parameter)}")
-                data[requested_parameter] = self.properties[requested_parameter].__get__(self, type(self))
+            for requested_prop in names:
+                if not isinstance(requested_prop, str):
+                    raise TypeError(f"property name must be a string. Given type {type(requested_prop)}")
+                if not isinstance(self.properties[requested_prop], Property) or self.properties[requested_prop]._remote_info is None:
+                    raise AttributeError("this property is not remote accessible")
+                data[requested_prop] = self.properties[requested_prop].__get__(self, type(self))
         elif len(kwargs.keys()) != 0:
-            for rename, requested_parameter in kwargs.items():
-                data[rename] = self.properties[requested_parameter].__get__(self, type(self))                   
+            for rename, requested_prop in kwargs.items():
+                if not isinstance(self.properties[requested_prop], Property) or self.properties[requested_prop]._remote_info is None:
+                    raise AttributeError("this property is not remote accessible")
+                data[rename] = self.properties[requested_prop].__get__(self, type(self))                   
         return data 
     
-    @action(URL_path='/properties', http_method=HTTP_METHODS.PATCH)
+    @action(URL_path='/properties', http_method=[HTTP_METHODS.PUT, HTTP_METHODS.PATCH])
     def _set_properties(self, **values : typing.Dict[str, typing.Any]) -> None:
         """ 
         set properties whose name is specified by keys of a dictionary
@@ -330,7 +342,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         Parameters
         ----------
         values: Dict[str, Any]
-            dictionary of parameter names and its values
+            dictionary of property names and its values
         """
         for name, value in values.items():
             setattr(self, name, value)
@@ -379,12 +391,13 @@ class Thing(Parameterized, metaclass=ThingMeta):
     @action(URL_path='/properties/db-reload', http_method=HTTP_METHODS.POST)
     def load_properties_from_DB(self):
         """
-        Load and apply parameter values which have ``db_init`` or ``db_persist``
+        Load and apply property values which have ``db_init`` or ``db_persist``
         set to ``True`` from database
         """
         if not hasattr(self, 'db_engine'):
             return
-        for name, resource in inspect._getmembers(self, lambda o : isinstance(o, Thing), getattr_without_descriptor_read): 
+        for name, resource in inspect._getmembers(self, lambda o : isinstance(o, Thing), 
+                                                    getattr_without_descriptor_read): 
             if name == '_owner':
                 continue
         missing_properties = self.db_engine.create_missing_properties(self.__class__.properties.db_init_objects,
@@ -433,10 +446,10 @@ class Thing(Parameterized, metaclass=ThingMeta):
         #     value for node-wot to ignore validation or claim the accessed value for complaint with the schema.
         #     In other words, schema validation will always pass.  
         from .td import ThingDescription
-        return ThingDescription().build(self, authority or self._object_info.http_server,
-                                            allow_loose_schema=False) #allow_loose_schema)
+        return ThingDescription(self, authority or self._object_info.http_server,
+                                    allow_loose_schema=False).build() #allow_loose_schema)
     
-    
+
     @action(URL_path='/exit', http_method=HTTP_METHODS.POST)                                                                                                                                          
     def exit(self) -> None:
         """

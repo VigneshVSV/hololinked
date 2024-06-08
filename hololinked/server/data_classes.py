@@ -469,7 +469,7 @@ def get_organised_resources(instance):
                 # above condition is just a gaurd in case somebody does some unpredictable patching activities
             remote_info = prop._remote_info
             fullpath = f"{instance._full_URL_path_prefix}{remote_info.URL_path}"
-            read_http_method, write_http_method = remote_info.http_method
+            read_http_method, write_http_method, delete_http_method = remote_info.http_method
                 
             httpserver_resources[fullpath] = HTTPResource(
                                                 what=ResourceTypes.PROPERTY, 
@@ -481,7 +481,8 @@ def get_organised_resources(instance):
                                                 return_value_schema=remote_info.return_value_schema,
                                                 **{ 
                                                     read_http_method : f"{fullpath}/read",
-                                                    write_http_method : f"{fullpath}/write"
+                                                    write_http_method : f"{fullpath}/write",
+                                                    delete_http_method : f"{fullpath}/delete"
                                                 }
                                             )
             rpc_resources[fullpath] = RPCResource(
@@ -501,14 +502,17 @@ def get_organised_resources(instance):
             instance_resources[f"{fullpath}/write"] = data_cls  
             # instance_resources[f"{fullpath}/delete"] = data_cls  
             if prop.observable:
+                evt_fullpath = f"{instance._full_URL_path_prefix}{prop._observable_event.URL_path}"
                 event_data_cls = ServerSentEvent(
                             name=prop._observable_event.name,
                             obj_name='_observable_event', # not used in client, so fill it with something
                             what=ResourceTypes.EVENT,
-                            unique_identifier=f"{instance._full_URL_path_prefix}{prop._observable_event.URL_path}",
+                            unique_identifier=evt_fullpath,
                         )
+                prop._observable_event._owner = instance
+                prop._observable_event._unique_identifier = bytes(evt_fullpath, encoding='utf-8')
                 prop._observable_event._remote_info = event_data_cls
-                httpserver_resources[fullpath] = event_data_cls
+                httpserver_resources[evt_fullpath] = event_data_cls
     # Methods
     for name, resource in inspect._getmembers(instance, inspect.ismethod, getattr_without_descriptor_read): 
         if hasattr(resource, '_remote_info'):
@@ -519,10 +523,9 @@ def get_organised_resources(instance):
             # methods are already bound
             assert remote_info.isaction, ("remote info from inspect.ismethod is not a callable",
                                 "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")
-            if len(remote_info.http_method) > 1:
-                raise ValueError(f"methods support only one HTTP method at the moment. Given number of methods : {len(remote_info.http_method)}.")
             fullpath = f"{instance._full_URL_path_prefix}{remote_info.URL_path}" 
-            instruction = f"{fullpath}/{remote_info.http_method[0]}"
+            instruction = f"{fullpath}/invoke-on-{remote_info.http_method[0]}" 
+            # needs to be cleaned up for multiple HTTP methods
             httpserver_resources[instruction] = HTTPResource(
                                         what=ResourceTypes.ACTION,
                                         instance_name=instance._owner.instance_name if instance._owner is not None else instance.instance_name,
@@ -531,7 +534,7 @@ def get_organised_resources(instance):
                                         request_as_argument=remote_info.request_as_argument,
                                         argument_schema=remote_info.argument_schema,
                                         return_value_schema=remote_info.return_value_schema,
-                                        **{ remote_info.http_method[0] : instruction },
+                                        **{ http_method : instruction for http_method in remote_info.http_method },
                                     )
             rpc_resources[instruction] = RPCResource(
                                             what=ResourceTypes.ACTION,
@@ -546,6 +549,7 @@ def get_organised_resources(instance):
                                             request_as_argument=remote_info.request_as_argument
                                         )
             instance_resources[instruction] = remote_info.to_dataclass(obj=resource, bound_obj=instance) 
+           
     # Events
     for name, resource in inspect._getmembers(instance, lambda o : isinstance(o, Event), getattr_without_descriptor_read):
         assert isinstance(resource, Event), ("thing event query from inspect.ismethod is not an Event",

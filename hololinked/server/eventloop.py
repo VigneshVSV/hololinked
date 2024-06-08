@@ -339,7 +339,9 @@ class EventLoop(RemoteObject):
             elif action == "read":
                 return prop.__get__(owner_inst, type(owner_inst))             
             elif action == "delete":
-                return prop.deleter() # this may not be correct yet
+                if prop.fdel is not None:
+                    return prop.fdel() # this may not be correct yet
+                raise NotImplementedError("This property does not support deletion")
         raise NotImplementedError("Unimplemented execution path for Thing {} for instruction {}".format(instance_name, instruction_str))
 
 

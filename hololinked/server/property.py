@@ -3,6 +3,8 @@ from types import FunctionType, MethodType
 from enum import Enum
 import warnings
 
+from hololinked.param.parameterized import Parameterized, ParameterizedMetaclass
+
 from ..param.parameterized import Parameter, ClassParameters
 from .data_classes import RemoteResourceInfoValidator
 from .constants import USE_OBJECT_NAME, HTTP_METHODS
@@ -109,7 +111,8 @@ class Property(Parameter):
 
     """
 
-    __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', '_remote_info', '_observable_event', 'fcomparator']
+    __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', '_remote_info', 
+                '_observable', '_observable_event', 'fcomparator']
     
     # RPC only init - no HTTP methods for those who dont like
     @typing.overload
@@ -173,9 +176,9 @@ class Property(Parameter):
         self.db_persist = db_persist
         self.db_init    = db_init
         self.db_commit  = db_commit
-        self.observable = observable
         self.fcomparator = fcomparator
         self.metadata = metadata
+        self._observable = observable
         if remote:
             self._remote_info = RemoteResourceInfoValidator(
                 http_method=http_method,
@@ -192,8 +195,9 @@ class Property(Parameter):
                 elif not self._remote_info.URL_path.startswith('/'): 
                     raise ValueError(f"URL_path should start with '/', please add '/' before '{self._remote_info.URL_path}'")
                 self._remote_info.obj_name = self.name
-            if self._observable_event is not None and self._observable_event.URL_path == USE_OBJECT_NAME: 
-                self._observable_event.URL_path = f'{self._remote_info.URL_path}/change-event'
+            if self._observable:
+                self._observable_event = Event(name=f'{self.name}_change_event',
+                                            URL_path=f'{self._remote_info.URL_path}/change-event')
             # In principle the above could be done when setting name itself however to simplify
             # we do it with owner. So we should always remember order of __set_name__ -> 1) attrib_name, 
             # 2) name and then 3) owner
@@ -205,15 +209,19 @@ class Property(Parameter):
             # assert isinstance(obj, Thing), f"database property {self.name} bound to a non Thing, currently not supported"
             # uncomment for type definitions
             obj.db_engine.set_property(self, value)
+        self.push_change_event(obj, value)
+        return super()._post_value_set(obj, value)
+    
+    def push_change_event(self, obj, value : typing.Any) -> None:
         if self.observable and self._observable_event is not None:
-            old_value = obj.__dict__.get(self._internal_name, NotImplemented)
+            print("received value is ", value)
+            old_value = obj.__dict__.get(f'{self._internal_name}_old_value', NotImplemented)
             obj.__dict__[f'{self._internal_name}_old_value'] = value 
             if self.fcomparator:
                 if self.fcomparator(old_value, value):
                     self._observable_event.push(value)               
             elif old_value != value:
                 self._observable_event.push(value)
-        return super()._post_value_set(obj, value)
     
     def comparator(self, func : typing.Callable) -> typing.Callable:
         """
@@ -224,21 +232,27 @@ class Property(Parameter):
     
     @property
     def observable(self) -> bool:
-        return self._observable_event is not None 
+        return self._observable
     
     @observable.setter
     def observable(self, value : bool) -> None:
         if value:
+            self._observable = value    
             if not self._observable_event:
-                self._observable_event = Event(name=f'{self.name}_change_event', URL_path=USE_OBJECT_NAME)
+                self._observable_event = Event(name=f'{self.name}_change_event', 
+                                           URL_path=f'{self._remote_info.URL_path}/change-event')
             else:
                 warnings.warn(f"property is already observable, cannot change event object though", 
                             category=UserWarning)
-        elif self._observable_event is not None:
+        elif not value and self._observable_event is not None:
             raise NotImplementedError(f"Setting an observable property ({self.name}) to un-observe is currently not supported.")
     
-            
+    def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass) -> typing.Any:
+        read_value = super().__get__(obj, objtype)
+        self.push_change_event(obj, read_value)
+        return read_value
     
+
 __property_info__ = [
                 'allow_None' , 'class_member', 'db_init', 'db_persist', 
                 'db_commit', 'deepcopy_default', 'per_instance_descriptor', 

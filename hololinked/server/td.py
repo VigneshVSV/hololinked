@@ -199,9 +199,6 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
         """generates the schema"""
         DataSchema.build(self, property, owner, authority)
 
-        if property.observable:
-            self.observable = property.observable
-
         self.forms = []
         for index, method in enumerate(property._remote_info.http_method):
             form = Form()
@@ -215,6 +212,17 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
             form.href = f"{authority}{owner._full_URL_path_prefix}{property._remote_info.URL_path}"
             form.htv_methodName = method.upper()
             self.forms.append(form.asdict())
+
+        if property.observable:
+            self.observable = property.observable
+            form = Form()
+            form.op = 'observeproperty'
+            form.href = f"{authority}{owner._full_URL_path_prefix}{property._observable_event.URL_path}"
+            form.htv_methodName = "GET"
+            form.subprotocol = "sse"
+            form.contentType = "text/event-stream"
+            self.forms.append(form.asdict())
+
 
     @classmethod
     def generate_schema(self, property : Property, owner : Thing, authority : str) -> typing.Dict[str, JSONSerializable]:
@@ -456,7 +464,7 @@ class OneOfSchema(PropertyAffordance):
             oneOf = self.oneOf[0]
             self.type = oneOf["type"]
             if oneOf["type"] == 'object':
-                if oneOf.get("properites", NotImplemented) is not NotImplemented:
+                if oneOf.get("properties", NotImplemented) is not NotImplemented:
                     self.properties = oneOf["properties"]
                 if oneOf.get("required", NotImplemented) is not NotImplemented:
                     self.required = oneOf["required"]
@@ -677,43 +685,86 @@ class ThingDescription(Schema):
                     'thing_description', 'maxlen', 'execution_logs', 'GUI', 'object_info'  ]
 
     skip_actions = ['_set_properties', '_get_properties', 'push_events', 'stop_events', 
-                    'postman_collection']
+                    'get_postman_collection']
 
-    def __init__(self):
+    # not the best code and logic, but works for now
+
+    def __init__(self, instance : Thing, authority : typing.Optional[str] = None, 
+                    allow_loose_schema : typing.Optional[bool] = False):
         super().__init__()
-    
-    def build(self, instance : Thing, authority = f"https://{socket.gethostname()}:8080", 
-                    allow_loose_schema : typing.Optional[bool] = False) -> typing.Dict[str, typing.Any]: 
+        self.instance = instance
+        self.authority = authority or f"https://{socket.gethostname()}:8080"
+        self.allow_loose_schema = allow_loose_schema
+
+
+    def build(self) -> typing.Dict[str, typing.Any]: 
         self.context = "https://www.w3.org/2022/wot/td/v1.1"
-        self.id = f"{authority}/{instance.instance_name}"
-        self.title = instance.__class__.__name__ 
-        self.description = Schema.format_doc(instance.__doc__) if instance.__doc__ else "no class doc provided" 
+        self.id = f"{self.authority}/{self.instance.instance_name}"
+        self.title = self.instance.__class__.__name__ 
+        self.description = Schema.format_doc(self.instance.__doc__) if self.instance.__doc__ else "no class doc provided" 
         self.properties = dict()
         self.actions = dict()
         self.events = dict()
+        self.forms = []
 
+        self.add_interaction_affordances()
+        self.add_top_level_forms()
+        self.add_security_definitions()
+       
+        return self.asdict()
+    
+
+    def add_interaction_affordances(self):
         # properties and actions
-        for resource in instance.instance_resources.values():
+        for resource in self.instance.instance_resources.values():
             if (resource.isproperty and resource.obj_name not in self.properties and 
                 resource.obj_name not in self.skip_properties and hasattr(resource.obj, "_remote_info") and 
                 resource.obj._remote_info is not None): 
-                self.properties[resource.obj_name] = PropertyAffordance.generate_schema(resource.obj, instance, authority) 
+                self.properties[resource.obj_name] = PropertyAffordance.generate_schema(resource.obj, 
+                                                                            self.instance, self.authority) 
             elif (resource.isaction and resource.obj_name not in self.actions and 
                   resource.obj_name not in self.skip_actions and hasattr(resource.obj, '_remote_info')):
-                self.actions[resource.obj_name] = ActionAffordance.generate_schema(resource.obj, instance, authority)
+                self.actions[resource.obj_name] = ActionAffordance.generate_schema(resource.obj, 
+                                                                            self.instance, self.authority)
         # Events
-        for name, resource in vars(instance).items(): 
+        for name, resource in vars(self.instance).items(): 
             if not isinstance(resource, Event):
                 continue
-            self.events[name] = EventAffordance.generate_schema(resource, instance, authority)
-
-        self.security = 'unimplemented'
-        self.securityDefinitions = SecurityScheme().build('unimplemented', instance)
-
-        return self.asdict()
+            self.events[name] = EventAffordance.generate_schema(resource, self.instance, self.authority)
     
+
+    def add_top_level_forms(self):
+
+        readallproperties = Form()
+        readallproperties.op = "readallproperties"
+        readallproperties.href = f"{self.authority}{self.instance._full_URL_path_prefix}/properties"
+        readallproperties.htv_methodName = "GET"
+        self.forms.append(readallproperties.asdict())
         
+        writeallproperties = Form() 
+        writeallproperties.op = "writeallproperties"   
+        writeallproperties.href = f"{self.authority}{self.instance._full_URL_path_prefix}/properties"
+        writeallproperties.htv_methodName = "PUT"
+        self.forms.append(writeallproperties.asdict())
+
+        readmultipleproperties = Form()
+        readmultipleproperties.op = "readmultipleproperties"
+        readmultipleproperties.href = f"{self.authority}{self.instance._full_URL_path_prefix}/properties"
+        readmultipleproperties.htv_methodName = "GET"
+        self.forms.append(readmultipleproperties.asdict())
+
+        writemultipleproperties = Form() 
+        writemultipleproperties.op = "writemultipleproperties"   
+        writemultipleproperties.href = f"{self.authority}{self.instance._full_URL_path_prefix}/properties"
+        writemultipleproperties.htv_methodName = "PATCH"
+        self.forms.append(writemultipleproperties.asdict())
         
+    def add_security_definitions(self):
+        self.security = 'unimplemented'
+        self.securityDefinitions = SecurityScheme().build('unimplemented', self.instance)
+
+
+
 __all__ = [
     ThingDescription.__name__,
     JSONSchema.__name__
