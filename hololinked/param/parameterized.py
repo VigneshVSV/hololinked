@@ -202,7 +202,7 @@ class Parameter(metaclass=ParameterMetaclass):
     # overhead, Parameters are implemented using __slots__ (see
     # http://www.python.org/doc/2.4/ref/slots.html). 
 
-    __slots__ = ['default', 'doc', 'constant', 'readonly', 'allow_None',
+    __slots__ = ['default', 'doc', 'constant', 'readonly', 'allow_None', 'label',
                 'per_instance_descriptor', 'deepcopy_default', 'class_member', 'precedence', 
                 'owner', 'name', '_internal_name', 'watchers', 'fget', 'fset', 'fdel',
                 '_disable_post_slot_set']
@@ -212,8 +212,8 @@ class Parameter(metaclass=ParameterMetaclass):
     # class is created, owner, name, and _internal_name are
     # set.
 
-    def __init__(self, default : typing.Any, *, doc : typing.Optional[str] = None,
-                constant : bool = False, readonly : bool = False, allow_None : bool = False,
+    def __init__(self, default : typing.Any, *, doc : typing.Optional[str] = None, constant : bool = False, 
+                readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None,
                 per_instance_descriptor : bool = False, deepcopy_default : bool = False, class_member : bool = False,
                 fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
                 fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:  # pylint: disable-msg=R0913
@@ -293,6 +293,7 @@ class Parameter(metaclass=ParameterMetaclass):
         self.constant = constant # readonly is also constant however constants can be set once
         self.readonly = readonly
         self.allow_None = constant or allow_None
+        self.label = label
         self.per_instance_descriptor = per_instance_descriptor
         self.deepcopy_default = deepcopy_default
         self.class_member = class_member
@@ -462,8 +463,7 @@ class Parameter(metaclass=ParameterMetaclass):
         """
         All Parameters have slots, not a dict, so we have to support
         pickle and deepcopy ourselves.
-        """
-        
+        """        
         state = {}
         for slot in self.__slots__ + self.__parent_slots__:
             state[slot] = getattr(self, slot)

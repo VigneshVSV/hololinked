@@ -6,30 +6,27 @@ Connecting to Things with Clients
 =================================
 
 When using a HTTP server, it is possible to use any HTTP client including web browser provided clients like ``XMLHttpRequest`` 
-and ``EventSource`` object. This is the intention of providing HTTP support. However, additional possibilities exist which are noteworthy:
+and ``EventSource`` object. This is the intention of providing HTTP support. However, additional possibilities exist:
 
 Using ``hololinked.client``
 ---------------------------
 
-To use ZMQ transport methods to connect to the server instead of HTTP, one can use an object proxy available in 
+To use ZMQ transport methods to connect to the ``Thing``/server instead of HTTP, one can use an object proxy available in 
 ``hololinked.client``. For certain applications, for example, oscilloscope traces consisting of millions of data points, 
 or, camera images or video streaming with raw pixel density & no compression, the ZMQ transport may significantly speed 
-up the data transfer rate. Especially one may use a different serializer like MessagePack instead of JSON. 
-JSON is the default, and currently the only supported serializer for HTTP applications and is still meant to be used 
-to interface such data-heavy devices with HTTP clients. Nevertheless, ZMQ transport is simultaneously possible along 
-with using HTTP. 
-|br|
-To use a ZMQ client from a different python process other than the ``Thing``'s running process, one needs to start the 
-``Thing`` server using TCP or IPC (inter-process communication) transport methods and **not** with ``run_with_http_server()`` 
-method (which allows only INPROC/intra-process communication). Use the ``run()`` method instead and specify the desired 
-ZMQ transport layers:
+up the data transfer rate. Especially one may use a different serializer like MessagePack instead of JSON. Or, one does not 
+need HTTP integration. 
+
+To use a ZMQ client from a different python process other than the ``Thing``'s running process, may be in the same or 
+different computer, one needs to start the ``Thing`` server using ZMQ's TCP or IPC (inter-process communication) transport 
+methods. Use the ``run()`` method and **not** with ``run_with_http_server()``:
 
 .. literalinclude:: code/rpc.py
     :language: python
     :linenos: 
     :lines: 1-2, 9-13, 62-81
 
-Then, import the ``ObjectProxy`` and specify the ZMQ transport method and ``instance_name`` to connect to the server and 
+Then, import the ``ObjectProxy`` and specify the ZMQ transport method(s) and ``instance_name`` to connect to the server and 
 the object it serves: 
 
 .. literalinclude:: code/rpc_client.py
@@ -37,8 +34,9 @@ the object it serves:
     :linenos: 
     :lines: 1-9
 
-The exposed properties, actions and events become available on the client. One can use get-set on properties, function 
-calls on actions and subscribe to events with a callback which is executed once an event arrives:
+The exposed properties, actions and events then become available on the client. One can use get-set on properties, methods 
+calls on actions similar to how its done natively on the object as seen above. To subscribe to events, provide a callback 
+which is executed once an event arrives:
 
 .. literalinclude:: code/rpc_client.py 
     :language: python 
@@ -54,14 +52,7 @@ to be accessible from network clients.
     :linenos: 
     :lines: 75, 84-87
 
-Irrespective of client's request origin, whether TCP, IPC or INPROC, requests are always queued before executing. To repeat:
-
-* TCP - raw TCP transport facilitated by ZMQ (therefore, without details of HTTP) for clients on the network. You might 
-  need to open your firewall. Currently, neither encryption nor user authorization security is provided, use HTTP if you 
-  need these features. 
-* IPC - interprocess communication for accessing by other process within the same computer. One can use this instead of 
-  using TCP with firewall or single computer applications.
-* INPROC - only clients from the same python process can access the server. 
+Irrespective of client's request origin, whether TCP, IPC or INPROC, requests are always queued before executing. 
 
 If one needs type definitions for the client because the client does not know the server to which it is connected, one 
 can import the server script ``Thing`` and set it as the type of the client as a quick-hack. 
@@ -71,7 +62,19 @@ can import the server script ``Thing`` and set it as the type of the client as a
     :linenos: 
     :lines: 15-20
 
-Serializer customization is discussed further in :doc:`Serializer How-To <serializers>`.
+To summarize:
+
+* TCP - raw TCP transport facilitated by ZMQ (therefore, without details of HTTP) for clients on the network. You might 
+  need to open your firewall. Currently, neither encryption nor user authorization security is provided, use HTTP if you 
+  need these features. 
+* IPC - interprocess communication for accessing by other process within the same computer. One can use this instead of 
+  using TCP with firewall or in single computer applications. Its also mildly faster than TCP. 
+* INPROC - only clients from the same python process can access the server. You need to thread your client and server 
+  within the same python process. 
+
+JSON is the default, and currently the only supported serializer for HTTP applications. Nevertheless, ZMQ transport is 
+simultaneously possible along with using HTTP. Serializer customizations is discussed further in 
+:doc:`Serializer How-To <serializers>`.
 
 Using ``node-wot`` client
 -------------------------

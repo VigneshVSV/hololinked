@@ -35,8 +35,8 @@ actions and events. In object orientied case:
 * properties are validated get-set attributes of the class which may be used to model device settings, hold captured/computed data etc.
 * actions are methods which issue commands to the device like connect/disconnect, start/stop measurement, or, 
   run arbitrary python logic. 
-* events can asynchronously communicate/push data to a client, like alarm messages, streaming captured data to a client, 
-  say to populate a GUI or a graph, etc. 
+* events can asynchronously communicate/push data to a client, like alarm messages, measured data etc., 
+  say, to refresh a GUI or update a graph. 
 
 The base class which enables this classification is the ``Thing`` class. Any class that inherits the ``Thing`` class can 
 instantiate properties, actions and events which become visible to a client in this segragated manner. 
@@ -52,7 +52,7 @@ Please follow the documentation for examples, how-to's and API reference to unde
    :caption: Contents:
    
 
-   installation
+   Installation & Examples <installation>
    How Tos <howto/index>
    autodoc/index
    development_notes

@@ -11,8 +11,8 @@ class OceanOpticsSpectrometer(Thing):
     """
 
     serial_number = String(default=None, allow_None=True, constant=True, 
-                        URL_path='/serial-number',
-                        doc="serial number of the spectrometer") # type: str
+                    URL_path='/serial-number', http_method=("GET", "PUT", "DELETE"),
+                    doc="serial number of the spectrometer") # type: str
 
     def __init__(self, instance_name, serial_number, autoconnect, **kwargs):
         super().__init__(instance_name=instance_name, serial_number=serial_number,
@@ -24,7 +24,7 @@ class OceanOpticsSpectrometer(Thing):
         self.measurement_event = Event(name='intensity-measurement', 
                                 URL_path='/intensity/measurement-event')
 
-    @action(URL_path='/connect')
+    @action(URL_path='/connect', http_method='POST')
     def connect(self, trigger_mode, integration_time):
         self.device = Spectrometer.from_serial_number(self.serial_number)
         if trigger_mode:

@@ -75,7 +75,7 @@ def start_https_server():
 if __name__ == "__main__":
    
     Process(target=start_https_server).start()
-    
+    # Remove above line if HTTP not necessary.
     spectrometer = OceanOpticsSpectrometer(instance_name='spectrometer', 
                         serializer='msgpack', serial_number=None, autoconnect=False)
     spectrometer.run(zmq_protocols="IPC")

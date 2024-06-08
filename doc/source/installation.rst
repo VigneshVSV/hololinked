@@ -1,7 +1,7 @@
 .. |module-highlighted| replace:: ``hololinked``
 
-Installation & Examples
-=======================
+Installation 
+============
 
 .. code:: shell 
 
@@ -42,6 +42,8 @@ To open the docs in the default browser, one can also issue the following instea
 
     make host-doc
 
+Examples
+========
 
 Check out:
 
@@ -52,7 +54,7 @@ Check out:
      - repository containing example code discussed in this documentation
    * - hololinked-portal 
      - https://github.com/VigneshVSV/hololinked-portal.git
-     - GUI to access ``Thing``s and interact with their properties, actions and events. 
+     - GUI to view your devices' properties, actions and events. 
 
 
 

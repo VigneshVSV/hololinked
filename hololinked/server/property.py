@@ -1,6 +1,7 @@
 import typing
 from types import FunctionType, MethodType
 from enum import Enum
+import warnings
 
 from ..param.parameterized import Parameter, ClassParameters
 from .data_classes import RemoteResourceInfoValidator
@@ -108,8 +109,7 @@ class Property(Parameter):
 
     """
 
-    __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', '_remote_info', 'observable', 
-                '_observable_event', 'fcomparator']
+    __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', '_remote_info', '_observable_event', 'fcomparator']
     
     # RPC only init - no HTTP methods for those who dont like
     @typing.overload
@@ -138,7 +138,8 @@ class Property(Parameter):
     def __init__(self, default: typing.Any = None, *, doc : typing.Optional[str] = None, constant : bool = False, 
                 readonly : bool = False, allow_None : bool = False, 
                 URL_path : str = USE_OBJECT_NAME, 
-                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (HTTP_METHODS.GET, HTTP_METHODS.PUT), 
+                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                            (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
                 observable : bool = False, change_comparator : typing.Optional[typing.Union[FunctionType, MethodType]] = None,
                 state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
                 db_persist : bool = False, db_init : bool = False, db_commit : bool = False, remote : bool = True,
@@ -150,28 +151,31 @@ class Property(Parameter):
             ) -> None:
         ...
  
-    def __init__(self, default: typing.Any = None, *, doc : typing.Optional[str] = None, constant : bool = False, 
-                readonly : bool = False, allow_None : bool = False, 
+    def __init__(self, default: typing.Any = None, *, 
+                doc : typing.Optional[str] = None, constant : bool = False, 
+                readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
                 URL_path : str = USE_OBJECT_NAME, 
-                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (HTTP_METHODS.GET, HTTP_METHODS.PUT),
+                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                            (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
                 state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
                 db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
-                observable : bool = False, change_comparator : typing.Optional[typing.Union[FunctionType, MethodType]] = None, 
-                class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
-                fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None,
-                fcomparator : typing.Optional[typing.Callable] = None,  
+                observable : bool = False, class_member : bool = False, 
+                fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+                fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
                 deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
                 precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None
             ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, allow_None=allow_None,
-                    per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default,
+                    label=label, per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default,
                     class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence)
+        self._remote_info = None
+        self._observable_event = None
         self.db_persist = db_persist
         self.db_init    = db_init
         self.db_commit  = db_commit
-        self.metadata = metadata
         self.observable = observable
-        self._observable_event = None
+        self.fcomparator = fcomparator
+        self.metadata = metadata
         if remote:
             self._remote_info = RemoteResourceInfoValidator(
                 http_method=http_method,
@@ -179,10 +183,7 @@ class Property(Parameter):
                 state=state,
                 isproperty=True
             )
-        else:
-            self._remote_info = None
-        self.fcomparator = fcomparator
-        
+
     def _post_slot_set(self, slot : str, old : typing.Any, value : typing.Any) -> None:
         if slot == 'owner' and self.owner is not None:
             if self._remote_info is not None:
@@ -191,9 +192,8 @@ class Property(Parameter):
                 elif not self._remote_info.URL_path.startswith('/'): 
                     raise ValueError(f"URL_path should start with '/', please add '/' before '{self._remote_info.URL_path}'")
                 self._remote_info.obj_name = self.name
-            if self.observable:
-                self._observable_event = Event(name=f'observable-{self.name}', 
-                                        URL_path=f'{self._remote_info.URL_path}/change-event')
+            if self._observable_event is not None and self._observable_event.URL_path == USE_OBJECT_NAME: 
+                self._observable_event.URL_path = f'{self._remote_info.URL_path}/change-event'
             # In principle the above could be done when setting name itself however to simplify
             # we do it with owner. So we should always remember order of __set_name__ -> 1) attrib_name, 
             # 2) name and then 3) owner
@@ -222,7 +222,22 @@ class Property(Parameter):
         self.fcomparator = func 
         return func
     
+    @property
+    def observable(self) -> bool:
+        return self._observable_event is not None 
     
+    @observable.setter
+    def observable(self, value : bool) -> None:
+        if value:
+            if not self._observable_event:
+                self._observable_event = Event(name=f'{self.name}_change_event', URL_path=USE_OBJECT_NAME)
+            else:
+                warnings.warn(f"property is already observable, cannot change event object though", 
+                            category=UserWarning)
+        elif self._observable_event is not None:
+            raise NotImplementedError(f"Setting an observable property ({self.name}) to un-observe is currently not supported.")
+    
+            
     
 __property_info__ = [
                 'allow_None' , 'class_member', 'db_init', 'db_persist', 
