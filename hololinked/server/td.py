@@ -160,7 +160,7 @@ class DataSchema(Schema):
 
     def build(self, property : Property, owner : Thing, authority : str) -> None:
         """generates the schema"""
-        self.title = property.name # or property.label
+        self.title = property.label or property.name 
         if property.constant:
             self.const = property.constant 
         if property.readonly:
@@ -697,7 +697,7 @@ class ThingDescription(Schema):
         self.allow_loose_schema = allow_loose_schema
 
 
-    def build(self) -> typing.Dict[str, typing.Any]: 
+    def produce(self) -> typing.Dict[str, typing.Any]: 
         self.context = "https://www.w3.org/2022/wot/td/v1.1"
         self.id = f"{self.authority}/{self.instance.instance_name}"
         self.title = self.instance.__class__.__name__ 

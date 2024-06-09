@@ -303,10 +303,12 @@ class Thing(Parameterized, metaclass=ThingMeta):
     def _get_properties(self, **kwargs) -> typing.Dict[str, typing.Any]:
         """
         """
+        print("Request was made")
         skip_props = ["httpserver_resources", "rpc_resources", "gui_resources", "GUI", "object_info"]
         for prop_name in skip_props:
             if prop_name in kwargs:
-                raise RuntimeError("GUI, httpserver resources, RPC resources etc. cannot be queried using multiple property fetch.")
+                raise RuntimeError("GUI, httpserver resources, RPC resources , object info etc. cannot be queried" + 
+                                  " using multiple property fetch.")
         data = {}
         if len(kwargs) == 0:
             for name, prop in self.properties.descriptors.items():
@@ -447,7 +449,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         #     In other words, schema validation will always pass.  
         from .td import ThingDescription
         return ThingDescription(self, authority or self._object_info.http_server,
-                                    allow_loose_schema=False).build() #allow_loose_schema)
+                                    allow_loose_schema=False).produce() #allow_loose_schema)
     
 
     @action(URL_path='/exit', http_method=HTTP_METHODS.POST)                                                                                                                                          

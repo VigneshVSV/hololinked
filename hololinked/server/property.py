@@ -209,12 +209,11 @@ class Property(Parameter):
             # assert isinstance(obj, Thing), f"database property {self.name} bound to a non Thing, currently not supported"
             # uncomment for type definitions
             obj.db_engine.set_property(self, value)
-        self.push_change_event(obj, value)
+        self._push_change_event_if_needed(obj, value)
         return super()._post_value_set(obj, value)
     
-    def push_change_event(self, obj, value : typing.Any) -> None:
+    def _push_change_event_if_needed(self, obj, value : typing.Any) -> None:
         if self.observable and self._observable_event is not None:
-            print("received value is ", value)
             old_value = obj.__dict__.get(f'{self._internal_name}_old_value', NotImplemented)
             obj.__dict__[f'{self._internal_name}_old_value'] = value 
             if self.fcomparator:
@@ -249,7 +248,7 @@ class Property(Parameter):
     
     def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass) -> typing.Any:
         read_value = super().__get__(obj, objtype)
-        self.push_change_event(obj, read_value)
+        self._push_change_event_if_needed(obj, read_value)
         return read_value
     
 

@@ -19,7 +19,7 @@ need HTTP integration.
 
 To use a ZMQ client from a different python process other than the ``Thing``'s running process, may be in the same or 
 different computer, one needs to start the ``Thing`` server using ZMQ's TCP or IPC (inter-process communication) transport 
-methods. Use the ``run()`` method and **not** with ``run_with_http_server()``:
+methods. Use the ``run()`` method and not ``run_with_http_server()``:
 
 .. literalinclude:: code/rpc.py
     :language: python

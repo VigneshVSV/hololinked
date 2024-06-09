@@ -10,7 +10,7 @@ class OceanOpticsSpectrometer(Thing):
     Spectrometer example object 
     """
 
-    serial_number = String(default=None, allow_None=True, constant=True, 
+    serial_number = String(default=None, allow_None=True, 
                     URL_path='/serial-number', http_method=("GET", "PUT", "DELETE"),
                     doc="serial number of the spectrometer") # type: str
 
