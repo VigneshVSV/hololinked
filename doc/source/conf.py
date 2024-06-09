@@ -61,7 +61,13 @@ html_theme_options = {
     "secondary_sidebar_items": {
         "**" : ["page-toc", "sourcelink"],
     },
-    "navigation_with_keys" : True
+    "navigation_with_keys" : True,
+    "icon_links": [{
+            "name": "GitHub",
+            "url": "https://github.com/VigneshVSV/hololinked", # required
+            "icon": "fab fa-github-square",
+            "type": "fontawesome",
+    }]
 }
 
 pygments_style = 'vs'
