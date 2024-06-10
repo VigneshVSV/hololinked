@@ -101,7 +101,7 @@ internally generated name as the property value can be accessed again in any pyt
 However, to avoid generating such an internal data container and instead apply the value on the device, one may supply 
 custom get-set methods using the fget and fset argument. This is generally useful as the hardware is a better source 
 of truth about the value of a property. Further, the write value of a property may not always correspond to a read 
-value due to hardware limitations, say, a linear stage could not move to the requested position due to obstacles. 
+value due to hardware limitations, say, a linear stage could not move to the requested position due to obstacles.
 
 Events are to be used to asynchronously push data to clients. One can store captured data in properties & supply clients 
 with the measured data using events:

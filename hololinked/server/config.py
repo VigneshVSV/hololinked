@@ -102,6 +102,7 @@ class Configuration:
         self.TCP_SOCKET_SEARCH_END_PORT = 65535
         self.PWD_HASHER_TIME_COST = 15
         self.USE_UVLOOP = False
+        self.validate_schema_on_client = True
 
         if not use_environment:
             return 

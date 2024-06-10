@@ -75,6 +75,8 @@ class RemoteResourceInfoValidator:
                     doc="JSON schema validations for arguments of a callable")
     return_value_schema = TypedDict(default=None, allow_None=True, key_type=str,
                     doc="schema for return value of a callable")
+    create_task = Boolean(default=False, 
+                        doc="should a coroutine be tasked or run in the same loop?") # type: bool
  
     def __init__(self, **kwargs) -> None:
         """   
