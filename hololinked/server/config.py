@@ -85,7 +85,8 @@ class Configuration:
         # credentials
         "PWD_HASHER_TIME_COST", "PWD_HASHER_MEMORY_COST",
         # Eventloop
-        "USE_UVLOOP"
+        "USE_UVLOOP",
+        'validate_schema_on_client'
     ]
 
     def __init__(self, use_environment : bool = False):

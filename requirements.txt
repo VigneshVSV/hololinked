@@ -5,4 +5,4 @@ pyzmq==25.1.0
 SQLAlchemy==2.0.21
 SQLAlchemy_Utils==0.41.1
 tornado==6.3.3
-
+jsonschema==4.22.0
