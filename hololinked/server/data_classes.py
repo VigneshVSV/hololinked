@@ -174,6 +174,7 @@ class RemoteResource(SerializableDataclass):
     isproperty : bool
     obj : typing.Any
     bound_obj : typing.Any
+    schema_validator : typing.Optional[typing.Any]
   
     def json(self):
         """

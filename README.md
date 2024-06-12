@@ -23,7 +23,7 @@ Or, clone the repository and install in develop mode `pip install -e .` for conv
 - actions are methods which issue commands to the device or run arbitrary python logic. 
 - events can asynchronously communicate/push data to a client, like alarm messages, streaming captured data etc. 
 
-In `hololinked`, the base class which enables this classification is the `Thing` class. Any class that inherits the `Thing` class can instantiate properties, actions and events which become visible to a client in this segragated manner. For example, consider an optical spectrometer device, the following code is possible:
+In this package, the base class which enables this classification is the `Thing` class. Any class that inherits the `Thing` class can instantiate properties, actions and events which become visible to a client in this segragated manner. For example, consider an optical spectrometer device, the following code is possible:
 
 #### Import Statements
 

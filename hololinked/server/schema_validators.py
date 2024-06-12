@@ -1,3 +1,4 @@
+import typing
 from .constants import JSON
 
 class JSONSchemaError(Exception):
@@ -13,6 +14,7 @@ class JSONValidationError(Exception):
     irrespective of internal validation used
     """
     pass
+
 
 
 try: 
@@ -61,8 +63,32 @@ class JsonSchemaValidator:
     """
     
     def __init__(self, schema):
+        self.schema = schema
         self.validator = jsonschema.Draft7Validator(schema)
         self.validator.check_schema(schema)
 
     def validate(self, data):
         self.validator.validate(data)
+
+    def json(self):
+        """allows JSON (de-)serializable of the instance itself"""
+        return self.schema
+
+    def __get_state__(self):
+        return self.schema
+    
+    def __set_state__(self, schema):
+        return JsonSchemaValidator(schema)
+    
+
+
+def _get_validator_from_user_options(option : typing.Optional[str] = None) -> typing.Union[JsonSchemaValidator, FastJsonSchemaValidator]:
+    """
+    returns a JSON schema validator based on user options
+    """
+    if option == "fastjsonschema":
+        return FastJsonSchemaValidator
+    elif option == "jsonschema" or not option:
+        return JsonSchemaValidator
+    else:
+        raise ValueError(f"Unknown JSON schema validator option: {option}")
