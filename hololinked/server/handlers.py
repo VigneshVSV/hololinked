@@ -264,7 +264,7 @@ class EventHandler(BaseHandler):
             # fashion as HTTP server should be running purely sync(or normal) python method.
             event_consumer = event_consumer_cls(self.resource.unique_identifier, self.resource.socket_address, 
                                             identity=f"{self.resource.unique_identifier}|HTTPEvent|{uuid.uuid4()}",
-                                            logger=self.logger, json_serializer=self.serializer, 
+                                            logger=self.logger, http_serializer=self.serializer, 
                                             context=self.owner._zmq_event_context if self.resource.socket_address.startswith('inproc') else None)
             event_loop = asyncio.get_event_loop()
             data_header = b'data: %s\n\n'
@@ -310,7 +310,7 @@ class ImageEventHandler(EventHandler):
         try:
             event_consumer = AsyncEventConsumer(self.resource.unique_identifier, self.resource.socket_address, 
                             f"{self.resource.unique_identifier}|HTTPEvent|{uuid.uuid4()}", 
-                            json_serializer=self.serializer, logger=self.logger,
+                            http_serializer=self.serializer, logger=self.logger,
                             context=self.owner._zmq_event_context if self.resource.socket_address.startswith('inproc') else None)         
             self.set_header("Content-Type", "application/x-mpegURL")
             self.write("#EXTM3U\n")

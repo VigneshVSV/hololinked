@@ -66,14 +66,14 @@ class Event:
         serialize: bool, default True
             serialize the payload before pushing, set to False when supplying raw bytes
         **kwargs:
-            rpc_clients: bool, default True
+            zmq_clients: bool, default True
                 pushes event to RPC clients, irrelevant if ``Thing`` uses only one type of serializer (refer to 
-                difference between rpc_serializer and json_serializer).
+                difference between zmq_serializer and http_serializer).
             http_clients: bool, default True
                 pushed event to HTTP clients, irrelevant if ``Thing`` uses only one type of serializer (refer to 
-                difference between rpc_serializer and json_serializer).
+                difference between zmq_serializer and http_serializer).
         """
-        self.publisher.publish(self._unique_identifier, data, rpc_clients=kwargs.get('rpc_clients', True), 
+        self.publisher.publish(self._unique_identifier, data, zmq_clients=kwargs.get('zmq_clients', True), 
                                     http_clients=kwargs.get('http_clients', True), serialize=serialize)
 
 

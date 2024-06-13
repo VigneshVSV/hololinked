@@ -143,7 +143,7 @@ class HTTPServer(Parameterized):
         
         self.zmq_client_pool = MessageMappedZMQClientPool(self.things, identity=self._IP, 
                                                     deserialize_server_messages=False, handshake=False,
-                                                    json_serializer=self.serializer, context=self._zmq_socket_context,
+                                                    http_serializer=self.serializer, context=self._zmq_socket_context,
                                                     protocol=self._zmq_protocol)
     
         event_loop = asyncio.get_event_loop()

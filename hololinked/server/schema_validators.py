@@ -17,10 +17,23 @@ class JSONValidationError(Exception):
 
 
 
+class BaseSchemaValidator: # type definition
+    """
+    Base class for all schema validators. 
+    Serves as a type definition. 
+    """
+
+    def validate(self, data) -> None:
+        """
+        validate the data against the schema. 
+        """
+        raise NotImplementedError("validate method must be implemented by subclass")
+
+
 try: 
     import fastjsonschema 
     
-    class FastJsonSchemaValidator:
+    class FastJsonSchemaValidator(BaseSchemaValidator):
         """
         JSON schema validator according to fast JSON schema.
         Useful for performance with dictionary based schema specification
@@ -32,7 +45,7 @@ try:
             self.schema = schema
             self.validator = fastjsonschema.compile(schema)
 
-        def validate(self, data):
+        def validate(self, data) -> None:
             """validates and raises exception when failed directly to the caller"""
             try: 
                 self.validator(data)
@@ -56,7 +69,7 @@ except ImportError as ex:
 
 import jsonschema
 
-class JsonSchemaValidator:
+class JsonSchemaValidator(BaseSchemaValidator):
     """
     JSON schema validator according to standard python JSON schema.
     Somewhat slow, consider msgspec if possible. 
@@ -82,7 +95,10 @@ class JsonSchemaValidator:
     
 
 
-def _get_validator_from_user_options(option : typing.Optional[str] = None) -> typing.Union[JsonSchemaValidator, FastJsonSchemaValidator]:
+def _get_validator_from_user_options(option : typing.Optional[str] = None) -> typing.Union[
+                                                                                JsonSchemaValidator, 
+                                                                                FastJsonSchemaValidator
+                                                                            ]:
     """
     returns a JSON schema validator based on user options
     """

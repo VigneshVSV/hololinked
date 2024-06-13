@@ -177,7 +177,7 @@ class PickleSerializer(BaseSerializer):
 class MsgpackSerializer(BaseSerializer):
     """
     (de)serializer that wraps the msgspec MessagePack serialization protocol, recommended serializer for ZMQ based 
-    high speed applications. Set an instance of this serializer to both ``Thing.rpc_serializer`` and 
+    high speed applications. Set an instance of this serializer to both ``Thing.zmq_serializer`` and 
     ``hololinked.client.ObjectProxy``.
     """
 
@@ -238,27 +238,27 @@ except ImportError:
 
 
 def _get_serializer_from_user_given_options(
-        rpc_serializer : typing.Union[str, BaseSerializer], 
-        json_serializer : typing.Union[str, JSONSerializer]
+        zmq_serializer : typing.Union[str, BaseSerializer], 
+        http_serializer : typing.Union[str, JSONSerializer]
     ) -> typing.Tuple[BaseSerializer, JSONSerializer]:
     """
     We give options to specify serializer as a string or an object,  
     """ 
-    if json_serializer in [None, 'json'] or isinstance(json_serializer, JSONSerializer):
-        json_serializer = json_serializer if isinstance(json_serializer, JSONSerializer) else JSONSerializer()
+    if http_serializer in [None, 'json'] or isinstance(http_serializer, JSONSerializer):
+        http_serializer = http_serializer if isinstance(http_serializer, JSONSerializer) else JSONSerializer()
     else:
-        raise ValueError("invalid JSON serializer option : {}".format(json_serializer))
-    if isinstance(rpc_serializer, BaseSerializer):
-        rpc_serializer = rpc_serializer 
-        if isinstance(rpc_serializer, PickleSerializer) or rpc_serializer.type == pickle:
+        raise ValueError("invalid JSON serializer option : {}".format(http_serializer))
+    if isinstance(zmq_serializer, BaseSerializer):
+        zmq_serializer = zmq_serializer 
+        if isinstance(zmq_serializer, PickleSerializer) or zmq_serializer.type == pickle:
             warnings.warn("using pickle serializer which is unsafe, consider another like msgpack.", UserWarning)
-    elif rpc_serializer == 'json' or rpc_serializer is None:
-        rpc_serializer = json_serializer
-    elif isinstance(rpc_serializer, str): 
-        rpc_serializer = serializers.get(rpc_serializer, JSONSerializer)()
+    elif zmq_serializer == 'json' or zmq_serializer is None:
+        zmq_serializer = http_serializer
+    elif isinstance(zmq_serializer, str): 
+        zmq_serializer = serializers.get(zmq_serializer, JSONSerializer)()
     else:
-        raise ValueError("invalid rpc serializer option : {}".format(rpc_serializer))    
-    return rpc_serializer, json_serializer
+        raise ValueError("invalid rpc serializer option : {}".format(zmq_serializer))    
+    return zmq_serializer, http_serializer
 
 
 

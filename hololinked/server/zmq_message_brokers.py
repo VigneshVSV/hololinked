@@ -88,7 +88,7 @@ def get_socket_type_name(socket_type):
 class BaseZMQ: 
     """
     Base class for all ZMQ message brokers. Implements socket creation, logger, serializer instantiation 
-    which is common to all server and client implementations. For HTTP clients, json_serializer is necessary and 
+    which is common to all server and client implementations. For HTTP clients, http_serializer is necessary and 
     for RPC clients, any of the allowed serializer is possible.
 
     Parameters
@@ -97,9 +97,9 @@ class BaseZMQ:
         instance name of the serving ``Thing``
     server_type: Enum
         metadata about the nature of the server
-    json_serializer: hololinked.server.serializers.JSONSerializer
+    http_serializer: hololinked.server.serializers.JSONSerializer
         serializer used to send message to HTTP Server
-    rpc_serializer: any of hololinked.server.serializers.serializer, default serpent
+    zmq_serializer: any of hololinked.server.serializers.serializer, default serpent
         serializer used to send message to RPC clients
     logger: logging.Logger, Optional
         logger, on will be created while creating a socket automatically if None supplied 
@@ -273,15 +273,15 @@ class BaseZMQServer(BaseZMQ):
     def __init__(self, 
                 instance_name : str,
                 server_type : typing.Union[bytes, str], 
-                json_serializer : typing.Union[None, JSONSerializer] = None, 
-                rpc_serializer : typing.Union[str, BaseSerializer, None] = None,
+                http_serializer : typing.Union[None, JSONSerializer] = None, 
+                zmq_serializer : typing.Union[str, BaseSerializer, None] = None,
                 logger : typing.Optional[logging.Logger] = None,
                 **kwargs
             ) -> None:
         super().__init__()
-        self.rpc_serializer, self.json_serializer = _get_serializer_from_user_given_options(
-                                                            rpc_serializer=rpc_serializer,
-                                                            json_serializer=json_serializer
+        self.zmq_serializer, self.http_serializer = _get_serializer_from_user_given_options(
+                                                            zmq_serializer=zmq_serializer,
+                                                            http_serializer=http_serializer
                                                         )
         self.instance_name = instance_name 
         self.server_type = server_type if isinstance(server_type, bytes) else bytes(server_type, encoding='utf-8') 
@@ -323,13 +323,13 @@ class BaseZMQServer(BaseZMQ):
             if message_type == INSTRUCTION:
                 client_type = message[CM_INDEX_CLIENT_TYPE]
                 if client_type == PROXY:
-                    message[CM_INDEX_INSTRUCTION] = self.rpc_serializer.loads(message[CM_INDEX_INSTRUCTION]) # type: ignore
-                    message[CM_INDEX_ARGUMENTS] = self.rpc_serializer.loads(message[CM_INDEX_ARGUMENTS]) # type: ignore
-                    message[CM_INDEX_EXECUTION_CONTEXT] = self.rpc_serializer.loads(message[CM_INDEX_EXECUTION_CONTEXT]) # type: ignore
+                    message[CM_INDEX_INSTRUCTION] = self.zmq_serializer.loads(message[CM_INDEX_INSTRUCTION]) # type: ignore
+                    message[CM_INDEX_ARGUMENTS] = self.zmq_serializer.loads(message[CM_INDEX_ARGUMENTS]) # type: ignore
+                    message[CM_INDEX_EXECUTION_CONTEXT] = self.zmq_serializer.loads(message[CM_INDEX_EXECUTION_CONTEXT]) # type: ignore
                 elif client_type == HTTP_SERVER:
-                    message[CM_INDEX_INSTRUCTION] = self.json_serializer.loads(message[CM_INDEX_INSTRUCTION]) # type: ignore
-                    message[CM_INDEX_ARGUMENTS] = self.json_serializer.loads(message[CM_INDEX_ARGUMENTS]) # type: ignore
-                    message[CM_INDEX_EXECUTION_CONTEXT] = self.json_serializer.loads(message[CM_INDEX_EXECUTION_CONTEXT]) # type: ignore
+                    message[CM_INDEX_INSTRUCTION] = self.http_serializer.loads(message[CM_INDEX_INSTRUCTION]) # type: ignore
+                    message[CM_INDEX_ARGUMENTS] = self.http_serializer.loads(message[CM_INDEX_ARGUMENTS]) # type: ignore
+                    message[CM_INDEX_EXECUTION_CONTEXT] = self.http_serializer.loads(message[CM_INDEX_EXECUTION_CONTEXT]) # type: ignore
                 return message 
             elif message_type == HANDSHAKE:
                 self.handshake(message)
@@ -365,9 +365,9 @@ class BaseZMQServer(BaseZMQ):
             the crafted reply with information in the correct positions within the list
         """
         if client_type == HTTP_SERVER:
-            data = self.json_serializer.dumps(data)
+            data = self.http_serializer.dumps(data)
         elif client_type == PROXY:
-            data = self.rpc_serializer.dumps(data)
+            data = self.zmq_serializer.dumps(data)
 
         return [
             address,
@@ -405,9 +405,9 @@ class BaseZMQServer(BaseZMQ):
         """
         client_type = original_client_message[CM_INDEX_CLIENT_TYPE]
         if client_type == HTTP_SERVER:
-            data = self.json_serializer.dumps(data)
+            data = self.http_serializer.dumps(data)
         elif client_type == PROXY:
-            data = self.rpc_serializer.dumps(data)
+            data = self.zmq_serializer.dumps(data)
         else:
             raise ValueError(f"invalid client type given '{client_type}' for preparing message to send from " +
                             f"'{self.identity}' of type {self.__class__}.")
@@ -662,9 +662,9 @@ class AsyncPollingZMQServer(AsyncZMQServer):
         where the max delay to stop polling will be ``poll_timeout``
   
     **kwargs:
-        json_serializer: hololinked.server.serializers.JSONSerializer
+        http_serializer: hololinked.server.serializers.JSONSerializer
             serializer used to send message to HTTP Server
-        rpc_serializer: any of hololinked.server.serializers.serializer, default serpent
+        zmq_serializer: any of hololinked.server.serializers.serializer, default serpent
             serializer used to send message to RPC clients
     """
 
@@ -910,8 +910,8 @@ class RPCServer(BaseZMQServer):
             protocols = [protocols]
         else:
             raise TypeError(f"unsupported protocols type : {type(protocols)}")
-        kwargs["json_serializer"] = self.json_serializer
-        kwargs["rpc_serializer"] = self.rpc_serializer
+        kwargs["http_serializer"] = self.http_serializer
+        kwargs["zmq_serializer"] = self.zmq_serializer
         self.inproc_server = self.ipc_server = self.tcp_server = self.event_publisher = None
         event_publisher_protocol = None 
         if self.logger is None:
@@ -940,8 +940,8 @@ class RPCServer(BaseZMQServer):
         self.event_publisher = EventPublisher(
                             instance_name=instance_name + '-event-pub',
                             protocol=event_publisher_protocol,
-                            rpc_serializer=self.rpc_serializer,
-                            json_serializer=self.json_serializer,
+                            zmq_serializer=self.zmq_serializer,
+                            http_serializer=self.http_serializer,
                             logger=self.logger
                         )        
         # instruction serializing broker
@@ -1003,9 +1003,9 @@ class RPCServer(BaseZMQServer):
         """
         client_type = message[CM_INDEX_CLIENT_TYPE]
         if client_type == PROXY:
-            return self.rpc_serializer.loads(message[CM_INDEX_TIMEOUT]) 
+            return self.zmq_serializer.loads(message[CM_INDEX_TIMEOUT]) 
         elif client_type == HTTP_SERVER:
-            return self.json_serializer.loads(message[CM_INDEX_TIMEOUT])
+            return self.http_serializer.loads(message[CM_INDEX_TIMEOUT])
        
 
     async def poll(self):
@@ -1145,17 +1145,17 @@ class BaseZMQClient(BaseZMQ):
     client_type: str
         RPC or HTTP Server
     **kwargs:
-        rpc_serializer: BaseSerializer
+        zmq_serializer: BaseSerializer
             custom implementation of RPC serializer if necessary
-        json_serializer: JSONSerializer
+        http_serializer: JSONSerializer
             custom implementation of JSON serializer if necessary
     """
 
     def __init__(self, *,
                 server_instance_name : str, client_type : bytes, 
                 server_type : typing.Union[bytes, str, Enum] = ServerTypes.UNKNOWN_TYPE, 
-                json_serializer : typing.Union[None, JSONSerializer] = None, 
-                rpc_serializer : typing.Union[str, BaseSerializer, None] = None,
+                http_serializer : typing.Union[None, JSONSerializer] = None, 
+                zmq_serializer : typing.Union[str, BaseSerializer, None] = None,
                 logger : typing.Optional[logging.Logger] = None,
                 **kwargs
             ) -> None:
@@ -1166,9 +1166,9 @@ class BaseZMQClient(BaseZMQ):
         if server_instance_name:
             self.server_address = bytes(server_instance_name, encoding='utf-8')
         self.instance_name = server_instance_name
-        self.rpc_serializer, self.json_serializer = _get_serializer_from_user_given_options(
-                                                            rpc_serializer=rpc_serializer,
-                                                            json_serializer=json_serializer
+        self.zmq_serializer, self.http_serializer = _get_serializer_from_user_given_options(
+                                                            zmq_serializer=zmq_serializer,
+                                                            http_serializer=http_serializer
                                                         )
         if isinstance(server_type, bytes):
             self.server_type = server_type 
@@ -1237,18 +1237,18 @@ class BaseZMQClient(BaseZMQ):
         if message_type == REPLY:
             if deserialize:
                 if self.client_type == HTTP_SERVER:
-                    message[SM_INDEX_DATA] = self.json_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
+                    message[SM_INDEX_DATA] = self.http_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
                 elif self.client_type == PROXY:
-                    message[SM_INDEX_DATA] = self.rpc_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
+                    message[SM_INDEX_DATA] = self.zmq_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
             return message 
         elif message_type == HANDSHAKE:
             self.logger.debug("""handshake messages arriving out of order are silently dropped as receiving this message 
                 means handshake was successful before. Received hanshake from {}""".format(message[0]))
         elif message_type == EXCEPTION or message_type == INVALID_MESSAGE:
             if self.client_type == HTTP_SERVER:
-                message[SM_INDEX_DATA] = self.json_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
+                message[SM_INDEX_DATA] = self.http_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
             elif self.client_type == PROXY:
-                message[SM_INDEX_DATA] = self.rpc_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
+                message[SM_INDEX_DATA] = self.zmq_serializer.loads(message[SM_INDEX_DATA]) # type: ignore
             if not raise_client_side_exception:
                 return message
             if message[SM_INDEX_DATA].get('exception', None) is not None:
@@ -1278,20 +1278,20 @@ class BaseZMQClient(BaseZMQ):
         """
         message_id = bytes(str(uuid4()), encoding='utf-8')
         if self.client_type == HTTP_SERVER:
-            timeout = self.json_serializer.dumps(timeout) # type: bytes
-            instruction = self.json_serializer.dumps(instruction) # type: bytes
+            timeout = self.http_serializer.dumps(timeout) # type: bytes
+            instruction = self.http_serializer.dumps(instruction) # type: bytes
             # TODO - following can be improved
             if arguments == b'':
-                arguments = self.json_serializer.dumps({}) # type: bytes
+                arguments = self.http_serializer.dumps({}) # type: bytes
             elif not isinstance(arguments, byte_types):
-                arguments = self.json_serializer.dumps(arguments) # type: bytes
-            context = self.json_serializer.dumps(context) # type: bytes
+                arguments = self.http_serializer.dumps(arguments) # type: bytes
+            context = self.http_serializer.dumps(context) # type: bytes
         elif self.client_type == PROXY:
-            timeout = self.rpc_serializer.dumps(timeout) # type: bytes
-            instruction = self.rpc_serializer.dumps(instruction) # type: bytes
+            timeout = self.zmq_serializer.dumps(timeout) # type: bytes
+            instruction = self.zmq_serializer.dumps(instruction) # type: bytes
             if not isinstance(arguments, byte_types):
-                arguments = self.rpc_serializer.dumps(arguments) # type: bytes
-            context = self.rpc_serializer.dumps(context)
+                arguments = self.zmq_serializer.dumps(arguments) # type: bytes
+            context = self.zmq_serializer.dumps(context)
               
         return [
             self.server_address, 
@@ -1371,9 +1371,9 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
     **kwargs:
         socket_address: str
             socket address for connecting to TCP server
-        rpc_serializer: 
+        zmq_serializer: 
             custom implementation of RPC serializer if necessary
-        json_serializer:
+        http_serializer:
             custom implementation of JSON serializer if necessary
     """
 
@@ -1427,8 +1427,8 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             a byte representation of message id
         """
         message = self.craft_instruction_from_arguments(instruction, arguments, invokation_timeout, context)
-        if global_config.validate_schema_on_client and argument_schema:
-            jsonschema.validate(arguments, argument_schema)
+        # if global_config.validate_schema_on_client and argument_schema:
+        #     jsonschema.validate(arguments, argument_schema)
         self.socket.send_multipart(message)
         self.logger.debug(f"sent instruction '{instruction}' to server '{self.instance_name}' with msg-id '{message[SM_INDEX_MESSAGE_ID]}'")
         return message[SM_INDEX_MESSAGE_ID]
@@ -1621,8 +1621,8 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             a byte representation of message id
         """
         message = self.craft_instruction_from_arguments(instruction, arguments, invokation_timeout, context) 
-        if global_config.validate_schema_on_client and argument_schema:
-            jsonschema.validate(arguments, argument_schema)
+        # if global_config.validate_schema_on_client and argument_schema:
+        #     jsonschema.validate(arguments, argument_schema)
         await self.socket.send_multipart(message)
         self.logger.debug(f"sent instruction '{instruction}' to server '{self.instance_name}' with msg-id {message[SM_INDEX_MESSAGE_ID]}")
         return message[SM_INDEX_MESSAGE_ID]
@@ -1708,7 +1708,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         for instance_name in server_instance_names:
             client = AsyncZMQClient(server_instance_name=instance_name,
                 identity=identity, client_type=client_type, handshake=handshake, protocol=protocol, 
-                context=self.context, rpc_serializer=self.rpc_serializer, json_serializer=self.json_serializer,
+                context=self.context, zmq_serializer=self.zmq_serializer, http_serializer=self.http_serializer,
                 logger=self.logger)
             client._monitor_socket = client.socket.get_monitor_socket()
             self.poller.register(client._monitor_socket, zmq.POLLIN)
@@ -1737,7 +1737,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         if server_instance_name not in self.pool.keys():
             client = AsyncZMQClient(server_instance_name=server_instance_name,
                 identity=self.identity, client_type=self.client_type, handshake=True, protocol=protocol, 
-                context=self.context, rpc_serializer=self.rpc_serializer, json_serializer=self.json_serializer,
+                context=self.context, zmq_serializer=self.zmq_serializer, http_serializer=self.http_serializer,
                 logger=self.logger)
             client._monitor_socket = client.socket.get_monitor_socket()
             self.poller.register(client._monitor_socket, zmq.POLLIN)
@@ -2120,7 +2120,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         self.events.add(event) 
         self.logger.info("registered event '{}' serving at PUB socket with address : {}".format(event.name, self.socket_address))
                
-    def publish(self, unique_identifier : bytes, data : typing.Any, *, rpc_clients : bool = True, 
+    def publish(self, unique_identifier : bytes, data : typing.Any, *, zmq_clients : bool = True, 
                         http_clients : bool = True, serialize : bool = True) -> None: 
         """
         publish an event with given unique name. 
@@ -2133,20 +2133,21 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
             payload of the event
         serialize: bool, default True
             serialize the payload before pushing, set to False when supplying raw bytes
-        rpc_clients: bool, default True
+        zmq_clients: bool, default True
             pushes event to RPC clients
         http_clients: bool, default True
             pushed event to HTTP clients
         """
         if unique_identifier in self.event_ids:
             if serialize:
-                if isinstance(self.rpc_serializer , JSONSerializer):
-                    self.socket.send_multipart([unique_identifier, self.json_serializer.dumps(data)])
+                if isinstance(self.zmq_serializer , JSONSerializer):
+                    self.socket.send_multipart([unique_identifier, self.http_serializer.dumps(data)])
                     return
-                if rpc_clients:
-                    self.socket.send_multipart([unique_identifier, self.rpc_serializer.dumps(data)])
+                if zmq_clients:
+                    # TODO - event id should not any longer be unique
+                    self.socket.send_multipart([unique_identifier, self.zmq_serializer.dumps(data)])
                 if http_clients:
-                    self.socket.send_multipart([unique_identifier, self.json_serializer.dumps(data)])
+                    self.socket.send_multipart([unique_identifier, self.http_serializer.dumps(data)])
             else:
                 self.socket.send_multipart([unique_identifier, data])
         else:
@@ -2187,9 +2188,9 @@ class BaseEventConsumer(BaseZMQClient):
     **kwargs:
         protocol: str 
             TCP, IPC or INPROC
-        json_serializer: JSONSerializer
+        http_serializer: JSONSerializer
             json serializer instance for HTTP_SERVER client type
-        rpc_serializer: BaseSerializer
+        zmq_serializer: BaseSerializer
             serializer for RPC clients
         server_instance_name: str
             instance name of the Thing publishing the event
@@ -2262,9 +2263,9 @@ class AsyncEventConsumer(BaseEventConsumer):
     **kwargs:
         protocol: str 
             TCP, IPC or INPROC
-        json_serializer: JSONSerializer
+        http_serializer: JSONSerializer
             json serializer instance for HTTP_SERVER client type
-        rpc_serializer: BaseSerializer
+        zmq_serializer: BaseSerializer
             serializer for RPC clients
         server_instance_name: str
             instance name of the Thing publishing the event
@@ -2304,9 +2305,9 @@ class AsyncEventConsumer(BaseEventConsumer):
         if not deserialize or not contents: 
             return contents
         if self.client_type == HTTP_SERVER:
-            return self.json_serializer.loads(contents)
+            return self.http_serializer.loads(contents)
         elif self.client_type == PROXY:
-            return self.rpc_serializer.loads(contents)
+            return self.zmq_serializer.loads(contents)
         else:
             raise ValueError("invalid client type")
 
@@ -2316,11 +2317,11 @@ class AsyncEventConsumer(BaseEventConsumer):
         generally should be used for exiting this object
         """
         if self.client_type == HTTP_SERVER:
-            message = [self.json_serializer.dumps(f'{self.identity}/interrupting-server'), 
-                       self.json_serializer.dumps("INTERRUPT")]
+            message = [self.http_serializer.dumps(f'{self.identity}/interrupting-server'), 
+                       self.http_serializer.dumps("INTERRUPT")]
         elif self.client_type == PROXY:
-            message = [self.rpc_serializer.dumps(f'{self.identity}/interrupting-server'), 
-                       self.rpc_serializer.dumps("INTERRUPT")]
+            message = [self.zmq_serializer.dumps(f'{self.identity}/interrupting-server'), 
+                       self.zmq_serializer.dumps("INTERRUPT")]
         await self.interrupting_peer.send_multipart(message)
 
     
@@ -2341,9 +2342,9 @@ class EventConsumer(BaseEventConsumer):
     **kwargs:
         protocol: str 
             TCP, IPC or INPROC
-        json_serializer: JSONSerializer
+        http_serializer: JSONSerializer
             json serializer instance for HTTP_SERVER client type
-        rpc_serializer: BaseSerializer
+        zmq_serializer: BaseSerializer
             serializer for RPC clients
         server_instance_name: str
             instance name of the Thing publishing the event
@@ -2383,9 +2384,9 @@ class EventConsumer(BaseEventConsumer):
         if not deserialize: 
             return contents
         if self.client_type == HTTP_SERVER:
-            return self.json_serializer.loads(contents)
+            return self.http_serializer.loads(contents)
         elif self.client_type == PROXY:
-            return self.rpc_serializer.loads(contents)
+            return self.zmq_serializer.loads(contents)
         else:
             raise ValueError("invalid client type for event")
         
@@ -2395,11 +2396,11 @@ class EventConsumer(BaseEventConsumer):
         generally should be used for exiting this object
         """
         if self.client_type == HTTP_SERVER:
-            message = [self.json_serializer.dumps(f'{self.identity}/interrupting-server'), 
-                       self.json_serializer.dumps("INTERRUPT")]
+            message = [self.http_serializer.dumps(f'{self.identity}/interrupting-server'), 
+                       self.http_serializer.dumps("INTERRUPT")]
         elif self.client_type == PROXY:
-            message = [self.rpc_serializer.dumps(f'{self.identity}/interrupting-server'), 
-                       self.rpc_serializer.dumps("INTERRUPT")]
+            message = [self.zmq_serializer.dumps(f'{self.identity}/interrupting-server'), 
+                       self.zmq_serializer.dumps("INTERRUPT")]
         self.interrupting_peer.send_multipart(message)
     
         

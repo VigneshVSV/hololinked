@@ -10,9 +10,10 @@ from dataclasses import dataclass, asdict, field, fields
 from types import FunctionType, MethodType
 
 from ..param.parameters import String, Boolean, Tuple, TupleSelector, TypedDict, ClassSelector, Parameter
-from .constants import JSON, USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, REGEX, ResourceTypes, http_methods
+from .constants import JSON, USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, REGEX, ResourceTypes, http_methods 
 from .utils import get_signature, getattr_without_descriptor_read
-
+from .config import global_config
+from .schema_validators import BaseSchemaValidator
 
 
 class RemoteResourceInfoValidator:
@@ -112,7 +113,8 @@ class RemoteResourceInfoValidator:
         return RemoteResource(
                     state=tuple(self.state) if self.state is not None else None, 
                     obj_name=self.obj_name, isaction=self.isaction, iscoroutine=self.iscoroutine,
-                    isproperty=self.isproperty, obj=obj, bound_obj=bound_obj
+                    isproperty=self.isproperty, obj=obj, bound_obj=bound_obj, 
+                    schema_validator=None if global_config.validate_schema_on_client else (bound_obj.schema_validator)(self.argument_schema)
                 ) 
         # http method is manually always stored as a tuple
 
@@ -174,7 +176,7 @@ class RemoteResource(SerializableDataclass):
     isproperty : bool
     obj : typing.Any
     bound_obj : typing.Any
-    schema_validator : typing.Optional[typing.Any]
+    schema_validator : typing.Optional[BaseSchemaValidator]
   
     def json(self):
         """
