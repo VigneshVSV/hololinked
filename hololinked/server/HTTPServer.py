@@ -22,7 +22,7 @@ from .serializers import JSONSerializer
 from .database import ThingInformation
 from .zmq_message_brokers import  AsyncZMQClient, MessageMappedZMQClientPool
 from .handlers import RPCHandler, BaseHandler, EventHandler, ThingsHandler
-from .schema_validators import BaseSchemaValidator, FastJsonSchemaValidator
+from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
 from .config import global_config
 
 
@@ -70,7 +70,7 @@ class HTTPServer(Parameterized):
                             doc="custom web request handler of your choice for property read-write & action execution" ) # type: typing.Union[BaseHandler, RPCHandler]
     event_handler = ClassSelector(default=EventHandler, class_=(EventHandler, BaseHandler), isinstance=False, 
                             doc="custom event handler of your choice for handling events") # type: typing.Union[BaseHandler, EventHandler]
-    schema_validator = ClassSelector(class_=BaseSchemaValidator, default=FastJsonSchemaValidator, allow_None=True, isinstance=False,
+    schema_validator = ClassSelector(class_=BaseSchemaValidator, default=JsonSchemaValidator, allow_None=True, isinstance=False,
                         doc="""Validator for JSON schema. If not supplied, a default JSON schema validator is created.""") # type: BaseSchemaValidator
     
    
@@ -78,7 +78,7 @@ class HTTPServer(Parameterized):
     def __init__(self, things : typing.List[str], *, port : int = 8080, address : str = '0.0.0.0', 
                 host : typing.Optional[str] = None, logger : typing.Optional[logging.Logger] = None, log_level : int = logging.INFO, 
                 serializer : typing.Optional[JSONSerializer] = None, ssl_context : typing.Optional[ssl.SSLContext] = None, 
-                schema_validator : typing.Optional[BaseSchemaValidator] = FastJsonSchemaValidator,
+                schema_validator : typing.Optional[BaseSchemaValidator] = JsonSchemaValidator,
                 certfile : str = None, keyfile : str = None, # protocol_version : int = 1, network_interface : str = 'Ethernet', 
                 allowed_clients : typing.Optional[typing.Union[str, typing.Iterable[str]]] = None,   
                 **kwargs) -> None:

@@ -10,7 +10,7 @@ from ..param.parameterized import Parameterized, ParameterizedMetaclass
 from .constants import (LOGLEVEL, ZMQ_PROTOCOLS, HTTP_METHODS)
 from .database import ThingDB, ThingInformation
 from .serializers import _get_serializer_from_user_given_options, BaseSerializer, JSONSerializer
-from .schema_validators import BaseSchemaValidator, FastJsonSchemaValidator
+from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
 from .exceptions import BreakInnerLoop
 from .action import action
 from .data_classes import GUIResources, HTTPResource, RPCResource, get_organised_resources
@@ -102,7 +102,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
                         doc="""Serializer used for exchanging messages with a HTTP clients,
                             subclass JSONSerializer to implement your own JSON serialization requirements; or, 
                             register type replacements. Other types of serializers are currently not allowed for HTTP clients.""") # type: JSONSerializer
-    schema_validator = ClassSelector(class_=BaseSchemaValidator, default=FastJsonSchemaValidator, allow_None=True, 
+    schema_validator = ClassSelector(class_=BaseSchemaValidator, default=JsonSchemaValidator, allow_None=True, 
                         remote=False, isinstance=False,
                         doc="""Validator for JSON schema. If not supplied, a default JSON schema validator is created.""") # type: BaseSchemaValidator
     
