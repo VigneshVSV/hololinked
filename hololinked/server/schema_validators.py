@@ -95,10 +95,7 @@ class JsonSchemaValidator(BaseSchemaValidator):
     
 
 
-def _get_validator_from_user_options(option : typing.Optional[str] = None) -> typing.Union[
-                                                                                JsonSchemaValidator, 
-                                                                                FastJsonSchemaValidator
-                                                                            ]:
+def _get_validator_from_user_options(option : typing.Optional[str] = None) -> BaseSchemaValidator:
     """
     returns a JSON schema validator based on user options
     """
