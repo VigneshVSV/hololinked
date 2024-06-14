@@ -3,15 +3,14 @@ import warnings
 import typing 
 import logging
 import uuid
-import zmq
 
-from hololinked.server.config import global_config
 
+from ..server.config import global_config
 from ..server.constants import JSON, CommonRPC, ServerMessage, ResourceTypes, ZMQ_PROTOCOLS
 from ..server.serializers import BaseSerializer
 from ..server.data_classes import RPCResource, ServerSentEvent
 from ..server.zmq_message_brokers import AsyncZMQClient, SyncZMQClient, EventConsumer, PROXY
-from ..server.schema_validators import BaseValidator
+from ..server.schema_validators import BaseSchemaValidator
 
 
 class ObjectProxy:
@@ -39,7 +38,7 @@ class ObjectProxy:
             whether to use both synchronous and asynchronous clients. 
         serializer: BaseSerializer
             use a custom serializer, must be same as the serializer supplied to the server. 
-        schema_validator: BaseValidator
+        schema_validator: BaseSchemaValidator
             use a schema validator, must be same as the schema validator supplied to the server.
         allow_foreign_attributes: bool, default False
             allows local attributes for proxy apart from properties fetched from the server.
@@ -585,7 +584,7 @@ class _RemoteMethod:
     def __init__(self, sync_client : SyncZMQClient, instruction : str, invokation_timeout : typing.Optional[float] = 5, 
                     execution_timeout : typing.Optional[float] = None, argument_schema : typing.Optional[JSON] = None,
                     async_client : typing.Optional[AsyncZMQClient] = None, 
-                    schema_validator : typing.Optional[typing.Type[BaseSerializer]] = None) -> None:
+                    schema_validator : typing.Optional[typing.Type[BaseSchemaValidator]] = None) -> None:
         """
         Parameters
         ----------

@@ -2,7 +2,7 @@
 =========
 
 .. autoclass:: hololinked.server.thing.Thing()
-    :members: instance_name, logger, state, rpc_serializer, json_serializer, 
+    :members: instance_name, logger, state, zmq_serializer, http_serializer, 
             event_publisher,  
     :show-inheritance:
 
