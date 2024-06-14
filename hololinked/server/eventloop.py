@@ -321,9 +321,9 @@ class EventLoop(RemoteObject):
                 func = resource.obj
                 args = arguments.pop('__args__', tuple())
                 if resource.iscoroutine:
-                    return await func(*args, **arguments)
+                    return await func(*args, **arguments) # arguments then become kwargs
                 else:
-                    return func(*args, **arguments)
+                    return func(*args, **arguments) # arguments then become kwargs
             else: 
                 raise StateMachineError("Thing '{}' is in '{}' state, however command can be executed only in '{}' state".format(
                         instance_name, instance.state, resource.state))

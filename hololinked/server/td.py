@@ -65,7 +65,18 @@ class JSONSchema:
         dict : 'object',
         list : 'array',
         tuple : 'array',
-        type(None) : 'null'
+        type(None) : 'null',
+        Exception : {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "properties": {
+                "message": {"type": "string"},
+                "type": {"type": "string"},
+                "traceback": {"type": "array", "items": {"type": "string"}},
+                "notes": {"type": ["string", "null"]}
+            },
+            "required": ["message", "type", "traceback"]
+        }
     }
 
     _schemas = {

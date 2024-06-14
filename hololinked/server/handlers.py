@@ -5,9 +5,11 @@ import uuid
 from tornado.web import RequestHandler, StaticFileHandler
 from tornado.iostream import StreamClosedError
 
+
 from .data_classes import HTTPResource, ServerSentEvent
 from .utils import *
 from .zmq_message_brokers import AsyncEventConsumer, EventConsumer
+from .schema_validators import BaseSchemaValidator
 
 
 class BaseHandler(RequestHandler):
@@ -15,7 +17,8 @@ class BaseHandler(RequestHandler):
     Base request handler for RPC operations
     """
 
-    def initialize(self, resource : typing.Union[HTTPResource, ServerSentEvent], owner = None) -> None:
+    def initialize(self, resource : typing.Union[HTTPResource, ServerSentEvent], validator : BaseSchemaValidator, 
+                            owner = None) -> None:
         """
         Parameters
         ----------
@@ -27,6 +30,7 @@ class BaseHandler(RequestHandler):
         from .HTTPServer import HTTPServer
         assert isinstance(owner, HTTPServer)
         self.resource = resource
+        self.schema_validator = validator
         self.owner = owner
         self.zmq_client_pool = self.owner.zmq_client_pool 
         self.serializer = self.owner.serializer
@@ -171,6 +175,8 @@ class RPCHandler(BaseHandler):
             reply = None
             try:
                 arguments, context, timeout = self.get_execution_parameters()
+                if self.schema_validator is not None:
+                    self.schema_validator.validate(arguments)
                 reply = await self.zmq_client_pool.async_execute(
                                         instance_name=self.resource.instance_name, 
                                         instruction=self.resource.instructions.__dict__[http_method], 

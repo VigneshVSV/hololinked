@@ -213,7 +213,7 @@ class Property(Parameter):
         return super()._post_value_set(obj, value)
     
     def _push_change_event_if_needed(self, obj, value : typing.Any) -> None:
-        if self.observable and self._observable_event is not None:
+        if self.observable and self._observable_event is not None and self._observable_event.publisher is not None:
             old_value = obj.__dict__.get(f'{self._internal_name}_old_value', NotImplemented)
             obj.__dict__[f'{self._internal_name}_old_value'] = value 
             if self.fcomparator:
@@ -221,6 +221,11 @@ class Property(Parameter):
                     self._observable_event.push(value)               
             elif old_value != value:
                 self._observable_event.push(value)
+
+    def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass) -> typing.Any:
+        read_value = super().__get__(obj, objtype)
+        self._push_change_event_if_needed(obj, read_value)
+        return read_value
     
     def comparator(self, func : typing.Callable) -> typing.Callable:
         """
@@ -246,10 +251,7 @@ class Property(Parameter):
         elif not value and self._observable_event is not None:
             raise NotImplementedError(f"Setting an observable property ({self.name}) to un-observe is currently not supported.")
     
-    def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass) -> typing.Any:
-        read_value = super().__get__(obj, objtype)
-        self._push_change_event_if_needed(obj, read_value)
-        return read_value
+    
     
 
 __property_info__ = [

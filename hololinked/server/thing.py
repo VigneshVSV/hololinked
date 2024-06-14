@@ -213,11 +213,6 @@ class Thing(Parameterized, metaclass=ThingMeta):
         self.logger.info(f"initialialised Thing class {self.__class__.__name__} with instance name {self.instance_name}")
 
 
-    @property
-    def properties(self):
-        return self.parameters
-
-
     def __setattr__(self, __name: str, __value: typing.Any) -> None:
         if  __name == '_internal_fixed_attributes' or __name in self._internal_fixed_attributes: 
             # order of 'or' operation for above 'if' matters
@@ -304,6 +299,13 @@ class Thing(Parameterized, metaclass=ThingMeta):
     @object_info.setter
     def _set_object_info(self, value):
         self._object_info = ThingInformation(**value)  
+
+    
+    @property
+    def properties(self):
+        """container for the property descriptors of the object."""
+        return self.parameters
+
       
     
     @action(URL_path='/properties', http_method=HTTP_METHODS.GET)
@@ -357,6 +359,22 @@ class Thing(Parameterized, metaclass=ThingMeta):
             setattr(self, name, value)
 
 
+    @action(URL_path='/properties', http_method=HTTP_METHODS.POST)
+    def _add_property(self, name : str, prop : Property) -> None:
+        """
+        add a property to the object
+        
+        Parameters
+        ----------
+        name: str
+            name of the property
+        prop: Property
+            property object
+        """
+        self.properties.add(name, prop)
+        self._prepare_resources()
+
+
     @property
     def event_publisher(self) -> EventPublisher:
         """
@@ -379,7 +397,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
                 # above is type definition
                 evt.publisher = publisher 
                 evt._remote_info.socket_address = publisher.socket_address
-            for prop in self.properties.descriptors.values():
+            for prop in obj.properties.descriptors.values():
                 if prop.observable:
                     assert isinstance(prop._observable_event, Event), "observable event logic error in event_publisher set"
                     prop._observable_event.publisher = publisher 
@@ -388,10 +406,10 @@ class Thing(Parameterized, metaclass=ThingMeta):
                         obj.state_machine.state_change_event is not None):                
                 obj.state_machine.state_change_event.publisher = publisher 
                 obj.state_machine.state_change_event._remote_info.socket_address = publisher.socket_address
-            for name, obj in inspect._getmembers(obj, lambda o: isinstance(o, Thing), getattr_without_descriptor_read):
+            for name, subobj in inspect._getmembers(obj, lambda o: isinstance(o, Thing), getattr_without_descriptor_read):
                 if name == '_owner':
                     continue 
-                recusively_set_event_publisher(obj, publisher)
+                recusively_set_event_publisher(subobj, publisher)
             obj._event_publisher = publisher            
 
         recusively_set_event_publisher(self, value)
@@ -582,7 +600,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         http_server = HTTPServer(
             [self.instance_name], logger=self.logger, serializer=self.http_serializer, 
             port=port, address=address, ssl_context=ssl_context,
-            allowed_clients=allowed_clients,
+            allowed_clients=allowed_clients, schema_validator=self.schema_validator,
             # network_interface=network_interface, 
             **kwargs,
         )

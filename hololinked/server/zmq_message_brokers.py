@@ -1427,8 +1427,6 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             a byte representation of message id
         """
         message = self.craft_instruction_from_arguments(instruction, arguments, invokation_timeout, context)
-        # if global_config.validate_schema_on_client and argument_schema:
-        #     jsonschema.validate(arguments, argument_schema)
         self.socket.send_multipart(message)
         self.logger.debug(f"sent instruction '{instruction}' to server '{self.instance_name}' with msg-id '{message[SM_INDEX_MESSAGE_ID]}'")
         return message[SM_INDEX_MESSAGE_ID]
@@ -1621,8 +1619,6 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             a byte representation of message id
         """
         message = self.craft_instruction_from_arguments(instruction, arguments, invokation_timeout, context) 
-        # if global_config.validate_schema_on_client and argument_schema:
-        #     jsonschema.validate(arguments, argument_schema)
         await self.socket.send_multipart(message)
         self.logger.debug(f"sent instruction '{instruction}' to server '{self.instance_name}' with msg-id {message[SM_INDEX_MESSAGE_ID]}")
         return message[SM_INDEX_MESSAGE_ID]

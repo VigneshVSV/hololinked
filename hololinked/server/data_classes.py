@@ -114,7 +114,7 @@ class RemoteResourceInfoValidator:
                     state=tuple(self.state) if self.state is not None else None, 
                     obj_name=self.obj_name, isaction=self.isaction, iscoroutine=self.iscoroutine,
                     isproperty=self.isproperty, obj=obj, bound_obj=bound_obj, 
-                    schema_validator=None if global_config.validate_schema_on_client else (bound_obj.schema_validator)(self.argument_schema)
+                    schema_validator=(bound_obj.schema_validator)(self.argument_schema) if not global_config.validate_schema_on_client and self.argument_schema else None 
                 ) 
         # http method is manually always stored as a tuple
 
@@ -252,19 +252,18 @@ class HTTPResource(SerializableDataclass):
     fullpath : str
     instructions : HTTPMethodInstructions
     argument_schema : typing.Optional[JSON]
-    return_value_schema : typing.Optional[JSON]
     request_as_argument : bool = field(default=False)
+    
                                   
     def __init__(self, *, what : str, instance_name : str, obj_name : str, fullpath : str, 
                 request_as_argument : bool = False, argument_schema : typing.Optional[JSON] = None, 
-                return_value_schema : typing.Optional[JSON] = None, **instructions) -> None:
+                **instructions) -> None:
         self.what = what 
         self.instance_name = instance_name
         self.obj_name = obj_name
         self.fullpath = fullpath
         self.request_as_argument = request_as_argument
         self.argument_schema = argument_schema
-        self.return_value_schema = return_value_schema
         if instructions.get('instructions', None):
             self.instructions = HTTPMethodInstructions(**instructions.get('instructions', None))
         else: 
@@ -481,9 +480,8 @@ def get_organised_resources(instance):
                                                 instance_name=instance._owner.instance_name if instance._owner is not None else instance.instance_name,
                                                 obj_name=remote_info.obj_name,
                                                 fullpath=fullpath,
-                                                request_as_argument=False,
+                                                request_as_argument=remote_info.request_as_argument,
                                                 argument_schema=remote_info.argument_schema,
-                                                return_value_schema=remote_info.return_value_schema,
                                                 **{ 
                                                     read_http_method : f"{fullpath}/read",
                                                     write_http_method : f"{fullpath}/write",
@@ -538,7 +536,6 @@ def get_organised_resources(instance):
                                         fullpath=fullpath,
                                         request_as_argument=remote_info.request_as_argument,
                                         argument_schema=remote_info.argument_schema,
-                                        return_value_schema=remote_info.return_value_schema,
                                         **{ http_method : instruction for http_method in remote_info.http_method },
                                     )
             rpc_resources[instruction] = RPCResource(
