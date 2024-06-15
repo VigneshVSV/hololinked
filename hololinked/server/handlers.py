@@ -6,7 +6,7 @@ from tornado.web import RequestHandler, StaticFileHandler
 from tornado.iostream import StreamClosedError
 
 
-from .data_classes import HTTPResource, ServerSentEvent
+from .dataklasses import HTTPResource, ServerSentEvent
 from .utils import *
 from .zmq_message_brokers import AsyncEventConsumer, EventConsumer
 from .schema_validators import BaseSchemaValidator

@@ -1,11 +1,12 @@
 import typing
+import jsonschema
 from enum import Enum
 from types import FunctionType
 from inspect import iscoroutinefunction, getfullargspec
 
-from .data_classes import RemoteResourceInfoValidator
+from .dataklasses import RemoteResourceInfoValidator
 from .constants import USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, JSON
-
+from .config import global_config
 
    
 def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.POST, 
@@ -51,7 +52,7 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
             if hasattr(obj, '_remote_info') and not isinstance(obj._remote_info, RemoteResourceInfoValidator): 
                 raise NameError(
                     "variable name '_remote_info' reserved for hololinked package. ",  
-                    "Please do not assign this variable to any other object except hololinked.server.data_classes.RemoteResourceInfoValidator."
+                    "Please do not assign this variable to any other object except hololinked.server.dataklasses.RemoteResourceInfoValidator."
                 )             
             else:
                 obj._remote_info = RemoteResourceInfoValidator() 
@@ -92,6 +93,10 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
             obj._remote_info.return_value_schema = output_schema
             obj._remote_info.obj = original
             obj._remote_info.create_task = create_task
+            
+            if global_config.validate_schemas and output_schema:
+                jsonschema.Draft7Validator.check_schema(output_schema)
+            
             return original
         else:
             raise TypeError(

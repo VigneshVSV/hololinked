@@ -86,7 +86,7 @@ class Configuration:
         "PWD_HASHER_TIME_COST", "PWD_HASHER_MEMORY_COST",
         # Eventloop
         "USE_UVLOOP",
-        'validate_schema_on_client'
+        'validate_schema_on_client', 'validate_schemas'
     ]
 
     def __init__(self, use_environment : bool = False):
@@ -104,6 +104,7 @@ class Configuration:
         self.PWD_HASHER_TIME_COST = 15
         self.USE_UVLOOP = False
         self.validate_schema_on_client = False
+        self.validate_schemas = True 
 
         if not use_environment:
             return 

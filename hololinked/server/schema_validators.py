@@ -77,8 +77,8 @@ class JsonSchemaValidator(BaseSchemaValidator):
     
     def __init__(self, schema):
         self.schema = schema
+        jsonschema.Draft7Validator.check_schema(schema)
         self.validator = jsonschema.Draft7Validator(schema)
-        self.validator.check_schema(schema)
 
     def validate(self, data):
         self.validator.validate(data)

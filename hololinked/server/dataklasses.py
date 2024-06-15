@@ -9,7 +9,7 @@ from enum import Enum
 from dataclasses import dataclass, asdict, field, fields
 from types import FunctionType, MethodType
 
-from ..param.parameters import String, Boolean, Tuple, TupleSelector, TypedDict, ClassSelector, Parameter
+from ..param.parameters import String, Boolean, Tuple, TupleSelector, ClassSelector, Parameter
 from .constants import JSON, USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, REGEX, ResourceTypes, http_methods 
 from .utils import get_signature, getattr_without_descriptor_read
 from .config import global_config
@@ -72,9 +72,11 @@ class RemoteResourceInfoValidator:
                     doc="True for a property") # type: bool
     request_as_argument = Boolean(default=False,
                     doc="if True, http/RPC request object will be passed as an argument to the callable.") # type: bool
-    argument_schema = TypedDict(default=None, allow_None=True, key_type=str,
+    argument_schema = ClassSelector(default=None, allow_None=True, class_=dict, 
+                    # due to schema validation, this has to be a dict, and not a special dict like TypedDict
                     doc="JSON schema validations for arguments of a callable")
-    return_value_schema = TypedDict(default=None, allow_None=True, key_type=str,
+    return_value_schema = ClassSelector(default=None, allow_None=True, class_=dict, 
+                    # due to schema validation, this has to be a dict, and not a special dict like TypedDict
                     doc="schema for return value of a callable")
     create_task = Boolean(default=False, 
                         doc="should a coroutine be tasked or run in the same loop?") # type: bool
@@ -346,8 +348,8 @@ class ServerSentEvent(SerializableDataclass):
         is it a property, method/action or event?
     """
     name : str
-    obj_name : str 
-    unique_identifier : str
+    obj_name : str = field(default=UNSPECIFIED)
+    unique_identifier : str = field(default=UNSPECIFIED)
     socket_address : str = field(default=UNSPECIFIED)
     what : str = field(default=ResourceTypes.EVENT)
 
@@ -401,10 +403,10 @@ class GUIResources(SerializableDataclass):
         self.GUI = instance.GUI
         self.events = {
             event._unique_identifier.decode() : dict(
-                name = event.name,
+                name = event._name,
                 instruction = event._unique_identifier.decode(),
-                owner = event.owner.__class__.__name__,
-                owner_instance_name =  event.owner.instance_name,
+                owner = event._owner_inst.__class__.__name__,
+                owner_instance_name =  event._owner_inst.instance_name,
                 address = instance.event_publisher.socket_address
             ) for event in instance.event_publisher.events
         }
@@ -447,7 +449,7 @@ def get_organised_resources(instance):
     so that the specific servers and event loop can use them. 
     """
     from .thing import Thing
-    from .events import Event
+    from .events import Event, EventDispatcher
     from .property import Property
 
     assert isinstance(instance, Thing), f"got invalid type {type(instance)}"
@@ -473,7 +475,13 @@ def get_organised_resources(instance):
                 # above condition is just a gaurd in case somebody does some unpredictable patching activities
             remote_info = prop._remote_info
             fullpath = f"{instance._full_URL_path_prefix}{remote_info.URL_path}"
-            read_http_method, write_http_method, delete_http_method = remote_info.http_method
+            read_http_method = write_http_method = delete_http_method = None
+            if len(remote_info.http_method) == 1:
+                read_http_method = remote_info.http_method[0]
+            elif len(remote_info.http_method) == 2:
+                read_http_method, write_http_method = remote_info.http_method
+            else:
+                read_http_method, write_http_method, delete_http_method = remote_info.http_method
                 
             httpserver_resources[fullpath] = HTTPResource(
                                                 what=ResourceTypes.PROPERTY, 
@@ -503,19 +511,17 @@ def get_organised_resources(instance):
             data_cls = remote_info.to_dataclass(obj=prop, bound_obj=instance) 
             instance_resources[f"{fullpath}/read"] = data_cls
             instance_resources[f"{fullpath}/write"] = data_cls  
-            # instance_resources[f"{fullpath}/delete"] = data_cls  
+            instance_resources[f"{fullpath}/delete"] = data_cls  
             if prop.observable:
+                assert isinstance(prop._observable_event, Event), f"observable event not yet set for {prop.name}. logic error."
                 evt_fullpath = f"{instance._full_URL_path_prefix}{prop._observable_event.URL_path}"
-                event_data_cls = ServerSentEvent(
-                            name=prop._observable_event.name,
-                            obj_name='_observable_event', # not used in client, so fill it with something
-                            what=ResourceTypes.EVENT,
-                            unique_identifier=evt_fullpath,
-                        )
-                prop._observable_event._owner = instance
-                prop._observable_event._unique_identifier = bytes(evt_fullpath, encoding='utf-8')
-                prop._observable_event._remote_info = event_data_cls
-                httpserver_resources[evt_fullpath] = event_data_cls
+                setattr(instance, prop._observable_event.name, EventDispatcher(prop._observable_event.name, 
+                                                                            evt_fullpath, instance))
+                # name, obj_name, unique_identifer, socket_address
+                prop._observable_event._remote_info.obj_name = prop._observable_event.name
+                prop._observable_event._remote_info.unique_identifier = evt_fullpath
+                httpserver_resources[evt_fullpath] = prop._observable_event._remote_info
+                # rpc_resources[evt_fullpath] = prop._observable_event._remote_info
     # Methods
     for name, resource in inspect._getmembers(instance, inspect.ismethod, getattr_without_descriptor_read): 
         if hasattr(resource, '_remote_info'):
@@ -534,8 +540,8 @@ def get_organised_resources(instance):
                                         instance_name=instance._owner.instance_name if instance._owner is not None else instance.instance_name,
                                         obj_name=remote_info.obj_name,
                                         fullpath=fullpath,
-                                        request_as_argument=remote_info.request_as_argument,
                                         argument_schema=remote_info.argument_schema,
+                                        request_as_argument=remote_info.request_as_argument,
                                         **{ http_method : instruction for http_method in remote_info.http_method },
                                     )
             rpc_resources[instruction] = RPCResource(
@@ -550,25 +556,20 @@ def get_organised_resources(instance):
                                             return_value_schema=remote_info.return_value_schema,
                                             request_as_argument=remote_info.request_as_argument
                                         )
-            instance_resources[instruction] = remote_info.to_dataclass(obj=resource, bound_obj=instance) 
-           
+            instance_resources[instruction] = remote_info.to_dataclass(obj=resource, bound_obj=instance)   
     # Events
     for name, resource in inspect._getmembers(instance, lambda o : isinstance(o, Event), getattr_without_descriptor_read):
         assert isinstance(resource, Event), ("thing event query from inspect.ismethod is not an Event",
                                     "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")
+        if getattr(instance, name, None):
+           continue 
         # above assertion is only a typing convenience
-        resource._owner = instance
         fullpath = f"{instance._full_URL_path_prefix}{resource.URL_path}"
-        resource._unique_identifier = bytes(fullpath, encoding='utf-8')
-        data_cls = ServerSentEvent(
-                            name=resource.name,
-                            obj_name=name,
-                            what=ResourceTypes.EVENT,
-                            unique_identifier=f"{instance._full_URL_path_prefix}{resource.URL_path}",
-                        )
-        resource._remote_info = data_cls
-        httpserver_resources[fullpath] = data_cls
-        rpc_resources[fullpath] = data_cls
+        resource._remote_info.unique_identifier = fullpath
+        resource._remote_info.obj_name = name
+        setattr(instance, name, EventDispatcher(resource.name, resource._remote_info.unique_identifier, owner_inst=instance))
+        httpserver_resources[fullpath] = resource._remote_info
+        rpc_resources[fullpath] = resource._remote_info
     # Other objects
     for name, resource in inspect._getmembers(instance, lambda o : isinstance(o, Thing), getattr_without_descriptor_read):
         assert isinstance(resource, Thing), ("thing children query from inspect.ismethod is not a Thing",

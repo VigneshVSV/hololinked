@@ -6,7 +6,7 @@ import warnings
 from hololinked.param.parameterized import Parameterized, ParameterizedMetaclass
 
 from ..param.parameterized import Parameter, ClassParameters
-from .data_classes import RemoteResourceInfoValidator
+from .dataklasses import RemoteResourceInfoValidator
 from .constants import USE_OBJECT_NAME, HTTP_METHODS
 from .events import Event
 
@@ -172,7 +172,7 @@ class Property(Parameter):
                     label=label, per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default,
                     class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence)
         self._remote_info = None
-        self._observable_event = None
+        self._observable_event = None # type: typing.Optional[Event]
         self.db_persist = db_persist
         self.db_init    = db_init
         self.db_commit  = db_commit
@@ -196,11 +196,16 @@ class Property(Parameter):
                     raise ValueError(f"URL_path should start with '/', please add '/' before '{self._remote_info.URL_path}'")
                 self._remote_info.obj_name = self.name
             if self._observable:
-                self._observable_event = Event(name=f'{self.name}_change_event',
-                                            URL_path=f'{self._remote_info.URL_path}/change-event')
-            # In principle the above could be done when setting name itself however to simplify
-            # we do it with owner. So we should always remember order of __set_name__ -> 1) attrib_name, 
-            # 2) name and then 3) owner
+                event_name = f'{self.name}_change_event'
+                self._observable_event = Event(
+                                        name=event_name,
+                                        URL_path=f'{self._remote_info.URL_path}/change-event',
+                                        doc=f"change event for {self.name}"
+                                    )
+                setattr(value, event_name, self._observable_event)
+                # In principle the above could be done when setting name itself however to simplify
+                # we do it with owner. So we should always remember order of __set_name__ -> 1) attrib_name, 
+                # 2) name and then 3) owner
         super()._post_slot_set(slot, old, value)
 
     def _post_value_set(self, obj, value : typing.Any) -> None:
@@ -213,7 +218,7 @@ class Property(Parameter):
         return super()._post_value_set(obj, value)
     
     def _push_change_event_if_needed(self, obj, value : typing.Any) -> None:
-        if self.observable and self._observable_event is not None and self._observable_event.publisher is not None:
+        if self.observable and hasattr(obj, 'event_publisher') and self._observable_event is not None:
             old_value = obj.__dict__.get(f'{self._internal_name}_old_value', NotImplemented)
             obj.__dict__[f'{self._internal_name}_old_value'] = value 
             if self.fcomparator:
@@ -243,8 +248,13 @@ class Property(Parameter):
         if value:
             self._observable = value    
             if not self._observable_event:
-                self._observable_event = Event(name=f'{self.name}_change_event', 
-                                           URL_path=f'{self._remote_info.URL_path}/change-event')
+                event_name = f'{self.name}_change_event'
+                self._observable_event = Event(
+                                        name=event_name,
+                                        URL_path=f'{self._remote_info.URL_path}/change-event',
+                                        doc=f"change event for {self.name}"
+                                    )
+                setattr(value, event_name, self._observable_event)
             else:
                 warnings.warn(f"property is already observable, cannot change event object though", 
                             category=UserWarning)

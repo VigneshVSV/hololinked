@@ -5,7 +5,7 @@ from enum import EnumMeta, Enum, StrEnum
 
 from ..param.parameterized import Parameterized
 from .utils import getattr_without_descriptor_read
-from .data_classes import RemoteResourceInfoValidator
+from .dataklasses import RemoteResourceInfoValidator
 from .property import Property
 from .properties import ClassSelector, TypedDict, Boolean
 from .events import Event
@@ -67,9 +67,9 @@ class StateMachine:
         self.states   = states
         self.initial_state = initial_state
         self.machine = machine
-        self.state_change_event = None
-        if push_state_change_event:
-            self.state_change_event = Event('state-change') 
+        self.push_state_change_event = push_state_change_event
+        # if :
+        #     self.state_change_event = Event('state-change') 
 
     def _prepare(self, owner : Parameterized) -> None:
         if self.states is None and self.initial_state is None:    
@@ -81,7 +81,7 @@ class StateMachine:
 
         self._state = self._get_machine_compliant_state(self.initial_state)
         self.owner = owner
-        owner_properties = owner.properties.descriptors.values()
+        owner_properties = owner.parameters.descriptors.values() # same as owner.properties.descriptors.values()
         owner_methods = [obj[0] for obj in inspect._getmembers(owner, inspect.ismethod, getattr_without_descriptor_read)]
         
         if isinstance(self.states, list):
@@ -175,8 +175,8 @@ class StateMachine:
         if value in self.states:
             previous_state = self._state
             self._state = self._get_machine_compliant_state(value)
-            if push_event and self.state_change_event is not None and self.state_change_event.publisher is not None:
-                self.state_change_event.push(value)
+            if push_event and self.push_state_change_event and hasattr(self.owner, 'event_publisher'):
+                self.owner.state._observable_event.__get__(self.owner).push(value)
             if skip_callbacks:
                 return 
             if previous_state in self.on_exit:

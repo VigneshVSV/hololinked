@@ -11,12 +11,11 @@ from tornado.httpserver import HTTPServer as TornadoHTTP1Server
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 
 # from tornado_http2.server import Server as TornadoHTTP2Server 
-
 from ..param import Parameterized
 from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector, TypedList, String)
 from .constants import CommonRPC, HTTPServerTypes, ResourceTypes, ServerMessage
 from .utils import get_IP_from_interface
-from .data_classes import HTTPResource, ServerSentEvent
+from .dataklasses import HTTPResource, ServerSentEvent
 from .utils import get_default_logger, run_coro_sync
 from .serializers import JSONSerializer
 from .database import ThingInformation
@@ -24,6 +23,7 @@ from .zmq_message_brokers import  AsyncZMQClient, MessageMappedZMQClientPool
 from .handlers import RPCHandler, BaseHandler, EventHandler, ThingsHandler
 from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
 from .config import global_config
+
 
 
 class HTTPServer(Parameterized):
@@ -256,6 +256,7 @@ class HTTPServer(Parameterized):
                         resource = ServerSentEvent(**http_resource)
                         handlers.append((instruction, self.event_handler, dict(
                                                                 resource=resource,
+                                                                validator=None,
                                                                 owner=self 
                                                             )))
                     """

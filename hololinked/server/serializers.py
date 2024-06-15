@@ -178,7 +178,7 @@ class MsgpackSerializer(BaseSerializer):
     """
     (de)serializer that wraps the msgspec MessagePack serialization protocol, recommended serializer for ZMQ based 
     high speed applications. Set an instance of this serializer to both ``Thing.zmq_serializer`` and 
-    ``hololinked.client.ObjectProxy``.
+    ``hololinked.client.ObjectProxy``. Unfortunately, MessagePack is currently not supported for HTTP clients. 
     """
 
     def __init__(self) -> None:
@@ -195,7 +195,7 @@ serializers = {
     None      : JSONSerializer,
     'json'    : JSONSerializer, 
     'pickle'  : PickleSerializer,
-    'msgpack' : MsgpackSerializer,
+    'msgpack' : MsgpackSerializer
 }
     
 
@@ -231,7 +231,7 @@ try:
                 raise ValueError("refusing to register replacement for a non-type or the type 'type' itself")
             serpent.register_class(object_type, custom_serializer)
 
-    serializers['serpent'] = SerpentSerializer,
+    serializers['serpent'] = SerpentSerializer
 except ImportError:
     pass
 

@@ -6,7 +6,6 @@ import zmq.asyncio
 import asyncio
 import logging
 import typing
-import jsonschema
 from uuid import uuid4
 from collections import deque
 from enum import Enum
@@ -2097,10 +2096,10 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         self.create_socket(identity=f'{instance_name}/event-publisher', bind=True, context=context,
                            protocol=protocol, socket_type=zmq.PUB, **kwargs)
         self.logger.info(f"created event publishing socket at {self.socket_address}")
-        self.events = set() # type: typing.Set[Event] 
+        self.events = set() # type: typing.Set[EventDispatcher] 
         self.event_ids = set() # type: typing.Set[bytes]
 
-    def register(self, event : "Event") -> None:
+    def register(self, event : "EventDispatcher") -> None:
         """
         register event with a specific (unique) name
 
@@ -2111,10 +2110,11 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
             automatically registered. 
         """
         if event._unique_identifier in self.events and event not in self.events:
-            raise AttributeError(f"event {event.name} already found in list of events, please use another name.")
+            raise AttributeError(f"event {event._name} already found in list of events, please use another name.")
         self.event_ids.add(event._unique_identifier)
         self.events.add(event) 
-        self.logger.info("registered event '{}' serving at PUB socket with address : {}".format(event.name, self.socket_address))
+        self.logger.info("registered event '{}' serving at PUB socket with address : {}".format(event._name, 
+                                                                                            self.socket_address))
                
     def publish(self, unique_identifier : bytes, data : typing.Any, *, zmq_clients : bool = True, 
                         http_clients : bool = True, serialize : bool = True) -> None: 
@@ -2401,7 +2401,7 @@ class EventConsumer(BaseEventConsumer):
     
         
 
-from .events import Event
+from .events import EventDispatcher
 
 
 __all__ = [

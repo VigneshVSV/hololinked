@@ -13,7 +13,7 @@ from .serializers import _get_serializer_from_user_given_options, BaseSerializer
 from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
 from .exceptions import BreakInnerLoop
 from .action import action
-from .data_classes import GUIResources, HTTPResource, RPCResource, get_organised_resources
+from .dataklasses import GUIResources, HTTPResource, RPCResource, get_organised_resources
 from .utils import get_default_logger, getattr_without_descriptor_read
 from .property import Property, ClassProperties
 from .properties import String, ClassSelector, Selector, TypedKeyMappingsConstrainedDict
@@ -107,14 +107,14 @@ class Thing(Parameterized, metaclass=ThingMeta):
                         doc="""Validator for JSON schema. If not supplied, a default JSON schema validator is created.""") # type: BaseSchemaValidator
     
     # remote paramerters
-    state = String(default=None, allow_None=True, URL_path='/state', readonly=True,
+    state = String(default=None, allow_None=True, URL_path='/state', readonly=True, observable=True, 
                 fget= lambda self : self.state_machine.current_state if hasattr(self, 'state_machine') else None,  
                 doc="current state machine's state if state machine present, None indicates absence of state machine.") #type: typing.Optional[str]
     
     httpserver_resources = Property(readonly=True, URL_path='/resources/http-server', 
                         doc="object's resources exposed to HTTP client (through ``hololinked.server.HTTPServer.HTTPServer``)", 
                         fget=lambda self: self._httpserver_resources ) # type: typing.Dict[str, HTTPResource]
-    rpc_resources = Property(readonly=True, URL_path='/resources/object-proxy', 
+    rpc_resources = Property(readonly=True, URL_path='/resources/zmq-object-proxy', 
                         doc="object's resources exposed to RPC client, similar to HTTP resources but differs in details.", 
                         fget=lambda self: self._rpc_resources) # type: typing.Dict[str, RPCResource]
     gui_resources = Property(readonly=True, URL_path='/resources/portal-app', 
@@ -306,8 +306,6 @@ class Thing(Parameterized, metaclass=ThingMeta):
         """container for the property descriptors of the object."""
         return self.parameters
 
-      
-    
     @action(URL_path='/properties', http_method=HTTP_METHODS.GET)
     def _get_properties(self, **kwargs) -> typing.Dict[str, typing.Any]:
         """
@@ -358,7 +356,6 @@ class Thing(Parameterized, metaclass=ThingMeta):
         for name, value in values.items():
             setattr(self, name, value)
 
-
     @action(URL_path='/properties', http_method=HTTP_METHODS.POST)
     def _add_property(self, name : str, prop : Property) -> None:
         """
@@ -395,17 +392,9 @@ class Thing(Parameterized, metaclass=ThingMeta):
             for name, evt in inspect._getmembers(obj, lambda o: isinstance(o, Event), getattr_without_descriptor_read):
                 assert isinstance(evt, Event), "object is not an event"
                 # above is type definition
-                evt.publisher = publisher 
+                e = evt.__get__(obj, type(obj)) 
+                e.publisher = publisher 
                 evt._remote_info.socket_address = publisher.socket_address
-            for prop in obj.properties.descriptors.values():
-                if prop.observable:
-                    assert isinstance(prop._observable_event, Event), "observable event logic error in event_publisher set"
-                    prop._observable_event.publisher = publisher 
-                    prop._observable_event._remote_info.socket_address = publisher.socket_address
-            if (hasattr(obj, 'state_machine') and isinstance(obj.state_machine, StateMachine) and 
-                        obj.state_machine.state_change_event is not None):                
-                obj.state_machine.state_change_event.publisher = publisher 
-                obj.state_machine.state_change_event._remote_info.socket_address = publisher.socket_address
             for name, subobj in inspect._getmembers(obj, lambda o: isinstance(o, Thing), getattr_without_descriptor_read):
                 if name == '_owner':
                     continue 
@@ -443,7 +432,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         """
         organised postman collection for this object
         """
-        from .api_platform_utils import postman_collection
+        from .api_platforms import postman_collection
         return postman_collection.build(instance=self, 
                     domain_prefix=domain_prefix if domain_prefix is not None else self._object_info.http_server)
     

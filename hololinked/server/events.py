@@ -1,10 +1,13 @@
 import typing 
-import threading 
+import threading
+import jsonschema
 
-from ..param import Parameterized
+from ..param.parameterized import Parameterized, ParameterizedMetaclass
+from .constants import JSON 
+from .config import global_config
 from .zmq_message_brokers import EventPublisher
-from .data_classes import ServerSentEvent
-
+from .dataklasses import ServerSentEvent
+from .security_definitions import BaseSecurityDefinition
 
 
 class Event:
@@ -19,27 +22,65 @@ class Event:
         name of the event, specified name may contain dashes and can be used on client side to subscribe to this event.
     URL_path: str
         URL path of the event if a HTTP server is used. only GET HTTP methods are supported. 
+    doc: str
+        docstring for the event
+    schema: JSON
+        schema of the event, if the event is JSON complaint. HTTP clients can validate the data with this schema. There
+        is no validation on server side.
+    security: Any
+        security necessary to access this event.
     """
+    __slots__ = ['name', '_internal_name', '_remote_info', 'doc', 'schema', 'URL_path', 'security', 'label']
 
-    def __init__(self, name : str, URL_path : typing.Optional[str] = None) -> None:
+
+    def __init__(self, name : str, URL_path : typing.Optional[str] = None, doc : typing.Optional[str] = None, 
+                schema : typing.Optional[JSON] = None, security : typing.Optional[BaseSecurityDefinition] = None,
+                label : typing.Optional[str] = None) -> None:
         self.name = name 
-        # self.name_bytes = bytes(name, encoding = 'utf-8')
-        if URL_path is not None and not URL_path.startswith('/'):
-            raise ValueError(f"URL_path should start with '/', please add '/' before '{URL_path}'")
-        self.URL_path = URL_path or '/' + name
-        self._unique_identifier = None # type: typing.Optional[str]
-        self._owner = None  # type: typing.Optional[Parameterized]
-        self._remote_info = None # type: typing.Optional[ServerSentEvent]
-        self._publisher = None
-        # above two attributes are not really optional, they are set later. 
+        self.doc = doc 
+        if global_config.validate_schemas and schema:
+            jsonschema.Draft7Validator.check_schema(schema)
+        self.schema = schema
+        self.URL_path = URL_path
+        self.security = security
+        self.label = label
+        self._internal_name = f"{self.name}-dispatcher"
+        self._remote_info = ServerSentEvent(name=name)
+      
+    
+    @typing.overload
+    def __get__(self, obj : ParameterizedMetaclass, objtype : typing.Optional[type] = None) -> "EventDispatcher":
+        ...
 
-    @property
-    def owner(self):
-        """
-        Event owning ``Thing`` object.
-        """
-        return self._owner        
+    def __get__(self, obj : ParameterizedMetaclass, objtype : typing.Optional[type] = None) -> "EventDispatcher":
+        try:
+            return obj.__dict__[self._internal_name]
+        except KeyError:
+            raise AttributeError("Event object not yet initialized, please dont access now." +
+                                " Access after Thing is running")
         
+    def __set__(self, obj : Parameterized, value : typing.Any) -> None:
+        if isinstance(value, EventDispatcher):
+            if not obj.__dict__.get(self._internal_name, None):
+                obj.__dict__[self._internal_name] = value 
+            else:
+                raise AttributeError(f"Event object already assigned for {self.name}. Cannot reassign.") 
+                # may be allowing to reassign is not a bad idea 
+        else:
+            raise TypeError(f"Supply EventDispatcher object to event {self.name}, not type {type(value)}.")
+
+
+class EventDispatcher:
+    """
+    The actual worker which pushes the event. The separation is necessary between ``Event`` and 
+    ``EventDispatcher`` to allow class level definitions of the ``Event`` 
+    """
+    def __init__(self, name : str, unique_identifier : str, owner_inst : Parameterized) -> None:
+        self._name = name
+        self._unique_identifier = bytes(unique_identifier, encoding='utf-8') 
+        self._owner_inst = owner_inst
+        self._publisher = None
+
     @property
     def publisher(self) -> "EventPublisher": 
         """

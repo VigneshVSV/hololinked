@@ -1,13 +1,16 @@
+import inspect
 import typing 
 import socket
 from dataclasses import dataclass, field
 
-from .data_classes import RemoteResourceInfoValidator
-from .properties import *
+
 from .constants import JSONSerializable
-from .thing import Thing
-from .properties import Property
+from .utils import getattr_without_descriptor_read
+from .dataklasses import RemoteResourceInfoValidator
 from .events import Event
+from .properties import *
+from .property import Property
+from .thing import Thing
 
 
 
@@ -46,7 +49,8 @@ class Schema:
             line = line.lstrip('\n').rstrip('\n')
             line = line.lstrip('\t').rstrip('\t')
             line = line.lstrip('\n').rstrip('\n')
-            line = line.lstrip().rstrip()              
+            line = line.lstrip().rstrip()   
+            line = ' ' + line # add space to left in case of new line            
             final_doc.append(line)
         return ''.join(final_doc)
     
@@ -558,7 +562,6 @@ class Form(Schema):
         super().__init__()
 
     
-    
 @dataclass
 class ActionAffordance(InteractionAffordance):
     """
@@ -618,6 +621,12 @@ class EventAffordance(InteractionAffordance):
         super().__init__()
     
     def build(self, event : Event, owner : Thing, authority : str) -> None:
+        self.title = event.label or event.name 
+        if event.doc:
+            self.description = event.doc
+        if event.schema:
+            self.data = event.schema
+
         form = Form()
         form.op = "subscribeevent"
         form.href = f"{authority}{owner._full_URL_path_prefix}{event.URL_path}"
@@ -738,8 +747,11 @@ class ThingDescription(Schema):
                 self.actions[resource.obj_name] = ActionAffordance.generate_schema(resource.obj, 
                                                                             self.instance, self.authority)
         # Events
-        for name, resource in vars(self.instance).items(): 
+        for name, resource in inspect._getmembers(self.instance, lambda o : isinstance(o, Event),
+                                                getattr_without_descriptor_read):
             if not isinstance(resource, Event):
+                continue
+            if '/change-event' in resource.URL_path:
                 continue
             self.events[name] = EventAffordance.generate_schema(resource, self.instance, self.authority)
     
