@@ -367,6 +367,8 @@ class Parameter(metaclass=ParameterMetaclass):
         class's value (default).
         """        
         if obj is None:
+            if objtype:
+                return objtype.__dict__.get(self._internal_name, self.default)
             return self 
         if self.fget is not None:     
             return self.fget(obj) 
@@ -399,7 +401,7 @@ class Parameter(metaclass=ParameterMetaclass):
         item in a list).
         """
         if self.readonly:
-            raise_TypeError("Read-only parameter cannot be set/modified.", self)
+            raise_ValueError("Read-only parameter cannot be set/modified.", self)
         
         value = self.validate_and_adapt(value)
 
@@ -410,7 +412,7 @@ class Parameter(metaclass=ParameterMetaclass):
             old = None
             if (obj.__dict__.get(self._internal_name, NotImplemented) != NotImplemented) or self.default is not None: 
                 # Dont even entertain any type of setting, even if its the same value
-                raise_TypeError("Constant parameter cannot be modified.", self)
+                raise_ValueError("Constant parameter cannot be modified.", self)
         else:
             old = obj.__dict__.get(self._internal_name, self.default)
 
