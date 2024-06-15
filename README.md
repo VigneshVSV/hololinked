@@ -18,7 +18,7 @@ Or, clone the repository and install in develop mode `pip install -e .` for conv
 
 ### Usage/Quickstart
 
-`hololinked` is compatible with the [Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software. Each device or thing can be controlled systematically when their design in software is segregated into properties, actions and events. In object oriented terms for data acquisition:
+`hololinked` is compatible with the [Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software. Each device or thing can be controlled systematically when their design in software is segregated into properties, actions and events. In object oriented terms:
 - properties are validated get-set attributes of the class which may be used to model device settings, hold captured/computed data etc.
 - actions are methods which issue commands to the device or run arbitrary python logic. 
 - events can asynchronously communicate/push data to a client, like alarm messages, streaming captured data etc. 

@@ -2,8 +2,7 @@ import setuptools
 
 # read the contents of your README file
 from pathlib import Path
-this_directory = Path(__file__).parent
-long_description = (this_directory / "README.md").read_text()
+long_description = (Path(__file__).parent/"README.md").read_text()
 
 
 setuptools.setup(
@@ -47,7 +46,8 @@ setuptools.setup(
         "pyzmq>=25.1.0",
         "SQLAlchemy>=2.0.21",
         "SQLAlchemy_Utils>=0.41.1",
-        "tornado>=6.3.3"
+        "tornado>=6.3.3",
+        "jsonschema>=4.22.0"
     ],
     license="BSD-3-Clause",
     license_files=('license.txt', 'licenses/param-LICENSE.txt', 'licenses/pyro-LICENSE.txt'),

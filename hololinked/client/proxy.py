@@ -8,7 +8,7 @@ import uuid
 from ..server.config import global_config
 from ..server.constants import JSON, CommonRPC, ServerMessage, ResourceTypes, ZMQ_PROTOCOLS
 from ..server.serializers import BaseSerializer
-from ..server.data_classes import RPCResource, ServerSentEvent
+from ..server.dataklasses import RPCResource, ServerSentEvent
 from ..server.zmq_message_brokers import AsyncZMQClient, SyncZMQClient, EventConsumer, PROXY
 from ..server.schema_validators import BaseSchemaValidator
 

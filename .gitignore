@@ -10,7 +10,8 @@ old/
 doc/build
 doc/source/generated
 extra-packages 
-
+tests/
+# comment tests until good organisation comes about
 
 # vs-code 
 .vscode/
