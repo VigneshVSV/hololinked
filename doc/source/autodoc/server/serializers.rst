@@ -17,12 +17,6 @@ serializers
         :members:                                        
         :show-inheritance:
 
-.. collapse:: SerpentSerializer
-
-    .. autoclass:: hololinked.server.serializers.SerpentSerializer
-        :members:                                        
-        :show-inheritance:
-
 .. collapse:: PickleSerializer
 
     .. autoclass:: hololinked.server.serializers.PickleSerializer

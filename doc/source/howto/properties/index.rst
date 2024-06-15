@@ -8,11 +8,11 @@ for remote access due to limitations in using foreign attributes within the ``pr
 causes redundancy with implementation of ``hololinked.server.Property``, nevertheless, the term ``Property`` 
 (with capital 'P') is used to comply with the terminology of Web of Things. 
 
-.. .. toctree::
-..     :hidden:
-..     :maxdepth: 1
+.. toctree::
+    :hidden:
+    :maxdepth: 1
     
-..     arguments
+    arguments
 ..     extending
 
 Untyped/Custom typed Property 

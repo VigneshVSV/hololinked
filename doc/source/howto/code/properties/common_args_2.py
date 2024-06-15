@@ -1,4 +1,4 @@
-from hololinked.server import RemoteObject, RemoteParameter
+from hololinked.server import Thing, Property
 from enum import IntEnum
 
 
@@ -10,17 +10,18 @@ class ErrorCodes(IntEnum):
     IS_CANT_CLOSE_DEVICE = 4
 
     @classmethod
-    def json(self):
+    def json(cls):
         # code to code name - opposite of enum definition
-        return {value.value : name for name, value in vars(self).items() if isinstance(
-                                                                        value, self)}
+        return {
+            value.value : name for name, value in vars(cls).items() if isinstance(
+                                                                    value, cls)}
    
 
-class IDSCamera(RemoteObject):
+class IDSCamera(Thing):
     """
     Spectrometer example object 
     """
-    error_codes = RemoteParameter(readonly=True, default=ErrorCodes.json(), 
+    error_codes = Property(readonly=True, default=ErrorCodes.json(), 
                        class_member=True, 
                        doc="error codes raised by IDS library")
     

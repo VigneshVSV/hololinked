@@ -8,15 +8,15 @@
 
 .. automethod:: hololinked.server.thing.Thing.__init__
 
-.. attribute:: Thing.logger_remote_access
-    :type: Optional[bool] 
-
-    set False to prevent access of logs of logger remotely 
-
 .. attribute:: Thing.state_machine 
     :type: Optional[hololinked.server.state_machine.StateMachine]
 
     initialize state machine for controlling method/action execution and property writes
+
+.. attribute:: Thing.logger_remote_access
+    :type: Optional[bool] 
+
+    set False to prevent access of logs of logger remotely 
 
 .. attribute:: Thing.use_default_db
     :type: Optional[bool] 
