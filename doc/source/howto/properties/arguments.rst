@@ -9,7 +9,7 @@ Common arguments to all properties
 * ``constant`` (being ``True``), again makes the property read-only but can be set once if ``allow_None`` is ``True``. 
   This is useful the set the property once at ``__init__()`` but remain constant after that.
 
-.. literalinclude:: ../code/properties/common_arg_1.py
+.. literalinclude:: ../code/properties/common_args_1.py
     :language: python
     :linenos:
 
@@ -36,7 +36,7 @@ If ``class_member`` is True, the value is set in the class' ``__dict__`` instead
 Custom getter-setter-deleter are not compatible with this option currently. ``class_member`` takes precedence over fget-fset-fdel, 
 which in turn has precedence over ``default``.
 
-.. literalinclude:: ../code/properties/common_arg_2.py
+.. literalinclude:: ../code/properties/common_args_2.py
     :language: python
     :linenos:
     :lines: 5-29
