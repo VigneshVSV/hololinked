@@ -23,25 +23,38 @@ in a GUI for example. `hololinked-portal <https://github.com/VigneshVSV/hololink
 ``default``, ``class_member``, ``fget``, ``fset`` & ``fdel``
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-To provide a getter-setter (& deleter) method is optional. If none given, value is stored inside 
-the instance's ``__dict__`` under the name `<property name given>_param_value`. If no such 
-value was stored originally because a value assignment was never called on the property, say during 
-``__init__``, ``default`` is returned.  
+To provide a getter-setter (& deleter) method is optional. If none given, when the property is set/written, the value 
+is stored inside the instance's ``__dict__`` under the name `<property name given>_param_value` 
+(for example, ``serial_number_param_value`` for ``serial_number``). In layman's terms, 
+``__dict__`` is the internal map where the attributes of the object are stored by python. If no such value was stored 
+originally because a value assignment was never called on the property, ``default`` is returned.  
 
 If a setter/deleter is given, getter is mandatory. In this case, ``default`` is also ignored & the getter is 
-always executed. If default is desirable, one has to return it manually in the getter method by 
-accessing the property descriptor object directly. 
+always executed. 
+.. If default is desirable, one has to return it manually in the getter method by 
+.. accessing the property descriptor object directly. 
 
-If ``class_member`` is True, the value is set in the class' ``__dict__`` instead of instance's ``__dict__``. 
+.. literalinclude:: ../code/properties/common_args_2.py
+    :language: python
+    :linenos:
+    :start-after: # frame-rate-start
+    :end-before: # frame-rate-end
+
+
+If ``class_member`` is True, the value is set in the class' ``__dict__`` (i.e. becomes a class attribute) 
+instead of instance's ``__dict__`` (instance's attribute). 
 Custom getter-setter-deleter are not compatible with this option currently. ``class_member`` takes precedence over fget-fset-fdel, 
 which in turn has precedence over ``default``.
 
 .. literalinclude:: ../code/properties/common_args_2.py
     :language: python
     :linenos:
-    :lines: 5-29
+    :start-after: # error-codes-start
+    :end-before: # error-codes-end
 
 ``class_member`` can still be used with a default value if there is no custom fget-fset-fdel. 
+
+
 
 ``remote``
 ++++++++++

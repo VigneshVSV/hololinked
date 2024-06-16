@@ -8,7 +8,7 @@ class OceanOpticsSpectrometer(Thing):
     """
 
     serial_number = String(default="USB2+H15897", allow_None=False, readonly=True, 
-                        doc="serial number of the spectrometer (string)"
+                        doc="serial number of the spectrometer (string)",
                         label="serial number") # type: str
 
     integration_time = Number(default=1000, bounds=(0.001, None), 
@@ -38,7 +38,12 @@ class OceanOpticsSpectrometer(Thing):
         # readonly = True
         self.serial_number = serial_number # NOT OK - raises ValueError
         
-        # constant = True, constant = True mandatorily needs allow_None = True
+        # constant = True, mandatorily needs allow_None = True
         self.model = None # OK - constant accepts None when initially None
         self.model = 'USB2000+' # OK - can be set once 
         self.model = None # NOT OK - raises ValueError
+
+
+if __name__ == '__main__':
+    spectrometer = OceanOpticsSpectrometer(instance_name='spectrometer1', 
+                                    serial_number='S14155')
