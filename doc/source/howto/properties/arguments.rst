@@ -17,7 +17,7 @@ Common arguments to all properties
 +++++++++++++++++++++
 
 ``doc`` allows clients to fetch a docstring for the property. ``label`` can be used to show the property 
-in a GUI for example. hololinked-portal uses these two values in the same fashion. 
+in a GUI for example. `hololinked-portal <https://github.com/VigneshVSV/hololinked-portal>`_ uses these two values in the same fashion. 
 
 
 ``default``, ``class_member``, ``fget``, ``fset`` & ``fdel``
