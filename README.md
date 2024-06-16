@@ -1,4 +1,4 @@
-# hololinked
+# hololinked - Pythonic SCADA/IoT
 
 ### Description
 
