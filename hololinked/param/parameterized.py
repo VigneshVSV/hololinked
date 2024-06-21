@@ -366,9 +366,9 @@ class Parameter(metaclass=ParameterMetaclass):
         instance's value, if one has been set - otherwise produce the
         class's value (default).
         """        
+        if self.class_member:
+            return objtype.__dict__.get(self._internal_name, self.default)
         if obj is None:
-            if objtype:
-                return objtype.__dict__.get(self._internal_name, self.default)
             return self 
         if self.fget is not None:     
             return self.fget(obj) 
