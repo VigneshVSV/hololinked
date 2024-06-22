@@ -1,2 +1,0 @@
-Noteworthy Benchmarks
-=====================
