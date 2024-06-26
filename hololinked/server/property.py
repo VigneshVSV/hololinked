@@ -172,7 +172,7 @@ class Property(Parameter):
                     label=label, per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default,
                     class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence)
         self._remote_info = None
-        self._observable_event = None # type: typing.Optional[Event]
+        self._observable_event = None # type: Event
         self.db_persist = db_persist
         self.db_init    = db_init
         self.db_commit  = db_commit
@@ -219,13 +219,14 @@ class Property(Parameter):
     
     def _push_change_event_if_needed(self, obj, value : typing.Any) -> None:
         if self.observable and hasattr(obj, 'event_publisher') and self._observable_event is not None:
+            event_dispatcher = getattr(obj, self._observable_event.name, None)
             old_value = obj.__dict__.get(f'{self._internal_name}_old_value', NotImplemented)
             obj.__dict__[f'{self._internal_name}_old_value'] = value 
             if self.fcomparator:
                 if self.fcomparator(old_value, value):
-                    self._observable_event.push(value)               
+                    event_dispatcher.push(value)               
             elif old_value != value:
-                self._observable_event.push(value)
+                event_dispatcher.push(value)
 
     def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass) -> typing.Any:
         read_value = super().__get__(obj, objtype)

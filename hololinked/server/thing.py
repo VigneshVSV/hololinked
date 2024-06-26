@@ -108,7 +108,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
     
     # remote paramerters
     state = String(default=None, allow_None=True, URL_path='/state', readonly=True, observable=True, 
-                fget= lambda self : self.state_machine.current_state if hasattr(self, 'state_machine') else None,  
+                fget=lambda self : self.state_machine.current_state if hasattr(self, 'state_machine') else None,  
                 doc="current state machine's state if state machine present, None indicates absence of state machine.") #type: typing.Optional[str]
     
     httpserver_resources = Property(readonly=True, URL_path='/resources/http-server', 

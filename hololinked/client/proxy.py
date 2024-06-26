@@ -54,7 +54,8 @@ class ObjectProxy:
         '__annotations__',
         '_zmq_client', '_async_zmq_client', '_allow_foreign_attributes',
         'identity', 'instance_name', 'logger', 'execution_timeout', 'invokation_timeout', 
-        '_execution_timeout', '_invokation_timeout', '_events', '_noblock_messages'
+        '_execution_timeout', '_invokation_timeout', '_events', '_noblock_messages',
+        '_schema_validator'
     ])
 
     def __init__(self, instance_name : str, protocol : str = ZMQ_PROTOCOLS.IPC, invokation_timeout : float = 5, 
@@ -72,11 +73,11 @@ class ObjectProxy:
         # bothers mainly about __setattr__ and _getattr__
         self._async_zmq_client = None    
         self._zmq_client = SyncZMQClient(instance_name, self.identity, client_type=PROXY, protocol=protocol, 
-                                            rpc_serializer=kwargs.get('serializer', None), handshake=load_remote_object,
+                                            zmq_serializer=kwargs.get('serializer', None), handshake=load_remote_object,
                                             logger=self.logger, **kwargs)
         if kwargs.get("async_mixin", False):
             self._async_zmq_client = AsyncZMQClient(instance_name, self.identity + '|async', client_type=PROXY, protocol=protocol, 
-                                            rpc_serializer=kwargs.get('serializer', None), handshake=load_remote_object,
+                                            zmq_serializer=kwargs.get('serializer', None), handshake=load_remote_object,
                                             logger=self.logger, **kwargs)
         if load_remote_object:
             self.load_remote_object()
@@ -543,7 +544,7 @@ class ObjectProxy:
             elif data.what == ResourceTypes.EVENT:
                 assert isinstance(data, ServerSentEvent)
                 event = _Event(self._zmq_client, data.name, data.obj_name, data.unique_identifier, data.socket_address, 
-                            serializer=self._zmq_client.rpc_serializer, logger=self.logger)
+                            serializer=self._zmq_client.zmq_serializer, logger=self.logger)
                 _add_event(self, event, data)
                 self.__dict__[data.name] = event 
 
@@ -759,6 +760,7 @@ class _Event:
         self._callbacks = None 
         self._serializer = serializer
         self._logger = logger 
+        self._subscribed = False
 
     def add_callbacks(self, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable]) -> None:
         if not self._callbacks:
@@ -772,7 +774,7 @@ class _Event:
                     thread_callbacks : bool = False):
         self._event_consumer = EventConsumer(self._unique_identifier, self._socket_address, 
                                 f"{self._name}|RPCEvent|{uuid.uuid4()}", b'PROXY',
-                                rpc_serializer=self._serializer, logger=self._logger)
+                                zmq_serializer=self._serializer, logger=self._logger)
         self.add_callbacks(callbacks) 
         self._subscribed = True
         self._thread_callbacks = thread_callbacks

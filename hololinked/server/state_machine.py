@@ -176,7 +176,7 @@ class StateMachine:
             previous_state = self._state
             self._state = self._get_machine_compliant_state(value)
             if push_event and self.push_state_change_event and hasattr(self.owner, 'event_publisher'):
-                self.owner.state._observable_event.__get__(self.owner).push(value)
+                self.owner.state # just acces to trigger the observable event
             if skip_callbacks:
                 return 
             if previous_state in self.on_exit:

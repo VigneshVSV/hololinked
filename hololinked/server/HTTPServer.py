@@ -13,7 +13,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 # from tornado_http2.server import Server as TornadoHTTP2Server 
 from ..param import Parameterized
 from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector, TypedList, String)
-from .constants import CommonRPC, HTTPServerTypes, ResourceTypes, ServerMessage
+from .constants import ZMQ_PROTOCOLS, CommonRPC, HTTPServerTypes, ResourceTypes, ServerMessage
 from .utils import get_IP_from_interface
 from .dataklasses import HTTPResource, ServerSentEvent
 from .utils import get_default_logger, run_coro_sync
@@ -79,7 +79,8 @@ class HTTPServer(Parameterized):
                 host : typing.Optional[str] = None, logger : typing.Optional[logging.Logger] = None, log_level : int = logging.INFO, 
                 serializer : typing.Optional[JSONSerializer] = None, ssl_context : typing.Optional[ssl.SSLContext] = None, 
                 schema_validator : typing.Optional[BaseSchemaValidator] = JsonSchemaValidator,
-                certfile : str = None, keyfile : str = None, # protocol_version : int = 1, network_interface : str = 'Ethernet', 
+                certfile : str = None, keyfile : str = None, 
+                # protocol_version : int = 1, network_interface : str = 'Ethernet', 
                 allowed_clients : typing.Optional[typing.Union[str, typing.Iterable[str]]] = None,   
                 **kwargs) -> None:
         """
@@ -132,9 +133,9 @@ class HTTPServer(Parameterized):
         )
         self._type = HTTPServerTypes.THING_SERVER
         self._lost_things = dict() # see update_router_with_thing
-        # self._zmq_protocol = zmq_protocol
-        # self._zmq_socket_context = context
-        # self._zmq_event_context = context
+        self._zmq_protocol = ZMQ_PROTOCOLS.IPC
+        self._zmq_socket_context = None 
+        self._zmq_event_context = None
  
     @property
     def all_ok(self) -> bool:
@@ -151,8 +152,10 @@ class HTTPServer(Parameterized):
         
         self.zmq_client_pool = MessageMappedZMQClientPool(self.things, identity=self._IP, 
                                                     deserialize_server_messages=False, handshake=False,
-                                                    http_serializer=self.serializer, context=self._zmq_socket_context,
-                                                    protocol=self._zmq_protocol)
+                                                    http_serializer=self.serializer, 
+                                                    context=self._zmq_socket_context,
+                                                    protocol=self._zmq_protocol
+                                                )
     
         event_loop = asyncio.get_event_loop()
         event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))

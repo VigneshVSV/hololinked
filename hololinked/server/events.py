@@ -41,7 +41,7 @@ class Event:
         if global_config.validate_schemas and schema:
             jsonschema.Draft7Validator.check_schema(schema)
         self.schema = schema
-        self.URL_path = URL_path
+        self.URL_path = URL_path or f'/{name}'
         self.security = security
         self.label = label
         self._internal_name = f"{self.name}-dispatcher"
