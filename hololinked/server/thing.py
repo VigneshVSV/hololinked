@@ -7,7 +7,7 @@ import warnings
 import zmq
 
 from ..param.parameterized import Parameterized, ParameterizedMetaclass 
-from .constants import (LOGLEVEL, ZMQ_PROTOCOLS, HTTP_METHODS)
+from .constants import (JSON, LOGLEVEL, ZMQ_PROTOCOLS, HTTP_METHODS)
 from .database import ThingDB, ThingInformation
 from .serializers import _get_serializer_from_user_given_options, BaseSerializer, JSONSerializer
 from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
@@ -357,7 +357,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
             setattr(self, name, value)
 
     @action(URL_path='/properties', http_method=HTTP_METHODS.POST)
-    def _add_property(self, name : str, prop : Property) -> None:
+    def _add_property(self, name : str, prop : JSON) -> None:
         """
         add a property to the object
         
@@ -368,6 +368,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         prop: Property
             property object
         """
+        prop = Property(**prop)
         self.properties.add(name, prop)
         self._prepare_resources()
 
@@ -381,12 +382,12 @@ class Thing(Parameterized, metaclass=ThingMeta):
         try:
             return self._event_publisher 
         except AttributeError:
-            raise AttributeError("event publisher not yet created.") from None
+            raise AttributeError("event publisher not yet created") from None
                 
     @event_publisher.setter
     def event_publisher(self, value : EventPublisher) -> None:
         if hasattr(self, '_event_publisher'):
-            raise AttributeError("Can set event publisher only once.")
+            raise AttributeError("Can set event publisher only once")
         
         def recusively_set_event_publisher(obj : Thing, publisher : EventPublisher) -> None:
             for name, evt in inspect._getmembers(obj, lambda o: isinstance(o, Event), getattr_without_descriptor_read):

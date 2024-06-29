@@ -51,7 +51,9 @@ class RemoteResourceInfoValidator:
     argument_schema: JSON, default None
         JSON schema validations for arguments of a callable. Assumption is therefore arguments will be JSON complaint. 
     return_value_schema: JSON, default None 
-        schema for return value of a callable
+        schema for return value of a callable. Assumption is therefore return value will be JSON complaint.
+    create_task: bool, default True
+        default for async methods/actions 
     """
 
     URL_path = String(default=USE_OBJECT_NAME,
@@ -64,12 +66,12 @@ class RemoteResourceInfoValidator:
                     doc="the unbound object like the unbound method")
     obj_name = String(default=USE_OBJECT_NAME, 
                     doc="the name of the object which will be supplied to the ``ObjectProxy`` class to populate its own namespace.") # type: str
-    iscoroutine = Boolean(default=False,
-                    doc="whether the callable should be awaited") # type: bool
     isaction = Boolean(default=False,
                     doc="True for a method or function or callable") # type: bool
     isproperty = Boolean(default=False,
                     doc="True for a property") # type: bool
+    iscoroutine = Boolean(default=False,
+                    doc="whether the callable should be awaited") # type: bool
     request_as_argument = Boolean(default=False,
                     doc="if True, http/RPC request object will be passed as an argument to the callable.") # type: bool
     argument_schema = ClassSelector(default=None, allow_None=True, class_=dict, 
@@ -78,7 +80,7 @@ class RemoteResourceInfoValidator:
     return_value_schema = ClassSelector(default=None, allow_None=True, class_=dict, 
                     # due to schema validation, this has to be a dict, and not a special dict like TypedDict
                     doc="schema for return value of a callable")
-    create_task = Boolean(default=False, 
+    create_task = Boolean(default=True, 
                         doc="should a coroutine be tasked or run in the same loop?") # type: bool
  
     def __init__(self, **kwargs) -> None:

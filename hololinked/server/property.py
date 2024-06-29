@@ -41,11 +41,11 @@ class Property(Parameter):
         allowed. 
 
     URL_path: str, uses object name by default
-        resource locator under which the attribute is accessible through HTTP. when value is supplied, the variable name 
+        resource locator under which the attribute is accessible through HTTP. When not given, the variable name 
         is used and underscores are replaced with dash
 
     http_method: tuple, default ("GET", "PUT", "DELETE")
-        http methods for read, write, delete respectively 
+        http methods for read, write and delete respectively 
 
     observable: bool, default False
         set to True to receive change events. Supply a function if interested to evaluate on what conditions the change 
@@ -235,7 +235,8 @@ class Property(Parameter):
     
     def comparator(self, func : typing.Callable) -> typing.Callable:
         """
-        Register a getter method by using this as a decorator.
+        Register a comparator method by using this as a decorator to decide when to push
+        a change event.
         """
         self.fcomparator = func 
         return func
@@ -339,21 +340,7 @@ class ClassProperties(ClassParameters):
                 info[param.name][field] = state.get(field, None) 
         return info 
 
-    @property
-    def visualization_parameters(self):
-        from ..webdashboard.visualization_parameters import VisualizationParameter
-        try:
-            return getattr(self.owner_cls, f'_{self.owner_cls.__name__}_visualization_params')
-        except AttributeError: 
-            paramdict = super().descriptors
-            visual_params = {}
-            for name, desc in paramdict.items():
-                if isinstance(desc, VisualizationParameter):
-                    visual_params[name] = desc
-            setattr(self.owner_cls, f'_{self.owner_cls.__name__}_visualization_params', visual_params)
-        return getattr(self.owner_cls, f'_{self.owner_cls.__name__}_visualization_params')
-
-
+    
   
 __all__ = [
     Property.__name__
