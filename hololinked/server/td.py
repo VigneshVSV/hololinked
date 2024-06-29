@@ -598,7 +598,6 @@ class ActionAffordance(InteractionAffordance):
         self.title = action.__name__
         if action.__doc__:
             self.description = self.format_doc(action.__doc__)
-        self.safe = True 
         if (hasattr(owner, 'state_machine') and owner.state_machine is not None and 
                 owner.state_machine.has_object(action._remote_info.obj)):
             self.idempotent = False 

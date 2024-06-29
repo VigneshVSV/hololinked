@@ -45,15 +45,6 @@ class RemoteResourceInfoValidator:
         True for a method or function or callable
     isproperty : bool, default False
         True for a property
-    request_as_argument : bool, default False
-        if True, http/RPC request object will be passed as an argument to the callable. 
-        The user is warned to not use this generally. 
-    argument_schema: JSON, default None
-        JSON schema validations for arguments of a callable. Assumption is therefore arguments will be JSON complaint. 
-    return_value_schema: JSON, default None 
-        schema for return value of a callable. Assumption is therefore return value will be JSON complaint.
-    create_task: bool, default True
-        default for async methods/actions 
     """
 
     URL_path = String(default=USE_OBJECT_NAME,
@@ -72,17 +63,7 @@ class RemoteResourceInfoValidator:
                     doc="True for a property") # type: bool
     iscoroutine = Boolean(default=False,
                     doc="whether the callable should be awaited") # type: bool
-    request_as_argument = Boolean(default=False,
-                    doc="if True, http/RPC request object will be passed as an argument to the callable.") # type: bool
-    argument_schema = ClassSelector(default=None, allow_None=True, class_=dict, 
-                    # due to schema validation, this has to be a dict, and not a special dict like TypedDict
-                    doc="JSON schema validations for arguments of a callable")
-    return_value_schema = ClassSelector(default=None, allow_None=True, class_=dict, 
-                    # due to schema validation, this has to be a dict, and not a special dict like TypedDict
-                    doc="schema for return value of a callable")
-    create_task = Boolean(default=True, 
-                        doc="should a coroutine be tasked or run in the same loop?") # type: bool
- 
+    
     def __init__(self, **kwargs) -> None:
         """   
         No full-scale checks for unknown keyword arguments as the class 
@@ -96,6 +77,22 @@ class RemoteResourceInfoValidator:
         for key, value in kwargs.items(): 
             setattr(self, key, value)
     
+
+class ActionRemoteResourceInfoValidator(RemoteResourceInfoValidator):
+    """
+    Attributes
+    ----------
+    request_as_argument : bool, default False
+        if True, http/RPC request object will be passed as an argument to the callable. 
+        The user is warned to not use this generally. 
+    argument_schema: JSON, default None
+        JSON schema validations for arguments of a callable. Assumption is therefore arguments will be JSON complaint. 
+    return_value_schema: JSON, default None 
+        schema for return value of a callable. Assumption is therefore return value will be JSON complaint.
+    create_task: bool, default True
+        default for async methods/actions 
+    """
+
     def to_dataclass(self, obj : typing.Any = None, bound_obj : typing.Any = None) -> "RemoteResource":
         """
         For a plain, faster and uncomplicated access, a dataclass in created & used by the

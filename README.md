@@ -169,13 +169,10 @@ In WoT Terminology, again, such a method becomes specified as an action affordan
             }
         },
         "additionalProperties": false
-    },
-    "safe": true,
-    "idempotent": false,
-    "synchronous": true
+    }
 },
 ```
-> input and output schema are optional and discussed later
+> input and output schema ("input" field above which describes the argument type) are optional and discussed later
 
 #### Defining and pushing events
 
@@ -245,6 +242,7 @@ In WoT Terminology, such an event becomes specified as an event affordance with 
     }
 }
 ```
+> data schema ("data" field above which describes the event payload) are optional and discussed later
 
 Although the code is the very familiar & age-old RPC server style, one can directly specify HTTP methods and URL path for each property, action and event. A configurable HTTP Server is already available (from `hololinked.server.HTTPServer`) which redirects HTTP requests to the object according to the specified HTTP API on the properties, actions and events. To plug in a HTTP server: 
 
