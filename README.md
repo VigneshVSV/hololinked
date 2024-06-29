@@ -1,29 +1,30 @@
-# hololinked - Pythonic SCADA/IoT
+# hololinked - Pythonic Supervisory Control & Data Acquisition / Internet of Things
 
 ### Description
 
-For beginners - `hololinked` is a server side pythonic package suited for instrumentation control and data acquisition over network, especially with HTTP. If you have a requirement to control and capture data from your hardware/instrumentation remotely through your network, show the data in a web browser/dashboard, use IoT tools, provide a Qt-GUI or run automated scripts, hololinked can help. One can start small from a single device/single computer application, and if interested, move ahead to build a bigger system made of individual components. 
+For beginners - `hololinked` is a server side pythonic package suited for instrumentation control and data acquisition over network, especially with HTTP. If you have a requirement to control and capture data from your hardware/instrumentation remotely through your network, show the data in a browser/dashboard, provide a GUI or run automated scripts, `hololinked` can help. Even if one wishes to do hardware control/data-acquisition in a single computer or a small setup without networking concepts, one can still separate the concerns of the GUI and the other tools that interact with the device & the device itself.
 <br/> <br/>
-For those familiar with RPC & web development - `hololinked` is a ZeroMQ-based Object Oriented RPC toolkit with customizable HTTP end-points. 
-The main goal is to develop a pythonic & pure python modern package for instrumentation control and data acquisition through network (SCADA), along with "reasonable" HTTP support for web development.  
-
+For those familiar with RPC & web development - This package is an implementation of a ZeroMQ-based Object Oriented RPC with customizable HTTP end-points. A dual transport in both ZMQ and HTTP is provided to maximize flexibility in data type and serialization, although HTTP is preferred. Even through HTTP, the paradigm of working is HTTP-RPC only, to queue the commands issued to hardware. The flexibility in HTTP endpoints is to offer a choice of how the hardware looks on the network. If one is looking for an object oriented approach towards creating components within a control or data acquisition system, or an IoT device, one may consider this package. 
+ 
 [![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest) [![Maintainability](https://api.codeclimate.com/v1/badges/913f4daa2960b711670a/maintainability)](https://codeclimate.com/github/VigneshVSV/hololinked/maintainability) [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked)](https://pypistats.org/packages/hololinked)
 
 ### To Install
 
 From pip - ``pip install hololinked``
 
-Or, clone the repository and install in develop mode `pip install -e .` for convenience. The conda env ``hololinked.yml`` can also help. 
-
+Or, clone the repository (develop branch for latest codebase) and install `pip install .` / `pip install -e .`. The conda env ``hololinked.yml`` can also help to setup all dependencies. 
 
 ### Usage/Quickstart
 
-`hololinked` is compatible with the [Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software. Each device or thing can be controlled systematically when their design in software is segregated into properties, actions and events. In object oriented terms:
-- properties are validated get-set attributes of the class which may be used to model device settings, hold captured/computed data etc.
-- actions are methods which issue commands to the device or run arbitrary python logic. 
-- events can asynchronously communicate/push data to a client, like alarm messages, streaming captured data etc. 
+`hololinked` is compatible with the [Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software. 
+Each device or thing can be controlled systematically when their design in software is segregated into properties, actions and events. In object oriented terms:
+- the hardware is represented by a class 
+- properties are validated get-set attributes of the class which may be used to model hardware settings, hold captured/computed data or generic network accessible quantities
+- actions are methods which issue commands like connect/disconnect, execute a control routine, start/stop measurement, or run arbitray python logic. 
+- events can asynchronously communicate/push (arbitrary) data to a client (say, a GUI), like alarm messages, streaming measured quantities etc. 
 
-In this package, the base class which enables this classification is the `Thing` class. Any class that inherits the `Thing` class can instantiate properties, actions and events which become visible to a client in this segragated manner. For example, consider an optical spectrometer device, the following code is possible:
+The base class which enables this classification is the `Thing` class. Any class that inherits the `Thing` class can instantiate properties, actions and events which 
+become visible to a client in this segragated manner. For example, consider an optical spectrometer device, the following code is possible:
 
 #### Import Statements
 
@@ -164,12 +165,21 @@ In WoT Terminology, again, such a method becomes specified as an action affordan
             "contentType": "application/json"
         }
     ],
+    "input": {
+        "type": "object",
+        "properties": {
+            "serial_number": {
+                "type": "string"
+            }
+        },
+        "additionalProperties": false
+    },
     "safe": true,
     "idempotent": false,
     "synchronous": true
 },
-
 ```
+> input and output schema are optional and discussed later
 
 #### Defining and pushing events
 
@@ -179,17 +189,23 @@ create a named event using `Event` object that can push any arbitrary data:
 
     def __init__(self, instance_name, serial_number, **kwargs):
         super().__init__(instance_name=instance_name, serial_number=serial_number, **kwargs)
-        self.measurement_event = Event(name='intensity-measurement',
-                    URL_path='/intensity/measurement-event')) # only GET HTTP method possible for events
+       
+    intensity_measurement_event = Event(name='intensity-measurement-event', URL_path='/intensity/measurement-event',
+            doc="event generated on measurement of intensity, max 30 per second even if measurement is faster.",
+            schema=intensity_event_schema) # only GET HTTP method possible for events
+            # schema is optional and will be discussed later 
 
     def capture(self): # not an action, but a plain python method
         self._run = True 
+        last_time = time.time()
         while self._run:
             self._intensity = self.device.intensities(
                                         correct_dark_counts=True,
                                         correct_nonlinearity=True
                                     )
-            self.measurement_event.push(self._intensity.tolist())
+            if time.time() - last_time > 0.033: # restrict speed to avoid overloading
+                self.intensity_measurement_event.push(self._intensity.tolist())
+            last_time = time.time()
 
     @action(URL_path='/acquisition/start', http_method="POST")
     def start_acquisition(self):
@@ -205,17 +221,32 @@ In WoT Terminology, such an event becomes specified as an event affordance with 
 
 ```JSON
 "intensity_measurement_event": {
+    "title": "intensity-measurement-event",
+    "description": "event generated on measurement of intensity, max 30 per second even if measurement is faster.",
     "forms": [
         {
-            "href": "https://example.com/spectrometer/intensity/measurement-event",
-            "subprotocol": "sse",
-            "op": "subscribeevent",
-            "htv:methodName": "GET",
-            "contentType": "text/event-stream"
+          "href": "https://example.com/spectrometer/intensity/measurement-event",
+          "subprotocol": "sse",
+          "op": "subscribeevent",
+          "htv:methodName": "GET",
+          "contentType": "text/plain"
         }
-    ]
+    ],
+    "data": {
+        "type": "object",
+        "properties": {
+            "value": {
+                "type": "array",
+                "items": {
+                    "type": "number"
+                }
+            },
+            "timestamp": {
+                "type": "string"
+            }
+        }
+    }
 }
-
 ```
 
 Although the code is the very familiar & age-old RPC server style, one can directly specify HTTP methods and URL path for each property, action and event. A configurable HTTP Server is already available (from `hololinked.server.HTTPServer`) which redirects HTTP requests to the object according to the specified HTTP API on the properties, actions and events. To plug in a HTTP server: 
@@ -254,27 +285,27 @@ The intention behind specifying HTTP URL paths and methods directly on object's 
 - or, find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events, yet appeals deeply to the object oriented python world. 
 
 See a list of currently supported features [below](#currently-supported). <br/> <br/>
-Ultimately, as expected, the redirection from the HTTP side to the object is mediated by ZeroMQ which implements the fully fledged RPC server that queues all the HTTP requests to execute them one-by-one on the hardware/object. The HTTP server can also communicate with the RPC server over ZeroMQ's INPROC (for the non-expert = multithreaded applications, at least in python) or IPC (for the non-expert = multiprocess applications) transport methods. In the example above, IPC is used by default. There is no need for yet another TCP from HTTP to TCP to ZeroMQ transport athough this is also supported. <br/> <br/>
-Serialization-Deserialization overheads are also already reduced. For example, when pushing an event from the object which gets automatically tunneled as a HTTP SSE or returning a reply for an action from the object, there is no JSON deserialization-serialization overhead when the message passes through the HTTP server. The message is serialized once on the object side but passes transparently through the HTTP server.     
-
-One may use the HTTP API according to one's beliefs (including letting the package auto-generate it), although it is mainly intended for web development and cross platform clients like the interoperable [node-wot](https://github.com/eclipse-thingweb/node-wot) client. The node-wot client is the recommended Javascript client for this package as one can seamlessly plugin code developed from this package to the rest of the IoT tools, protocols & standardizations, or do scripting on the browser or nodeJS. Please check node-wot docs on how to consume [Thing Descriptions](https://www.w3.org/TR/wot-thing-description11) to call actions, read & write properties or subscribe to events. A Thing Description will be automatically generated if absent as shown in JSON examples above or can be supplied manually. 
-To know more about client side scripting, please look into the documentation [How-To](https://hololinked.readthedocs.io/en/latest/howto/index.html) section.
 
 ##### NOTE - The package is under active development. Contributors welcome. 
 
 - [example repository](https://github.com/VigneshVSV/hololinked-examples) - detailed examples for both clients and servers
 - [helper GUI](https://github.com/VigneshVSV/hololinked-portal) - view & interact with your object's methods, properties and events. 
 
+Ultimately, as expected, the redirection from the HTTP side to the object is mediated by ZeroMQ which implements the fully fledged RPC server that queues all the HTTP requests to execute them one-by-one on the hardware/object. The HTTP server can also communicate with the RPC server over ZeroMQ's INPROC (for the non-expert = multithreaded applications, at least in python) or IPC (for the non-expert = multiprocess applications) transport methods. In the example above, IPC is used by default. There is no need for yet another TCP from HTTP to TCP to ZeroMQ transport athough this is also supported. <br/> <br/>
+Serialization-Deserialization overheads are also already reduced. For example, when pushing an event from the object which gets automatically tunneled as a HTTP SSE or returning a reply for an action from the object, there is no JSON deserialization-serialization overhead when the message passes through the HTTP server. The message is serialized once on the object side but passes transparently through the HTTP server.     
+
+One may use the HTTP API according to one's beliefs (including letting the package auto-generate it), although it is mainly intended for web development and cross platform clients like the interoperable [node-wot](https://github.com/eclipse-thingweb/node-wot) client. The node-wot client is the recommended Javascript client for this package as one can seamlessly plugin code developed from this package to the rest of the IoT tools, protocols & standardizations, or do scripting on the browser or nodeJS. Please check node-wot docs on how to consume [Thing Descriptions](https://www.w3.org/TR/wot-thing-description11) to call actions, read & write properties or subscribe to events. A Thing Description will be automatically generated if absent as shown in JSON examples above or can be supplied manually. 
+To know more about client side scripting, please look into the documentation [How-To](https://hololinked.readthedocs.io/en/latest/howto/index.html) section.
+
 ### Currently Supported
 
 - indicate HTTP verb & URL path directly on object's methods, properties and events.
 - control method execution and property write with a custom finite state machine.
 - database (Postgres, MySQL, SQLite - based on SQLAlchemy) support for storing and loading properties  when object dies and restarts. 
-- auto-generate Thing Description for Web of Things applications (inaccurate, continuously developed but usable). 
+- auto-generate Thing Description for Web of Things applications. 
 - use serializer of your choice (except for HTTP) - MessagePack, JSON, pickle etc. & extend serialization to suit your requirement. HTTP Server will support only JSON serializer to maintain compatibility with node-wot. Default is JSON serializer based on msgspec.
 - asyncio compatible - async RPC server event-loop and async HTTP Server - write methods in async 
-- have flexibility in process architecture - run HTTP Server & python object in separate processes or in the same process, serve multiple objects with same HTTP server etc. 
-- choose from multiple ZeroMQ transport methods. 
+- choose from multiple ZeroMQ transport methods & run HTTP Server & python object in separate processes or in the same process, serve multiple objects with same HTTP server etc. 
 
 Again, please check examples or the code for explanations. Documentation is being activety improved. 
 
