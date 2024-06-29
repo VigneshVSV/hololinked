@@ -315,12 +315,15 @@ class EventLoop(RemoteObject):
                             instance.state_machine.current_state in resource.state):
                 # Note that because we actually find the resource within __prepare_instance__, its already bound
                 # and we dont have to separately bind it. 
+                if resource.schema_validator is not None:
+                    resource.schema_validator.validate(arguments)
+                
                 func = resource.obj
                 args = arguments.pop('__args__', tuple())
                 if resource.iscoroutine:
-                    return await func(*args, **arguments)
+                    return await func(*args, **arguments) # arguments then become kwargs
                 else:
-                    return func(*args, **arguments)
+                    return func(*args, **arguments) # arguments then become kwargs
             else: 
                 raise StateMachineError("Thing '{}' is in '{}' state, however command can be executed only in '{}' state".format(
                         instance_name, instance.state, resource.state))
@@ -339,7 +342,9 @@ class EventLoop(RemoteObject):
             elif action == "read":
                 return prop.__get__(owner_inst, type(owner_inst))             
             elif action == "delete":
-                return prop.deleter() # this may not be correct yet
+                if prop.fdel is not None:
+                    return prop.fdel() # this may not be correct yet
+                raise NotImplementedError("This property does not support deletion")
         raise NotImplementedError("Unimplemented execution path for Thing {} for instruction {}".format(instance_name, instruction_str))
 
 

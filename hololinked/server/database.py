@@ -162,7 +162,7 @@ class BaseAsyncDB(BaseDB):
         The database to open in the database server specified in config_file (see below)
     serializer: BaseSerializer
         The serializer to use for serializing and deserializing data (for example
-        property serializing before writing to database). Will be the same as rpc_serializer supplied to ``Thing``.
+        property serializing before writing to database). Will be the same as zmq_serializer supplied to ``Thing``.
     config_file: str
         absolute path to database server configuration file
     """
@@ -190,7 +190,7 @@ class BaseSyncDB(BaseDB):
     serializer: BaseSerializer
         The serializer to use for serializing and deserializing data (for example
         property serializing into database for storage). Will be the same as
-        rpc_serializer supplied to ``Thing``.
+        zmq_serializer supplied to ``Thing``.
     config_file: str
         absolute path to database server configuration file
     """

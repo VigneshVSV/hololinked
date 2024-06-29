@@ -33,7 +33,7 @@ class ResourceTypes(StrEnum):
 class CommonRPC(StrEnum):
     """some common RPC and their associated instructions for quick access by lower level code"""
 
-    RPC_RESOURCES = '/resources/object-proxy'
+    RPC_RESOURCES = '/resources/zmq-object-proxy'
     HTTP_RESOURCES = '/resources/http-server'
     OBJECT_INFO = '/object-info'
     PING = '/ping'

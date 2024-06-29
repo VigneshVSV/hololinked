@@ -28,7 +28,7 @@ class postman_collection:
     @classmethod
     def build(cls, instance, domain_prefix : str) -> Dict[str, Any]:
         from .thing import Thing
-        from .data_classes import HTTPResource, RemoteResource
+        from .dataklasses import HTTPResource, RemoteResource
         assert isinstance(instance, Thing) # type definition
         try:
             return instance._postman_collection

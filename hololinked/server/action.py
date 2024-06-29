@@ -1,16 +1,17 @@
 import typing
+import jsonschema
 from enum import Enum
 from types import FunctionType
 from inspect import iscoroutinefunction, getfullargspec
 
-from .data_classes import RemoteResourceInfoValidator
+from .dataklasses import RemoteResourceInfoValidator
 from .constants import USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, JSON
-
+from .config import global_config
 
    
 def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.POST, 
             state : typing.Optional[typing.Union[str, Enum]] = None, input_schema : typing.Optional[JSON] = None,
-            output_schema : typing.Optional[JSON] = None, create_task : bool = False) -> typing.Callable:
+            output_schema : typing.Optional[JSON] = None, create_task : bool = False, **kwargs) -> typing.Callable:
     """
     Use this function as a decorate on your methods to make them accessible remotely. For WoT, an action affordance schema 
     for the method is generated.
@@ -26,9 +27,15 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
         the action can be executed under any state.
     input_schema: JSON 
         schema for arguments to validate them.
-    output_schema : JSON 
+    output_schema: JSON 
         schema for return value, currently only used to inform clients which is supposed to validate on its won. 
-        
+    **kwargs:
+        safe: bool 
+            indicate in thing description if action is safe to execute
+        idempotent: bool 
+            indicate in thing description if action is idempotent (for example, allows HTTP client to cache return value)
+        synchronous: bool
+            indicate in thing description if action is synchronous ()
     Returns
     -------
     Callable
@@ -45,7 +52,7 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
             if hasattr(obj, '_remote_info') and not isinstance(obj._remote_info, RemoteResourceInfoValidator): 
                 raise NameError(
                     "variable name '_remote_info' reserved for hololinked package. ",  
-                    "Please do not assign this variable to any other object except hololinked.server.data_classes.RemoteResourceInfoValidator."
+                    "Please do not assign this variable to any other object except hololinked.server.dataklasses.RemoteResourceInfoValidator."
                 )             
             else:
                 obj._remote_info = RemoteResourceInfoValidator() 
@@ -85,6 +92,11 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
             obj._remote_info.argument_schema = input_schema
             obj._remote_info.return_value_schema = output_schema
             obj._remote_info.obj = original
+            obj._remote_info.create_task = create_task
+            
+            if global_config.validate_schemas and output_schema:
+                jsonschema.Draft7Validator.check_schema(output_schema)
+            
             return original
         else:
             raise TypeError(
