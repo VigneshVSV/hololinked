@@ -182,13 +182,11 @@ In WoT Terminology, again, such a method becomes specified as an action affordan
 create a named event using `Event` object that can push any arbitrary data:
 
 ```python
-
-    def __init__(self, instance_name, serial_number, **kwargs):
-        super().__init__(instance_name=instance_name, serial_number=serial_number, **kwargs)
-       
     # only GET HTTP method possible for events
-    intensity_measurement_event = Event(name='intensity-measurement-event', URL_path='/intensity/measurement-event',
-            doc="event generated on measurement of intensity, max 30 per second even if measurement is faster.",
+    intensity_measurement_event = Event(name='intensity-measurement-event', 
+            URL_path='/intensity/measurement-event',
+            doc="""event generated on measurement of intensity, 
+            max 30 per second even if measurement is faster.""",
             schema=intensity_event_schema) 
             # schema is optional and will be discussed later,
             # assume the intensity_event_schema variable is valid
