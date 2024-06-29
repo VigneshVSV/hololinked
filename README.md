@@ -110,9 +110,6 @@ Those familiar with Web of Things (WoT) terminology may note that these properti
 "integration_time": {
     "title": "integration_time",
     "description": "integration time of measurement in milliseconds",
-    "constant": false,
-    "readOnly": false,
-    "writeOnly": false,
     "type": "number",
     "forms": [{
             "href": "https://example.com/spectrometer/integration-time",
@@ -126,7 +123,6 @@ Those familiar with Web of Things (WoT) terminology may note that these properti
             "contentType": "application/json"
         }
     ],
-    "observable": false,
     "minimum": 0.001
 },
 ```
@@ -190,10 +186,13 @@ create a named event using `Event` object that can push any arbitrary data:
     def __init__(self, instance_name, serial_number, **kwargs):
         super().__init__(instance_name=instance_name, serial_number=serial_number, **kwargs)
        
+    # only GET HTTP method possible for events
     intensity_measurement_event = Event(name='intensity-measurement-event', URL_path='/intensity/measurement-event',
             doc="event generated on measurement of intensity, max 30 per second even if measurement is faster.",
-            schema=intensity_event_schema) # only GET HTTP method possible for events
-            # schema is optional and will be discussed later 
+            schema=intensity_event_schema) 
+            # schema is optional and will be discussed later,
+            # assume the intensity_event_schema variable is valid
+            
 
     def capture(self): # not an action, but a plain python method
         self._run = True 
@@ -281,15 +280,17 @@ Here one can see the use of `instance_name` and why it turns up in the URL path.
 
 The intention behind specifying HTTP URL paths and methods directly on object's members is to 
 - eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in queueing commands issued to instruments
-- or, write an additional boiler-plate HTTP to RPC bridge
+- or, write an additional boiler-plate HTTP to RPC bridge or HTTP request handler design to object oriented design bridge
 - or, find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events, yet appeals deeply to the object oriented python world. 
 
-See a list of currently supported features [below](#currently-supported). <br/> <br/>
+See a list of currently supported features [below](#currently-supported). <br/> 
 
 ##### NOTE - The package is under active development. Contributors welcome. 
 
 - [example repository](https://github.com/VigneshVSV/hololinked-examples) - detailed examples for both clients and servers
 - [helper GUI](https://github.com/VigneshVSV/hololinked-portal) - view & interact with your object's methods, properties and events. 
+
+<br/> 
 
 Ultimately, as expected, the redirection from the HTTP side to the object is mediated by ZeroMQ which implements the fully fledged RPC server that queues all the HTTP requests to execute them one-by-one on the hardware/object. The HTTP server can also communicate with the RPC server over ZeroMQ's INPROC (for the non-expert = multithreaded applications, at least in python) or IPC (for the non-expert = multiprocess applications) transport methods. In the example above, IPC is used by default. There is no need for yet another TCP from HTTP to TCP to ZeroMQ transport athough this is also supported. <br/> <br/>
 Serialization-Deserialization overheads are also already reduced. For example, when pushing an event from the object which gets automatically tunneled as a HTTP SSE or returning a reply for an action from the object, there is no JSON deserialization-serialization overhead when the message passes through the HTTP server. The message is serialized once on the object side but passes transparently through the HTTP server.     
@@ -312,8 +313,6 @@ Again, please check examples or the code for explanations. Documentation is bein
 ### Currently being worked
 
 - improving accuracy of Thing Descriptions 
-- observable properties and read/write multiple properties through node-wot client
-- argument schema validation for actions (you can specify one but its not used)
 - credentials for authentication 
 
 ### Some Day In Future
