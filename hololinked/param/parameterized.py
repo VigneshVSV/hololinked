@@ -1666,7 +1666,7 @@ class InstanceParameters(ClassParameters):
         self._instance_params[param_obj.name] = param_obj_copy
 
 
-    def add_parameter(self, param_name: str, param_obj: Parameter) -> None:
+    def add(self, param_name : str, param_obj : Parameter) -> None:
         setattr(self.owner_inst, param_name, param_obj)
         if param_obj.deepcopy_default:
             self._deep_copy_param_default(param_obj)
