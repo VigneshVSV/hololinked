@@ -4,6 +4,7 @@ import jsonschema
 
 from ..param.parameterized import Parameterized, ParameterizedMetaclass
 from .constants import JSON 
+from .utils import pep8_to_URL_path
 from .config import global_config
 from .zmq_message_brokers import EventPublisher
 from .dataklasses import ServerSentEvent
@@ -41,17 +42,12 @@ class Event:
         if global_config.validate_schemas and schema:
             jsonschema.Draft7Validator.check_schema(schema)
         self.schema = schema
-        self.URL_path = URL_path or f'/{name}'
+        self.URL_path = URL_path or f'/{pep8_to_URL_path(name)}'
         self.security = security
         self.label = label
         self._internal_name = f"{self.name}-dispatcher"
         self._remote_info = ServerSentEvent(name=name)
       
-    
-    @typing.overload
-    def __get__(self, obj : ParameterizedMetaclass, objtype : typing.Optional[type] = None) -> "EventDispatcher":
-        ...
-
     def __get__(self, obj : ParameterizedMetaclass, objtype : typing.Optional[type] = None) -> "EventDispatcher":
         try:
             return obj.__dict__[self._internal_name]

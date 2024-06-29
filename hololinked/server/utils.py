@@ -56,7 +56,7 @@ def format_exception_as_json(exc : Exception) -> typing.Dict[str, typing.Any]:
     }
 
 
-def pep8_to_dashed_URL(word : str) -> str: 
+def pep8_to_URL_path(word : str) -> str: 
     """
     Make an underscored, lowercase form from the expression in the string.
     Example::
@@ -184,7 +184,7 @@ def getattr_without_descriptor_read(instance, key):
 __all__ = [
     get_IP_from_interface.__name__,
     format_exception_as_json.__name__,
-    pep8_to_dashed_URL.__name__,
+    pep8_to_URL_path.__name__,
     get_default_logger.__name__,
     run_coro_sync.__name__,
     run_callable_somehow.__name__,

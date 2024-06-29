@@ -24,7 +24,6 @@ class RemoteResourceInfoValidator:
     
     Attributes
     ----------
-
     URL_path : str, default - extracted object name 
         the path in the URL under which the object is accesible.
         Must follow url-regex ('[\-a-zA-Z0-9@:%._\/\+~#=]{1,256}') requirement. 
@@ -46,14 +45,13 @@ class RemoteResourceInfoValidator:
     isproperty : bool, default False
         True for a property
     """
-
     URL_path = String(default=USE_OBJECT_NAME,
                     doc="the path in the URL under which the object is accesible.") # type: str
     http_method = TupleSelector(default=HTTP_METHODS.POST, objects=http_methods, accept_list=True,
                     doc="HTTP request method under which the object is accessible. GET, POST, PUT, DELETE or PATCH are supported.") # typing.Tuple[str]
     state = Tuple(default=None, item_type=(Enum, str), allow_None=True, accept_list=True, accept_item=True,
                     doc="State machine state at which a callable will be executed or attribute/property can be written.") # type: typing.Union[Enum, str]
-    obj = ClassSelector(default=None, allow_None=True, class_=(FunctionType, classmethod, Parameter, MethodType), # Property will need circular import so we stick to Parameter
+    obj = ClassSelector(default=None, allow_None=True, class_=(FunctionType, classmethod, Parameter, MethodType), # Property will need circular import so we stick to base class Parameter
                     doc="the unbound object like the unbound method")
     obj_name = String(default=USE_OBJECT_NAME, 
                     doc="the name of the object which will be supplied to the ``ObjectProxy`` class to populate its own namespace.") # type: str
@@ -61,8 +59,6 @@ class RemoteResourceInfoValidator:
                     doc="True for a method or function or callable") # type: bool
     isproperty = Boolean(default=False,
                     doc="True for a property") # type: bool
-    iscoroutine = Boolean(default=False,
-                    doc="whether the callable should be awaited") # type: bool
     
     def __init__(self, **kwargs) -> None:
         """   
@@ -77,22 +73,6 @@ class RemoteResourceInfoValidator:
         for key, value in kwargs.items(): 
             setattr(self, key, value)
     
-
-class ActionRemoteResourceInfoValidator(RemoteResourceInfoValidator):
-    """
-    Attributes
-    ----------
-    request_as_argument : bool, default False
-        if True, http/RPC request object will be passed as an argument to the callable. 
-        The user is warned to not use this generally. 
-    argument_schema: JSON, default None
-        JSON schema validations for arguments of a callable. Assumption is therefore arguments will be JSON complaint. 
-    return_value_schema: JSON, default None 
-        schema for return value of a callable. Assumption is therefore return value will be JSON complaint.
-    create_task: bool, default True
-        default for async methods/actions 
-    """
-
     def to_dataclass(self, obj : typing.Any = None, bound_obj : typing.Any = None) -> "RemoteResource":
         """
         For a plain, faster and uncomplicated access, a dataclass in created & used by the
@@ -113,11 +93,58 @@ class ActionRemoteResourceInfoValidator(RemoteResourceInfoValidator):
         """
         return RemoteResource(
                     state=tuple(self.state) if self.state is not None else None, 
-                    obj_name=self.obj_name, isaction=self.isaction, iscoroutine=self.iscoroutine,
+                    obj_name=self.obj_name, isaction=self.isaction, 
                     isproperty=self.isproperty, obj=obj, bound_obj=bound_obj, 
-                    schema_validator=(bound_obj.schema_validator)(self.argument_schema) if not global_config.validate_schema_on_client and self.argument_schema else None 
                 ) 
         # http method is manually always stored as a tuple
+    
+
+class ActionInfoValidator(RemoteResourceInfoValidator):
+    """
+    request_as_argument : bool, default False
+        if True, http/RPC request object will be passed as an argument to the callable. 
+        The user is warned to not use this generally. 
+    argument_schema: JSON, default None
+        JSON schema validations for arguments of a callable. Assumption is therefore arguments will be JSON complaint. 
+    return_value_schema: JSON, default None 
+        schema for return value of a callable. Assumption is therefore return value will be JSON complaint.
+    create_task: bool, default True
+        default for async methods/actions 
+    safe: bool, default True
+        metadata information whether the action is safe to execute
+    idempotent: bool, default False
+        metadata information whether the action is idempotent
+    synchronous: bool, default True
+        metadata information whether the action is synchronous
+    """
+    request_as_argument = Boolean(default=False,
+                    doc="if True, http/RPC request object will be passed as an argument to the callable.") # type: bool
+    argument_schema = ClassSelector(default=None, allow_None=True, class_=dict, 
+                    # due to schema validation, this has to be a dict, and not a special dict like TypedDict
+                    doc="JSON schema validations for arguments of a callable")
+    return_value_schema = ClassSelector(default=None, allow_None=True, class_=dict, 
+                    # due to schema validation, this has to be a dict, and not a special dict like TypedDict
+                    doc="schema for return value of a callable")
+    create_task = Boolean(default=True, 
+                        doc="should a coroutine be tasked or run in the same loop?") # type: bool
+    iscoroutine = Boolean(default=False, # not sure if isFuture or isCoroutine is correct, something to fix later
+                    doc="whether the callable should be awaited") # type: bool
+    safe = Boolean(default=True,
+                    doc="metadata information whether the action is safe to execute") # type: bool
+    idempotent = Boolean(default=False,
+                    doc="metadata information whether the action is idempotent") # type: bool
+    synchronous = Boolean(default=True,
+                    doc="metadata information whether the action is synchronous") # type: bool
+    
+    def to_dataclass(self, obj : typing.Any = None, bound_obj : typing.Any = None) -> "RemoteResource":
+        return ActionResource(
+                    state=tuple(self.state) if self.state is not None else None, 
+                    obj_name=self.obj_name, isaction=self.isaction, iscoroutine=self.iscoroutine,
+                    isproperty=self.isproperty, obj=obj, bound_obj=bound_obj, 
+                    schema_validator=(bound_obj.schema_validator)(self.argument_schema) if not global_config.validate_schema_on_client and self.argument_schema else None,
+                    create_task=self.create_task
+                ) 
+    
 
 
 class SerializableDataclass:
@@ -125,7 +152,6 @@ class SerializableDataclass:
     Presents uniform serialization for serializers using getstate and setstate and json 
     serialization.
     """
-
     def json(self):
         return asdict(self)
 
@@ -135,7 +161,6 @@ class SerializableDataclass:
     def __setstate__(self, values : typing.Dict):
         for key, value in values.items():
             setattr(self, key, value)
-
 
 
 __dataclass_kwargs = dict(frozen=True)
@@ -159,8 +184,6 @@ class RemoteResource(SerializableDataclass):
         the name of the object which will be supplied to the ``ObjectProxy`` class to populate
         its own namespace. For HTTP clients, HTTP method and URL path is important and for 
         object proxies clients, the obj_name is important. 
-    iscoroutine : bool
-        whether the callable should be awaited
     isaction : bool
         True for a method or function or callable
     isproperty : bool
@@ -173,12 +196,10 @@ class RemoteResource(SerializableDataclass):
     state : typing.Optional[typing.Union[typing.Tuple, str]] 
     obj_name : str 
     isaction : bool 
-    iscoroutine : bool
     isproperty : bool
     obj : typing.Any
     bound_obj : typing.Any
-    schema_validator : typing.Optional[BaseSchemaValidator]
-  
+    
     def json(self):
         """
         return this object as a JSON serializable dictionary
@@ -191,8 +212,24 @@ class RemoteResource(SerializableDataclass):
             if field.name != 'obj' and field.name != 'bound_obj':
                 json_dict[field.name] = getattr(self, field.name)
         # object.__setattr__(self, '_json', json_dict) # because object is frozen - used to work, but not now 
-        return json_dict                 
-    
+        return json_dict     
+
+
+@dataclass(**__dataclass_kwargs)
+class ActionResource(RemoteResource):  
+    """
+    Attributes
+    ----------
+    iscoroutine : bool
+        whether the callable should be awaited
+    schema_validator : BaseSchemaValidator
+        schema validator for the callable if to be validated server side
+    """ 
+    iscoroutine : bool
+    schema_validator : typing.Optional[BaseSchemaValidator]
+    create_task : bool 
+    # no need safe, idempotent, synchronous
+
 
 @dataclass
 class HTTPMethodInstructions(SerializableDataclass):
@@ -272,7 +309,7 @@ class HTTPResource(SerializableDataclass):
     
 
 @dataclass
-class RPCResource(SerializableDataclass): 
+class ZMQResource(SerializableDataclass): 
     """
     Representation of resource used by RPC clients for mapping client method/action calls, property read/writes & events
     to a server resource. Used to dynamically populate the ``ObjectProxy``
@@ -415,12 +452,12 @@ class GUIResources(SerializableDataclass):
         for instruction, remote_info in instance.instance_resources.items(): 
             if remote_info.isaction:
                 try:
-                    self.actions[instruction] = instance.rpc_resources[instruction].json() 
+                    self.actions[instruction] = instance.zmq_resources[instruction].json() 
                     self.actions[instruction]["remote_info"] = instance.httpserver_resources[instruction].json() 
                     self.actions[instruction]["remote_info"]["http_method"] = instance.httpserver_resources[instruction].instructions.supported_methods()
                     # to check - apparently the recursive json() calling does not reach inner depths of a dict, 
                     # therefore we call json ourselves
-                    self.actions[instruction]["owner"] = instance.rpc_resources[instruction].qualname.split('.')[0]
+                    self.actions[instruction]["owner"] = instance.zmq_resources[instruction].qualname.split('.')[0]
                     self.actions[instruction]["owner_instance_name"] = remote_info.bound_obj.instance_name
                     self.actions[instruction]["type"] = 'classmethod' if isinstance(remote_info.obj, classmethod) else ''
                     self.actions[instruction]["signature"] = get_signature(remote_info.obj)[0]
@@ -455,9 +492,9 @@ def get_organised_resources(instance):
 
     httpserver_resources = dict() # type: typing.Dict[str, HTTPResource]
     # The following dict will be given to the object proxy client
-    rpc_resources = dict() # type: typing.Dict[str, RPCResource]
+    zmq_resources = dict() # type: typing.Dict[str, ZMQResource]
     # The following dict will be used by the event loop
-    instance_resources = dict() # type: typing.Dict[str, RemoteResource] 
+    instance_resources = dict() # type: typing.Dict[str, typing.Union[RemoteResource, ActionResource]] 
     # create URL prefix
     if instance._owner is not None: 
         instance._full_URL_path_prefix = f'{instance._owner._full_URL_path_prefix}/{instance.instance_name}' 
@@ -477,25 +514,29 @@ def get_organised_resources(instance):
             read_http_method = write_http_method = delete_http_method = None
             if len(remote_info.http_method) == 1:
                 read_http_method = remote_info.http_method[0]
+                instructions = { read_http_method : f"{fullpath}/read" }
             elif len(remote_info.http_method) == 2:
                 read_http_method, write_http_method = remote_info.http_method
+                instructions = { 
+                    read_http_method : f"{fullpath}/read", 
+                    write_http_method : f"{fullpath}/write"
+                }
             else:
                 read_http_method, write_http_method, delete_http_method = remote_info.http_method
+                instructions = {
+                    read_http_method : f"{fullpath}/read", 
+                    write_http_method : f"{fullpath}/write", 
+                    delete_http_method : f"{fullpath}/delete"
+                }
                 
             httpserver_resources[fullpath] = HTTPResource(
                                                 what=ResourceTypes.PROPERTY, 
                                                 instance_name=instance._owner.instance_name if instance._owner is not None else instance.instance_name,
                                                 obj_name=remote_info.obj_name,
                                                 fullpath=fullpath,
-                                                request_as_argument=remote_info.request_as_argument,
-                                                argument_schema=remote_info.argument_schema,
-                                                **{ 
-                                                    read_http_method : f"{fullpath}/read",
-                                                    write_http_method : f"{fullpath}/write",
-                                                    delete_http_method : f"{fullpath}/delete"
-                                                }
+                                                **instructions
                                             )
-            rpc_resources[fullpath] = RPCResource(
+            zmq_resources[fullpath] = ZMQResource(
                             what=ResourceTypes.PROPERTY, 
                             instance_name=instance._owner.instance_name if instance._owner is not None else instance.instance_name, 
                             instruction=fullpath, 
@@ -504,8 +545,6 @@ def get_organised_resources(instance):
                             qualname=instance.__class__.__name__ + '.' + remote_info.obj_name,
                             # qualname is not correct probably, does not respect inheritance
                             top_owner=instance._owner is None,
-                            argument_schema=remote_info.argument_schema,
-                            return_value_schema=remote_info.return_value_schema
                         ) 
             data_cls = remote_info.to_dataclass(obj=prop, bound_obj=instance) 
             instance_resources[f"{fullpath}/read"] = data_cls
@@ -520,11 +559,11 @@ def get_organised_resources(instance):
                 prop._observable_event._remote_info.obj_name = prop._observable_event.name
                 prop._observable_event._remote_info.unique_identifier = evt_fullpath
                 httpserver_resources[evt_fullpath] = prop._observable_event._remote_info
-                # rpc_resources[evt_fullpath] = prop._observable_event._remote_info
+                # zmq_resources[evt_fullpath] = prop._observable_event._remote_info
     # Methods
     for name, resource in inspect._getmembers(instance, inspect.ismethod, getattr_without_descriptor_read): 
         if hasattr(resource, '_remote_info'):
-            if not isinstance(resource._remote_info, RemoteResourceInfoValidator):
+            if not isinstance(resource._remote_info, ActionInfoValidator):
                 raise TypeError("instance member {} has unknown sub-member '_remote_info' of type {}.".format(
                             resource, type(resource._remote_info))) 
             remote_info = resource._remote_info
@@ -543,7 +582,7 @@ def get_organised_resources(instance):
                                         request_as_argument=remote_info.request_as_argument,
                                         **{ http_method : instruction for http_method in remote_info.http_method },
                                     )
-            rpc_resources[instruction] = RPCResource(
+            zmq_resources[instruction] = ZMQResource(
                                             what=ResourceTypes.ACTION,
                                             instance_name=instance._owner.instance_name if instance._owner is not None else instance.instance_name,
                                             instruction=instruction,                                                                                                                                                                                        
@@ -568,7 +607,7 @@ def get_organised_resources(instance):
         resource._remote_info.obj_name = name
         setattr(instance, name, EventDispatcher(resource.name, resource._remote_info.unique_identifier, owner_inst=instance))
         httpserver_resources[fullpath] = resource._remote_info
-        rpc_resources[fullpath] = resource._remote_info
+        zmq_resources[fullpath] = resource._remote_info
     # Other objects
     for name, resource in inspect._getmembers(instance, lambda o : isinstance(o, Thing), getattr_without_descriptor_read):
         assert isinstance(resource, Thing), ("thing children query from inspect.ismethod is not a Thing",
@@ -580,9 +619,9 @@ def get_organised_resources(instance):
             continue
         resource._owner = instance      
         httpserver_resources.update(resource.httpserver_resources)
-        # rpc_resources.update(resource.rpc_resources)
+        # zmq_resources.update(resource.zmq_resources)
         instance_resources.update(resource.instance_resources)
    
     # The above for-loops can be used only once, the division is only for readability
     # following are in _internal_fixed_attributes - allowed to set only once
-    return rpc_resources, httpserver_resources, instance_resources    
+    return zmq_resources, httpserver_resources, instance_resources    

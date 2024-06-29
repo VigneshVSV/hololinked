@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from ..param import Parameterized
 from .constants import JSONSerializable
 from .config import global_config
-from .utils import pep8_to_dashed_URL
+from .utils import pep8_to_URL_path
 from .serializers import PythonBuiltinJSONSerializer as JSONSerializer, BaseSerializer
 from .property import Property
 
@@ -103,7 +103,7 @@ class BaseDB:
         auto chooses among the different supported databases based on config file and creates the DB URL 
         """
         if config_file is None:
-            folder = f'{global_config.TEMP_DIR}{os.sep}databases{os.sep}{pep8_to_dashed_URL(self.thing_instance.__class__.__name__.lower())}'
+            folder = f'{global_config.TEMP_DIR}{os.sep}databases{os.sep}{pep8_to_URL_path(self.thing_instance.__class__.__name__.lower())}'
             if not os.path.exists(folder):
                 os.makedirs(folder)
             return BaseDB.create_sqlite_URL(**dict(file=f'{folder}{os.sep}{self.instance_name}.db'))

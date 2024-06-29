@@ -33,14 +33,14 @@ class ResourceTypes(StrEnum):
 class CommonRPC(StrEnum):
     """some common RPC and their associated instructions for quick access by lower level code"""
 
-    RPC_RESOURCES = '/resources/zmq-object-proxy'
+    ZMQ_RESOURCES = '/resources/zmq-object-proxy'
     HTTP_RESOURCES = '/resources/http-server'
     OBJECT_INFO = '/object-info'
     PING = '/ping'
 
     @classmethod
-    def rpc_resource_read(cls, instance_name : str) -> str:
-        return f"/{instance_name}{cls.RPC_RESOURCES}/read"
+    def zmq_resource_read(cls, instance_name : str) -> str:
+        return f"/{instance_name}{cls.ZMQ_RESOURCES}/read"
 
     @classmethod
     def http_resource_read(cls, instance_name : str) -> str:

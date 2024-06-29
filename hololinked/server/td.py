@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from .constants import JSON, JSONSerializable
 from .utils import getattr_without_descriptor_read
-from .dataklasses import RemoteResourceInfoValidator
+from .dataklasses import ActionInfoValidator
 from .events import Event
 from .properties import *
 from .property import Property
@@ -46,12 +46,13 @@ class Schema:
         """strip tabs, newlines, whitespaces etc."""
         doc_as_list = doc.split('\n')
         final_doc = []
-        for line in doc_as_list:
+        for index, line in enumerate(doc_as_list):
             line = line.lstrip('\n').rstrip('\n')
             line = line.lstrip('\t').rstrip('\t')
             line = line.lstrip('\n').rstrip('\n')
             line = line.lstrip().rstrip()   
-            line = ' ' + line # add space to left in case of new line            
+            if index > 0:
+                line = ' ' + line # add space to left in case of new line            
             final_doc.append(line)
         return ''.join(final_doc)
     
@@ -378,7 +379,7 @@ class ArraySchema(PropertyAffordance):
             if isinstance(property.item_type, (list, tuple)):
                 for typ in property.item_type:
                     self.items.append(dict(type=JSONSchema.get_type(typ)))
-            else: 
+            elif property.item_type is not None: 
                 self.items.append(dict(type=JSONSchema.get_type(property.item_type)))
         elif isinstance(property, TupleSelector):
             objects = list(property.objects)
@@ -386,7 +387,9 @@ class ArraySchema(PropertyAffordance):
                 if any(types["type"] == JSONSchema._replacements.get(type(obj), None) for types in self.items):
                     continue 
                 self.items.append(dict(type=JSONSchema.get_type(type(obj))))
-        if len(self.items) > 1:
+        if len(self.items) == 0:
+            del self.items
+        elif len(self.items) > 1:
             self.items = dict(oneOf=self.items)
             
 
@@ -590,7 +593,7 @@ class ActionAffordance(InteractionAffordance):
         super(InteractionAffordance, self).__init__()
     
     def build(self, action : typing.Callable, owner : Thing, authority : str) -> None:
-        assert isinstance(action._remote_info, RemoteResourceInfoValidator)
+        assert isinstance(action._remote_info, ActionInfoValidator)
         if action._remote_info.argument_schema: 
             self.input = action._remote_info.argument_schema 
         if action._remote_info.return_value_schema: 
@@ -598,12 +601,13 @@ class ActionAffordance(InteractionAffordance):
         self.title = action.__name__
         if action.__doc__:
             self.description = self.format_doc(action.__doc__)
-        if (hasattr(owner, 'state_machine') and owner.state_machine is not None and 
-                owner.state_machine.has_object(action._remote_info.obj)):
-            self.idempotent = False 
-        else:
-            self.idempotent = True      
-        self.synchronous = True 
+        if not (hasattr(owner, 'state_machine') and owner.state_machine is not None and 
+                owner.state_machine.has_object(action._remote_info.obj)) and action._remote_info.idempotent:
+            self.idempotent = action._remote_info.idempotent
+        if action._remote_info.synchronous:
+            self.synchronous = action._remote_info.synchronous
+        if action._remote_info.safe:
+            self.safe = action._remote_info.safe 
         self.forms = []
         for method in action._remote_info.http_method:
             form = Form()
@@ -636,7 +640,7 @@ class EventAffordance(InteractionAffordance):
     def build(self, event : Event, owner : Thing, authority : str) -> None:
         self.title = event.label or event.name 
         if event.doc:
-            self.description = event.doc
+            self.description = self.format_doc(event.doc)
         if event.schema:
             self.data = event.schema
 
@@ -712,7 +716,7 @@ class ThingDescription(Schema):
     securityDefinitions : SecurityScheme
     schemaDefinitions : typing.Optional[typing.List[DataSchema]]
     
-    skip_properties = ['expose', 'httpserver_resources', 'rpc_resources', 'gui_resources',
+    skip_properties = ['expose', 'httpserver_resources', 'zmq_resources', 'gui_resources',
                     'events', 'debug_logs', 'warn_logs', 'info_logs', 'error_logs', 'critical_logs',  
                     'thing_description', 'maxlen', 'execution_logs', 'GUI', 'object_info'  ]
 
@@ -725,7 +729,7 @@ class ThingDescription(Schema):
                     allow_loose_schema : typing.Optional[bool] = False) -> None:
         super().__init__()
         self.instance = instance
-        self.authority = authority or f"https://{socket.gethostname()}:8080"
+        self.authority = authority
         self.allow_loose_schema = allow_loose_schema
 
 
@@ -737,8 +741,9 @@ class ThingDescription(Schema):
         self.properties = dict()
         self.actions = dict()
         self.events = dict()
-        self.forms = []
-        self.links = []
+        self.forms = NotImplemented
+        self.links = NotImplemented
+        
         self.schemaDefinitions = dict(exception=JSONSchema.get_type(Exception))
 
         self.add_interaction_affordances()
@@ -754,7 +759,8 @@ class ThingDescription(Schema):
             if (resource.isproperty and resource.obj_name not in self.properties and 
                 resource.obj_name not in self.skip_properties and hasattr(resource.obj, "_remote_info") and 
                 resource.obj._remote_info is not None): 
-                if resource.obj_name == 'state' and self.instance.state_machine is None:
+                if (resource.obj_name == 'state' and hasattr(self.instance, 'state_machine') is None and 
+                            self.instance.state_machine is not None):
                     continue
                 self.properties[resource.obj_name] = PropertyAffordance.generate_schema(resource.obj, 
                                                                             self.instance, self.authority) 
@@ -773,12 +779,16 @@ class ThingDescription(Schema):
         for name, resource in inspect._getmembers(self.instance, lambda o : isinstance(o, Thing), getattr_without_descriptor_read):
             if resource is self.instance or isinstance(resource, EventLoop):
                 continue
+            if self.links is None:
+                self.links = []
             link = Link()
             link.build(resource, self.instance, self.authority)
             self.links.append(link.asdict())
     
 
     def add_top_level_forms(self):
+
+        self.forms = []
 
         properties_end_point = f"{self.authority}{self.instance._full_URL_path_prefix}/properties"
 

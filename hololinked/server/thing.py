@@ -13,7 +13,7 @@ from .serializers import _get_serializer_from_user_given_options, BaseSerializer
 from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
 from .exceptions import BreakInnerLoop
 from .action import action
-from .dataklasses import GUIResources, HTTPResource, RPCResource, get_organised_resources
+from .dataklasses import GUIResources, HTTPResource, ZMQResource, get_organised_resources
 from .utils import get_default_logger, getattr_without_descriptor_read
 from .property import Property, ClassProperties
 from .properties import String, ClassSelector, Selector, TypedKeyMappingsConstrainedDict
@@ -114,9 +114,9 @@ class Thing(Parameterized, metaclass=ThingMeta):
     httpserver_resources = Property(readonly=True, URL_path='/resources/http-server', 
                         doc="object's resources exposed to HTTP client (through ``hololinked.server.HTTPServer.HTTPServer``)", 
                         fget=lambda self: self._httpserver_resources ) # type: typing.Dict[str, HTTPResource]
-    rpc_resources = Property(readonly=True, URL_path='/resources/zmq-object-proxy', 
+    zmq_resources = Property(readonly=True, URL_path='/resources/zmq-object-proxy', 
                         doc="object's resources exposed to RPC client, similar to HTTP resources but differs in details.", 
-                        fget=lambda self: self._rpc_resources) # type: typing.Dict[str, RPCResource]
+                        fget=lambda self: self._zmq_resources) # type: typing.Dict[str, ZMQResource]
     gui_resources = Property(readonly=True, URL_path='/resources/portal-app', 
                         doc="""object's data read by hololinked-portal GUI client, similar to http_resources but differs 
                         in details.""",
@@ -132,7 +132,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         # defines some internal fixed attributes. attributes created by us that require no validation but 
         # cannot be modified are called _internal_fixed_attributes
         obj._internal_fixed_attributes = ['_internal_fixed_attributes', 'instance_resources',
-                                        '_httpserver_resources', '_rpc_resources', '_owner']        
+                                        '_httpserver_resources', '_zmq_resources', '_owner']        
         return obj
 
 
@@ -232,7 +232,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         and extracts information necessary to make RPC functionality work.
         """
         # The following dict is to be given to the HTTP server
-        self._rpc_resources, self._httpserver_resources, self.instance_resources = get_organised_resources(self)
+        self._zmq_resources, self._httpserver_resources, self.instance_resources = get_organised_resources(self)
 
 
     def _prepare_logger(self, log_level : int, log_file : str, remote_access : bool = False):
@@ -311,7 +311,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         """
         """
         print("Request was made")
-        skip_props = ["httpserver_resources", "rpc_resources", "gui_resources", "GUI", "object_info"]
+        skip_props = ["httpserver_resources", "zmq_resources", "gui_resources", "GUI", "object_info"]
         for prop_name in skip_props:
             if prop_name in kwargs:
                 raise RuntimeError("GUI, httpserver resources, RPC resources , object info etc. cannot be queried" + 

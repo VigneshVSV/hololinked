@@ -4,7 +4,8 @@ from enum import Enum
 from types import FunctionType
 from inspect import iscoroutinefunction, getfullargspec
 
-from .dataklasses import RemoteResourceInfoValidator
+from .utils import pep8_to_URL_path
+from .dataklasses import ActionInfoValidator
 from .constants import USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, JSON
 from .config import global_config
 
@@ -31,11 +32,11 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
         schema for return value, currently only used to inform clients which is supposed to validate on its won. 
     **kwargs:
         safe: bool 
-            indicate in thing description if action is safe to execute
+            indicate in thing description if action is safe to execute 
         idempotent: bool 
             indicate in thing description if action is idempotent (for example, allows HTTP client to cache return value)
         synchronous: bool
-            indicate in thing description if action is synchronous ()
+            indicate in thing description if action is synchronous (not long running)
     Returns
     -------
     Callable
@@ -49,17 +50,17 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
         if obj.__name__.startswith('__'):
             raise ValueError(f"dunder objects cannot become remote : {obj.__name__}")
         if callable(obj):
-            if hasattr(obj, '_remote_info') and not isinstance(obj._remote_info, RemoteResourceInfoValidator): 
+            if hasattr(obj, '_remote_info') and not isinstance(obj._remote_info, ActionInfoValidator): 
                 raise NameError(
                     "variable name '_remote_info' reserved for hololinked package. ",  
-                    "Please do not assign this variable to any other object except hololinked.server.dataklasses.RemoteResourceInfoValidator."
+                    "Please do not assign this variable to any other object except hololinked.server.dataklasses.ActionInfoValidator."
                 )             
             else:
-                obj._remote_info = RemoteResourceInfoValidator() 
+                obj._remote_info = ActionInfoValidator() 
             obj_name = obj.__qualname__.split('.')
             if len(obj_name) > 1: # i.e. its a bound method, used by Thing
                 if URL_path == USE_OBJECT_NAME: 
-                    obj._remote_info.URL_path = f'/{obj_name[1]}'
+                    obj._remote_info.URL_path = f'/{pep8_to_URL_path(obj_name[1])}'
                 else:
                     if not URL_path.startswith('/'):
                         raise ValueError(f"URL_path should start with '/', please add '/' before '{URL_path}'")
@@ -67,7 +68,7 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
                 obj._remote_info.obj_name = obj_name[1] 
             elif len(obj_name) == 1 and isinstance(obj, FunctionType):  # normal unbound function - used by HTTPServer instance
                 if URL_path is USE_OBJECT_NAME:
-                    obj._remote_info.URL_path = '/{}'.format(obj_name[0])
+                    obj._remote_info.URL_path = f'/{pep8_to_URL_path(obj_name[0])}'
                 else:
                     if not URL_path.startswith('/'):
                         raise ValueError(f"URL_path should start with '/', please add '/' before '{URL_path}'")
@@ -93,7 +94,12 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
             obj._remote_info.return_value_schema = output_schema
             obj._remote_info.obj = original
             obj._remote_info.create_task = create_task
+            obj._remote_info.safe = kwargs.get('safe', False)
+            obj._remote_info.idempotent = kwargs.get('idempotent', False)
+            obj._remote_info.synchronous = kwargs.get('synchronous', False)
             
+            if global_config.validate_schemas and input_schema:
+                jsonschema.Draft7Validator.check_schema(input_schema)
             if global_config.validate_schemas and output_schema:
                 jsonschema.Draft7Validator.check_schema(output_schema)
             

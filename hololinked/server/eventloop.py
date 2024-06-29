@@ -51,6 +51,7 @@ class Consumer:
         self.kwargs = kwargs
 
 
+
 RemoteObject = Thing # reading convenience
 
 class EventLoop(RemoteObject):

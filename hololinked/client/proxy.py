@@ -8,7 +8,7 @@ import uuid
 from ..server.config import global_config
 from ..server.constants import JSON, CommonRPC, ServerMessage, ResourceTypes, ZMQ_PROTOCOLS
 from ..server.serializers import BaseSerializer
-from ..server.dataklasses import RPCResource, ServerSentEvent
+from ..server.dataklasses import ZMQResource, ServerSentEvent
 from ..server.zmq_message_brokers import AsyncZMQClient, SyncZMQClient, EventConsumer, PROXY
 from ..server.schema_validators import BaseSchemaValidator
 
@@ -29,7 +29,7 @@ class ObjectProxy:
         timeout to return without a reply after scheduling a method call or property read/write. This timer starts
         ticking only after the method has started to execute. Returning a call before end of execution can lead to 
         change of state in the server. 
-    load_remote_object: bool, default True
+    load_thing: bool, default True
         when True, remote object is located and its resources are loaded. Otherwise, only the client is initialised.
     protocol: str
         ZMQ protocol used to connect to server. Unlike the server, only one can be specified.  
@@ -59,7 +59,7 @@ class ObjectProxy:
     ])
 
     def __init__(self, instance_name : str, protocol : str = ZMQ_PROTOCOLS.IPC, invokation_timeout : float = 5, 
-                    load_remote_object = True, **kwargs) -> None:
+                    load_thing = True, **kwargs) -> None:
         self._allow_foreign_attributes = kwargs.get('allow_foreign_attributes', False)
         self.instance_name = instance_name
         self.invokation_timeout = invokation_timeout
@@ -73,14 +73,14 @@ class ObjectProxy:
         # bothers mainly about __setattr__ and _getattr__
         self._async_zmq_client = None    
         self._zmq_client = SyncZMQClient(instance_name, self.identity, client_type=PROXY, protocol=protocol, 
-                                            zmq_serializer=kwargs.get('serializer', None), handshake=load_remote_object,
+                                            zmq_serializer=kwargs.get('serializer', None), handshake=load_thing,
                                             logger=self.logger, **kwargs)
         if kwargs.get("async_mixin", False):
             self._async_zmq_client = AsyncZMQClient(instance_name, self.identity + '|async', client_type=PROXY, protocol=protocol, 
-                                            zmq_serializer=kwargs.get('serializer', None), handshake=load_remote_object,
+                                            zmq_serializer=kwargs.get('serializer', None), handshake=load_thing,
                                             logger=self.logger, **kwargs)
-        if load_remote_object:
-            self.load_remote_object()
+        if load_thing:
+            self.load_thing()
 
     def __getattribute__(self, __name: str) -> typing.Any:
         obj = super().__getattribute__(__name)
@@ -513,43 +513,11 @@ class ObjectProxy:
             raise AttributeError(f"No event named {name}")
         event.unsubscribe()
 
-
-    def load_remote_object(self):
-        """
-        Get exposed resources from server (methods, properties, events) and remember them as attributes of the proxy.
-        """
-        fetch = _RemoteMethod(self._zmq_client, CommonRPC.rpc_resource_read(instance_name=self.instance_name), 
-                                    invokation_timeout=self._invokation_timeout) # type: _RemoteMethod
-        reply = fetch() # type: typing.Dict[str, typing.Dict[str, typing.Any]]
-
-        for name, data in reply.items():
-            if isinstance(data, dict):
-                try:
-                    if data["what"] == ResourceTypes.EVENT:
-                        data = ServerSentEvent(**data)
-                    else:
-                        data = RPCResource(**data)
-                except Exception as ex:
-                    ex.add_note("Did you correctly configure your serializer? " + 
-                            "This exception occurs when given serializer does not work the same way as server serializer")
-                    raise ex from None
-            elif not isinstance(data, (RPCResource, ServerSentEvent)):
-                raise RuntimeError("Logic error - deserialized info about server not instance of hololinked.server.data_classes.RPCResource")
-            if data.what == ResourceTypes.ACTION:
-                _add_method(self, _RemoteMethod(self._zmq_client, data.instruction, self.invokation_timeout, 
-                                                self.execution_timeout, data.argument_schema, self._async_zmq_client, self._schema_validator), data)
-            elif data.what == ResourceTypes.PROPERTY:
-                _add_property(self, _Property(self._zmq_client, data.instruction, self.invokation_timeout,
-                                                self.execution_timeout, self._async_zmq_client), data)
-            elif data.what == ResourceTypes.EVENT:
-                assert isinstance(data, ServerSentEvent)
-                event = _Event(self._zmq_client, data.name, data.obj_name, data.unique_identifier, data.socket_address, 
-                            serializer=self._zmq_client.zmq_serializer, logger=self.logger)
-                _add_event(self, event, data)
-                self.__dict__[data.name] = event 
-
-
+    
     def read_reply(self, message_id : bytes, timeout : typing.Optional[float] = 5000) -> typing.Any:
+        """
+        read reply of no block calls of an action or a property read/write.
+        """
         obj = self._noblock_messages.get(message_id, None) 
         if not obj:
             raise ValueError('given message id not a one way call or invalid.')
@@ -565,6 +533,44 @@ class ObjectProxy:
         elif isinstance(obj, _Property):
             obj._last_value = reply 
             return obj.last_read_value
+
+
+    def load_thing(self):
+        """
+        Get exposed resources from server (methods, properties, events) and remember them as attributes of the proxy.
+        """
+        fetch = _RemoteMethod(self._zmq_client, CommonRPC.zmq_resource_read(instance_name=self.instance_name), 
+                                    invokation_timeout=self._invokation_timeout) # type: _RemoteMethod
+        reply = fetch() # type: typing.Dict[str, typing.Dict[str, typing.Any]]
+
+        for name, data in reply.items():
+            if isinstance(data, dict):
+                try:
+                    if data["what"] == ResourceTypes.EVENT:
+                        data = ServerSentEvent(**data)
+                    else:
+                        data = ZMQResource(**data)
+                except Exception as ex:
+                    ex.add_note("Did you correctly configure your serializer? " + 
+                            "This exception occurs when given serializer does not work the same way as server serializer")
+                    raise ex from None
+            elif not isinstance(data, (ZMQResource, ServerSentEvent)):
+                raise RuntimeError("Logic error - deserialized info about server not instance of hololinked.server.data_classes.ZMQResource")
+            if data.what == ResourceTypes.ACTION:
+                _add_method(self, _RemoteMethod(self._zmq_client, data.instruction, self.invokation_timeout, 
+                                                self.execution_timeout, data.argument_schema, self._async_zmq_client, self._schema_validator), data)
+            elif data.what == ResourceTypes.PROPERTY:
+                _add_property(self, _Property(self._zmq_client, data.instruction, self.invokation_timeout,
+                                                self.execution_timeout, self._async_zmq_client), data)
+            elif data.what == ResourceTypes.EVENT:
+                assert isinstance(data, ServerSentEvent)
+                event = _Event(self._zmq_client, data.name, data.obj_name, data.unique_identifier, data.socket_address, 
+                            serializer=self._zmq_client.zmq_serializer, logger=self.logger)
+                _add_event(self, event, data)
+                self.__dict__[data.name] = event 
+
+
+    
 
 
 # SM = Server Message
@@ -814,7 +820,7 @@ class _Event:
 __allowed_attribute_types__ = (_Property, _RemoteMethod, _Event)
 __WRAPPER_ASSIGNMENTS__ =  ('__name__', '__qualname__', '__doc__')
 
-def _add_method(client_obj : ObjectProxy, method : _RemoteMethod, func_info : RPCResource) -> None:
+def _add_method(client_obj : ObjectProxy, method : _RemoteMethod, func_info : ZMQResource) -> None:
     if not func_info.top_owner:
         return 
         raise RuntimeError("logic error")
@@ -826,7 +832,7 @@ def _add_method(client_obj : ObjectProxy, method : _RemoteMethod, func_info : RP
         setattr(method, dunder, info)
     client_obj.__setattr__(func_info.obj_name, method)
 
-def _add_property(client_obj : ObjectProxy, property : _Property, property_info : RPCResource) -> None:
+def _add_property(client_obj : ObjectProxy, property : _Property, property_info : ZMQResource) -> None:
     if not property_info.top_owner:
         return
         raise RuntimeError("logic error")

@@ -3,9 +3,8 @@ from types import FunctionType, MethodType
 from enum import Enum
 import warnings
 
-from hololinked.param.parameterized import Parameterized, ParameterizedMetaclass
-
-from ..param.parameterized import Parameter, ClassParameters
+from ..param.parameterized import Parameter, ClassParameters, Parameterized, ParameterizedMetaclass
+from .utils import pep8_to_URL_path
 from .dataklasses import RemoteResourceInfoValidator
 from .constants import USE_OBJECT_NAME, HTTP_METHODS
 from .events import Event
@@ -191,7 +190,7 @@ class Property(Parameter):
         if slot == 'owner' and self.owner is not None:
             if self._remote_info is not None:
                 if self._remote_info.URL_path == USE_OBJECT_NAME:
-                    self._remote_info.URL_path = '/' + self.name
+                    self._remote_info.URL_path = f'/{pep8_to_URL_path(self.name)}'
                 elif not self._remote_info.URL_path.startswith('/'): 
                     raise ValueError(f"URL_path should start with '/', please add '/' before '{self._remote_info.URL_path}'")
                 self._remote_info.obj_name = self.name
