@@ -2,9 +2,9 @@
 
 ### Description
 
-For beginners - `hololinked` is a server side pythonic package suited for instrumentation control and data acquisition over network, especially with HTTP. If you have a requirement to control and capture data from your hardware/instrumentation remotely through your network, show the data in a browser/dashboard, provide a GUI or run automated scripts, `hololinked` can help. Even if one wishes to do hardware control/data-acquisition in a single computer or a small setup without networking concepts, one can still separate the concerns of the GUI and the other tools that interact with the device & the device itself.
+For beginners - `hololinked` is a server side pythonic package suited for instrumentation control and data acquisition over network, especially with HTTP. If you have a requirement to control and capture data from your hardware/instrumentation, show the data in a browser/dashboard, provide a GUI or run automated scripts, `hololinked` can help. Even if one wishes to do hardware control/data-acquisition in a single computer or a small setup without networking concepts, one can still separate the concerns of the GUI and the other tools that interact with the device & the device itself.
 <br/> <br/>
-For those familiar with RPC & web development - This package is an implementation of a ZeroMQ-based Object Oriented RPC with customizable HTTP end-points. A dual transport in both ZMQ and HTTP is provided to maximize flexibility in data type and serialization, although HTTP is preferred. Even through HTTP, the paradigm of working is HTTP-RPC only, to queue the commands issued to hardware. The flexibility in HTTP endpoints is to offer a choice of how the hardware looks on the network. If one is looking for an object oriented approach towards creating components within a control or data acquisition system, or an IoT device, one may consider this package. 
+For those familiar with RPC & web development - This package is an implementation of a ZeroMQ-based Object Oriented RPC with customizable HTTP end-points. A dual transport in both ZMQ and HTTP is provided to maximize flexibility in data type, serialization and speed, although HTTP is preferred for networked applications. Even through HTTP, the paradigm of working is HTTP-RPC only, to queue the commands issued to hardware. The flexibility in HTTP endpoints is to offer a choice of how the hardware looks on the network. If one is looking for an object oriented approach towards creating components within a control or data acquisition system, or an IoT device, one may consider this package. 
  
 [![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest) [![Maintainability](https://api.codeclimate.com/v1/badges/913f4daa2960b711670a/maintainability)](https://codeclimate.com/github/VigneshVSV/hololinked/maintainability) [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked)](https://pypistats.org/packages/hololinked)
 
@@ -185,6 +185,8 @@ and how to interact with it):
 create a named event using `Event` object that can push any arbitrary data:
 
 ```python
+class OceanOpticsSpectrometer(Thing):
+
     # only GET HTTP method possible for events
     intensity_measurement_event = Event(name='intensity-measurement-event', 
             URL_path='/intensity/measurement-event',
@@ -194,7 +196,6 @@ create a named event using `Event` object that can push any arbitrary data:
             # schema is optional and will be discussed later,
             # assume the intensity_event_schema variable is valid
             
-
     def capture(self): # not an action, but a plain python method
         self._run = True 
         last_time = time.time()
@@ -293,7 +294,6 @@ See a list of currently supported features [below](#currently-supported). <br/>
 - [helper GUI](https://github.com/VigneshVSV/hololinked-portal) - view & interact with your object's methods, properties and events. 
 
 <br/> 
-
 Ultimately, as expected, the redirection from the HTTP side to the object is mediated by ZeroMQ which implements the fully fledged RPC server that queues all the HTTP requests to execute them one-by-one on the hardware/object. The HTTP server can also communicate with the RPC server over ZeroMQ's INPROC (for the non-expert = multithreaded applications, at least in python) or IPC (for the non-expert = multiprocess applications) transport methods. In the example above, INPROC is used by default. There is no need for yet another TCP from HTTP to TCP to ZeroMQ transport athough this is also supported. 
 <br/> 
 Serialization-Deserialization overheads are also already reduced. For example, when pushing an event from the object which gets automatically tunneled as a HTTP SSE or returning a reply for an action from the object, there is no JSON deserialization-serialization overhead when the message passes through the HTTP server. The message is serialized once on the object side but passes transparently through the HTTP server.     
