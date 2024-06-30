@@ -225,8 +225,8 @@ class OceanOpticsSpectrometer(Thing):
         self._run = False 
 ```
 
-In WoT Terminology, such an event becomes specified as an event affordance with subprotocol SSE (or a description of 
-what the event represents and how to subscribe to it):
+In WoT Terminology, such an event becomes specified as an event affordance (or a description of 
+what the event represents and how to subscribe to it) with subprotocol SSE:
 
 ```JSON
 "intensity_measurement_event": {
