@@ -205,7 +205,8 @@ class OceanOpticsSpectrometer(Thing):
                                         correct_nonlinearity=False
                                     )
             curtime = datetime.datetime.now()
-            measurement_timestamp = curtime.strftime('%d.%m.%Y %H:%M:%S.') + '{:03d}'.format(int(curtime.microsecond /1000))
+            measurement_timestamp = curtime.strftime('%d.%m.%Y %H:%M:%S.') + '{:03d}'.format(
+                                                            int(curtime.microsecond /1000))
             if time.time() - last_time > 0.033: # restrict speed to avoid overloading
                 self.intensity_measurement_event.push({
                     "timestamp" : measurement_timestamp, 
