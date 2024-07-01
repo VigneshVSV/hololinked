@@ -32,6 +32,7 @@ become visible to a client in this segragated manner. For example, consider an o
 
 from hololinked.server import Thing, Property, action, Event
 from hololinked.server.properties import String, Integer, Number, List
+from seabreeze.spectrometers import Spectrometer # device driver
 ```
 
 #### Definition of one's own hardware controlling class
@@ -39,7 +40,6 @@ from hololinked.server.properties import String, Integer, Number, List
 subclass from Thing class to "make a network accessible Thing":
 
 ```python 
-
 class OceanOpticsSpectrometer(Thing):
     """
     OceanOptics spectrometers using seabreeze library. Device is identified by serial number. 
