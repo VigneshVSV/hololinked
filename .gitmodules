@@ -1,6 +1,6 @@
-[submodule "hololinked-docs"]
-	path = doc
-	url = https://github.com/VigneshVSV/hololinked-docs.git
 [submodule "examples"]
 	path = examples
 	url = https://github.com/VigneshVSV/hololinked-examples.git
+[submodule "doc"]
+	path = doc
+	url = https://github.com/VigneshVSV/hololinked-docs.git

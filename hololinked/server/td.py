@@ -614,7 +614,7 @@ class ActionAffordance(InteractionAffordance):
             form.href = f'{authority}{owner._full_URL_path_prefix}{action._remote_info.URL_path}'
             form.htv_methodName = method.upper()
             self.contentEncoding = 'application/json'
-            form.additionalResponses = [AdditionalExpectedResponse().asdict()]
+            # form.additionalResponses = [AdditionalExpectedResponse().asdict()]
             self.forms.append(form.asdict())
 
     @classmethod
@@ -743,7 +743,7 @@ class ThingDescription(Schema):
         self.forms = NotImplemented
         self.links = NotImplemented
         
-        self.schemaDefinitions = dict(exception=JSONSchema.get_type(Exception))
+        # self.schemaDefinitions = dict(exception=JSONSchema.get_type(Exception))
 
         self.add_interaction_affordances()
         self.add_top_level_forms()
@@ -796,7 +796,7 @@ class ThingDescription(Schema):
         readallproperties.op = "readallproperties"
         readallproperties.htv_methodName = "GET"
         readallproperties.contentType = "application/json"
-        readallproperties.additionalResponses = [AdditionalExpectedResponse().asdict()]
+        # readallproperties.additionalResponses = [AdditionalExpectedResponse().asdict()]
         self.forms.append(readallproperties.asdict())
         
         writeallproperties = Form() 
@@ -804,7 +804,7 @@ class ThingDescription(Schema):
         writeallproperties.op = "writeallproperties"   
         writeallproperties.htv_methodName = "PUT"
         writeallproperties.contentType = "application/json" 
-        writeallproperties.additionalResponses = [AdditionalExpectedResponse().asdict()]
+        # writeallproperties.additionalResponses = [AdditionalExpectedResponse().asdict()]
         self.forms.append(writeallproperties.asdict())
 
         readmultipleproperties = Form()
@@ -812,7 +812,7 @@ class ThingDescription(Schema):
         readmultipleproperties.op = "readmultipleproperties"
         readmultipleproperties.htv_methodName = "GET"
         readmultipleproperties.contentType = "application/json"
-        readmultipleproperties.additionalResponses = [AdditionalExpectedResponse().asdict()]
+        # readmultipleproperties.additionalResponses = [AdditionalExpectedResponse().asdict()]
         self.forms.append(readmultipleproperties.asdict())
 
         writemultipleproperties = Form() 
@@ -820,7 +820,7 @@ class ThingDescription(Schema):
         writemultipleproperties.op = "writemultipleproperties"   
         writemultipleproperties.htv_methodName = "PATCH"
         writemultipleproperties.contentType = "application/json"
-        writemultipleproperties.additionalResponses = [AdditionalExpectedResponse().asdict()]
+        # writemultipleproperties.additionalResponses = [AdditionalExpectedResponse().asdict()]
         self.forms.append(writemultipleproperties.asdict())
         
     def add_security_definitions(self):
