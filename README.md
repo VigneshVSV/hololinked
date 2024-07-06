@@ -2,9 +2,9 @@
 
 ### Description
 
-For beginners - `hololinked` is a server side pythonic package suited for instrumentation control and data acquisition over network, especially with HTTP. If you have a requirement to control and capture data from your hardware/instrumentation, show the data in a browser/dashboard, provide a GUI or run automated scripts, `hololinked` can help. Even if one wishes to do hardware control/data-acquisition in a single computer or a small setup without networking concepts, one can still separate the concerns of the GUI and the other tools that interact with the device & the device itself.
+For beginners - `hololinked` is a server side pythonic package suited for instrumentation control and data acquisition over network, especially with HTTP. If you have a requirement to control and capture data from your hardware/instrumentation, show the data in a browser/dashboard, provide a GUI or run automated scripts, `hololinked` can help. Even if one wishes to do hardware control/data-acquisition in a single computer or a small setup without networking concepts, one can still separate the concerns of the tools that interact with the hardware & the hardware itself.
 <br/> <br/>
-For those familiar with RPC & web development - This package is an implementation of a ZeroMQ-based Object Oriented RPC with customizable HTTP end-points. A dual transport in both ZMQ and HTTP is provided to maximize flexibility in data type, serialization and speed, although HTTP is preferred for networked applications. Even through HTTP, the paradigm of working is HTTP-RPC only, to queue the commands issued to hardware. The flexibility in HTTP endpoints is to offer a choice of how the hardware looks on the network. If one is looking for an object oriented approach towards creating components within a control or data acquisition system, or an IoT device, one may consider this package. 
+For those familiar with RPC & web development - This package is an implementation of a ZeroMQ-based Object Oriented RPC with customizable HTTP end-points. A dual transport in both ZMQ and HTTP is provided to maximize flexibility in data type, serialization and speed, although HTTP is preferred for networked applications. Even through HTTP, the paradigm of working is HTTP-RPC only, to queue the commands issued to the hardware. If one is looking for an object oriented approach towards creating components within a control or data acquisition system, or an IoT device, one may consider this package. 
  
 [![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest) [![Maintainability](https://api.codeclimate.com/v1/badges/913f4daa2960b711670a/maintainability)](https://codeclimate.com/github/VigneshVSV/hololinked/maintainability) [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked)](https://pypistats.org/packages/hololinked)
 
@@ -24,7 +24,7 @@ Each device or thing can be controlled systematically when their design in softw
 - events can asynchronously communicate/push (arbitrary) data to a client (say, a GUI), like alarm messages, streaming measured quantities etc. 
 
 The base class which enables this classification is the `Thing` class. Any class that inherits the `Thing` class can instantiate properties, actions and events which 
-become visible to a client in this segragated manner. For example, consider an optical spectrometer device, the following code is possible:
+become visible to a client in this segragated manner. For example, consider an optical spectrometer, the following code is possible:
 
 #### Import Statements
 
