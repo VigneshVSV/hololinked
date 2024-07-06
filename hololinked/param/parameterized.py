@@ -2053,6 +2053,7 @@ class ParameterizedFunction(Parameterized):
     def __new__(cls, *args, **params):
         # Create and __call__() an instance of this class.
         inst = super().__new__(cls)
+        inst.__init__(**params)
         return inst.__call__(*args, **params)
 
 

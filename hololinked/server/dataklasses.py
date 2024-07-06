@@ -10,6 +10,7 @@ from dataclasses import dataclass, asdict, field, fields
 from types import FunctionType, MethodType
 
 from ..param.parameters import String, Boolean, Tuple, TupleSelector, ClassSelector, Parameter
+from ..param.parameterized import ParameterizedMetaclass, ParameterizedFunction
 from .constants import JSON, USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, REGEX, ResourceTypes, http_methods 
 from .utils import get_signature, getattr_without_descriptor_read
 from .config import global_config
@@ -51,7 +52,7 @@ class RemoteResourceInfoValidator:
                     doc="HTTP request method under which the object is accessible. GET, POST, PUT, DELETE or PATCH are supported.") # typing.Tuple[str]
     state = Tuple(default=None, item_type=(Enum, str), allow_None=True, accept_list=True, accept_item=True,
                     doc="State machine state at which a callable will be executed or attribute/property can be written.") # type: typing.Union[Enum, str]
-    obj = ClassSelector(default=None, allow_None=True, class_=(FunctionType, classmethod, Parameter, MethodType), # Property will need circular import so we stick to base class Parameter
+    obj = ClassSelector(default=None, allow_None=True, class_=(FunctionType, MethodType, classmethod, Parameter, ParameterizedMetaclass), # Property will need circular import so we stick to base class Parameter
                     doc="the unbound object like the unbound method")
     obj_name = String(default=USE_OBJECT_NAME, 
                     doc="the name of the object which will be supplied to the ``ObjectProxy`` class to populate its own namespace.") # type: str
@@ -135,14 +136,17 @@ class ActionInfoValidator(RemoteResourceInfoValidator):
                     doc="metadata information whether the action is idempotent") # type: bool
     synchronous = Boolean(default=True,
                     doc="metadata information whether the action is synchronous") # type: bool
-    
+    isparameterized = Boolean(default=False,
+                    doc="True for a parameterized function") # type: bool
+
+
     def to_dataclass(self, obj : typing.Any = None, bound_obj : typing.Any = None) -> "RemoteResource":
         return ActionResource(
                     state=tuple(self.state) if self.state is not None else None, 
                     obj_name=self.obj_name, isaction=self.isaction, iscoroutine=self.iscoroutine,
                     isproperty=self.isproperty, obj=obj, bound_obj=bound_obj, 
                     schema_validator=(bound_obj.schema_validator)(self.argument_schema) if not global_config.validate_schema_on_client and self.argument_schema else None,
-                    create_task=self.create_task
+                    create_task=self.create_task, isparameterized=self.isparameterized
                 ) 
     
 
@@ -228,6 +232,7 @@ class ActionResource(RemoteResource):
     iscoroutine : bool
     schema_validator : typing.Optional[BaseSchemaValidator]
     create_task : bool 
+    isparameterized : bool
     # no need safe, idempotent, synchronous
 
 
@@ -561,7 +566,9 @@ def get_organised_resources(instance):
                 httpserver_resources[evt_fullpath] = prop._observable_event._remote_info
                 # zmq_resources[evt_fullpath] = prop._observable_event._remote_info
     # Methods
-    for name, resource in inspect._getmembers(instance, inspect.ismethod, getattr_without_descriptor_read): 
+    for name, resource in inspect._getmembers(instance, lambda f : inspect.ismethod(f) or (
+                                hasattr(f, '_remote_info') and isinstance(f._remote_info, ActionInfoValidator)),
+                                                 getattr_without_descriptor_read): 
         if hasattr(resource, '_remote_info'):
             if not isinstance(resource._remote_info, ActionInfoValidator):
                 raise TypeError("instance member {} has unknown sub-member '_remote_info' of type {}.".format(

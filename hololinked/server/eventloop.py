@@ -1,5 +1,6 @@
 import sys 
 import os
+from types import FunctionType, MethodType
 import warnings
 import subprocess
 import asyncio
@@ -8,6 +9,8 @@ import typing
 import threading
 import logging
 from uuid import uuid4
+
+from hololinked.param.parameterized import ParameterizedFunction
 
 from .constants import HTTP_METHODS
 from .utils import format_exception_as_json
@@ -322,8 +325,16 @@ class EventLoop(RemoteObject):
                 func = resource.obj
                 args = arguments.pop('__args__', tuple())
                 if resource.iscoroutine:
+                    if resource.isparameterized:
+                        if len(args) > 0:
+                            raise RuntimeError("parameterized functions cannot have positional arguments")
+                        return await func(resource.bound_obj, *args, **arguments)
                     return await func(*args, **arguments) # arguments then become kwargs
                 else:
+                    if resource.isparameterized:
+                        if len(args) > 0:
+                            raise RuntimeError("parameterized functions cannot have positional arguments")
+                        return func(resource.bound_obj, *args, **arguments)
                     return func(*args, **arguments) # arguments then become kwargs
             else: 
                 raise StateMachineError("Thing '{}' is in '{}' state, however command can be executed only in '{}' state".format(

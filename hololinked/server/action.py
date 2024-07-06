@@ -1,9 +1,10 @@
 import typing
 import jsonschema
 from enum import Enum
-from types import FunctionType
+from types import FunctionType, MethodType
 from inspect import iscoroutinefunction, getfullargspec
 
+from ..param.parameterized import ParameterizedFunction
 from .utils import pep8_to_URL_path
 from .dataklasses import ActionInfoValidator
 from .constants import USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, JSON
@@ -94,6 +95,7 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
             obj._remote_info.return_value_schema = output_schema
             obj._remote_info.obj = original
             obj._remote_info.create_task = create_task
+            obj._remote_info.isparameterized = not isinstance(obj, (FunctionType, MethodType)) and issubclass(obj, ParameterizedFunction)
             obj._remote_info.safe = kwargs.get('safe', False)
             obj._remote_info.idempotent = kwargs.get('idempotent', False)
             obj._remote_info.synchronous = kwargs.get('synchronous', False)
