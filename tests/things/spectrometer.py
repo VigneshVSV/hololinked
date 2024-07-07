@@ -2,7 +2,6 @@ import datetime
 from enum import StrEnum
 import threading
 import typing
-from seabreeze.spectrometers import Spectrometer, SeaBreezeError 
 import numpy
 from dataclasses import dataclass
 
@@ -109,9 +108,9 @@ class OceanOpticsSpectrometer(Thing):
         if serial_number is not None:
             self.serial_number = serial_number
         self.state_machine.current_state = self.states.ON
-        self._wavelengths = [i for i in range(50)]
-        self._model = 'STS'
         self._pixel_count = 50
+        self._wavelengths = [i for i in range(self._pixel_count)]
+        self._model = 'STS'
         self._max_intensity = 16384
         if trigger_mode is not None:
             self.trigger_mode = trigger_mode
@@ -221,46 +220,36 @@ class OceanOpticsSpectrometer(Thing):
             while self._running:
                 if max_count is not None and loop > max_count:
                     break 
-                loop += 1
-                try:
-                    # Following is a blocking command - self.spec.intensities
-                    self.logger.debug(f'starting measurement count {loop}')
-                    
-                    _current_intensity = [numpy.random.randint(0, self.max_intensity) for i in range(self._pixel_count)]
-                                 
-                    if self.background_correction == 'CUSTOM':
-                        if self.custom_background_intensity is None:
-                            self.logger.warn('no background correction possible')
-                            self.state_machine.set_state(self.states.ALARM)
-                        else:
-                            _current_intensity = _current_intensity - self.custom_background_intensity
-
-                    curtime = datetime.datetime.now()
-                    timestamp = curtime.strftime('%d.%m.%Y %H:%M:%S.') + '{:03d}'.format(int(curtime.microsecond /1000))
-                    self.logger.debug(f'measurement taken at {timestamp} - measurement count {loop}')
-
-                    if self._running:
-                        # To stop the acquisition in hardware trigger mode, we set running to False in stop_acquisition() 
-                        # and then change the trigger mode for self.spec.intensities to unblock. This exits this 
-                        # infintie loop. Therefore, to know, whether self.spec.intensities finished, whether due to trigger 
-                        # mode or due to actual completion of measurement, we check again if self._running is True. 
-                        self.last_intensity = Intensity(
-                            value=_current_intensity, 
-                            timestamp=timestamp
-                        )
-                        if self.last_intensity.not_completely_black:   
-                            self.intensity_measurement_event.push(self.last_intensity)
-                            self.state_machine.current_state = self.states.MEASURING
-                        else:
-                            self.logger.warn('trigger delayed or no trigger or erroneous data - completely black')
-                            self.state_machine.current_state = self.states.ALARM
-                except SeaBreezeError as ex:
-                    if not self._running and 'Data transfer error' in str(ex):
-                        pass
+                loop += 1               
+                # Following is a blocking command - self.spec.intensities
+                self.logger.debug(f'starting measurement count {loop}')                
+                _current_intensity = [numpy.random.randint(0, self.max_intensity) for i in range(self._pixel_count)]
+                if self.background_correction == 'CUSTOM':
+                    if self.custom_background_intensity is None:
+                        self.logger.warn('no background correction possible')
+                        self.state_machine.set_state(self.states.ALARM)
                     else:
-                        self.set_status(f'error during acquisition - {str(ex)}')
-                        raise ex from None
-               
+                        _current_intensity = _current_intensity - self.custom_background_intensity
+
+                curtime = datetime.datetime.now()
+                timestamp = curtime.strftime('%d.%m.%Y %H:%M:%S.') + '{:03d}'.format(int(curtime.microsecond /1000))
+                self.logger.debug(f'measurement taken at {timestamp} - measurement count {loop}')
+
+                if self._running:
+                    # To stop the acquisition in hardware trigger mode, we set running to False in stop_acquisition() 
+                    # and then change the trigger mode for self.spec.intensities to unblock. This exits this 
+                    # infintie loop. Therefore, to know, whether self.spec.intensities finished, whether due to trigger 
+                    # mode or due to actual completion of measurement, we check again if self._running is True. 
+                    self.last_intensity = Intensity(
+                        value=_current_intensity, 
+                        timestamp=timestamp
+                    )
+                    if self.last_intensity.not_completely_black:   
+                        self.intensity_measurement_event.push(self.last_intensity)
+                        self.state_machine.current_state = self.states.MEASURING
+                    else:
+                        self.logger.warn('trigger delayed or no trigger or erroneous data - completely black')
+                        self.state_machine.current_state = self.states.ALARM
             if self.state_machine.current_state not in [self.states.FAULT, self.states.ALARM]:        
                 self.state_machine.current_state = self.states.ON
                 self.set_status("ready to start acquisition")
@@ -282,7 +271,10 @@ class OceanOpticsSpectrometer(Thing):
     def reset_fault(self):
         self.state_machine.set_state(self.states.ON)
 
-   
+    @action()
+    def test_echo(self, value):
+        return value
+
     state_machine = StateMachine(
         states=states,
         initial_state=states.DISCONNECTED,
