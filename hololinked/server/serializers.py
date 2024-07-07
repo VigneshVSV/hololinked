@@ -248,6 +248,7 @@ def _get_serializer_from_user_given_options(
         http_serializer = http_serializer if isinstance(http_serializer, JSONSerializer) else JSONSerializer()
     else:
         raise ValueError("invalid JSON serializer option : {}".format(http_serializer))
+        # could also technically be TypeError 
     if isinstance(zmq_serializer, BaseSerializer):
         zmq_serializer = zmq_serializer 
         if isinstance(zmq_serializer, PickleSerializer) or zmq_serializer.type == pickle:

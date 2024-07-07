@@ -450,6 +450,11 @@ class Parameter(metaclass=ParameterMetaclass):
                 event_dispatcher.call_watcher(watcher, event)
             if not event_dispatcher.state.BATCH_WATCH:
                 event_dispatcher.batch_call_watchers()
+
+    def __delete__(self, obj : typing.Union['Parameterized', typing.Any]) -> None:
+        if self.fdel is not None:
+            return self.fdel(obj)
+        raise NotImplementedError("Parameter deletion not implemented.")
             
     def validate_and_adapt(self, value : typing.Any) -> typing.Any:
         """
