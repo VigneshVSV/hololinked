@@ -17,7 +17,7 @@ All types of contributions are encouraged and valued. See the [Table of Contents
 
 Do feel free to reach out to me at vignesh.vaidyanathan@hololinked.dev. I will try my very best to respond. 
 
-Nevertheless, if you want to ask a question, one may refer the available how-to section of the documentation [Documentation](https://hololinked.readthedocs.io/en/latest/index.html).
+Nevertheless, if you want to ask a question, one may also refer the available how-to section of the [Documentation](https://hololinked.readthedocs.io/en/latest/index.html).
 If the documentation is insufficient for any reason including being poorly documented, one may open a new discussion in the Q&A section of GitHub discussions. 
 
 For questions related to workings of HTTP, basic concepts of python like descriptors, decorators etc., it is also advisable to search the internet for answers first.
@@ -27,35 +27,40 @@ If you believe your question might also be a bug, you might want to search for e
 In case you have found a suitable issue and still need clarification, you can write your question in this issue. If an issue is not found:
 - Open an [Issue](https://github.com/VigneshVSV/hololinked/issues/new).
 - Provide as much context as you can about what you're running into.
-- Provide project and platform versions (OS, python version etc.), depending on what seems relevant.
-- 
-One may submit a bug report at any level of information. But the following information is useful:
   - Stack trace (Traceback)
   - OS, Platform and Version (Windows, Linux, macOS, x86, ARM)
   - Version of the interpreter
   - Possibly your input and the output
   - Can you reliably reproduce the issue? And can you also reproduce it with older versions?
+- Provide project and platform versions (OS, python version etc.), depending on what seems relevant.
+  
+One may submit a bug report at any level of information, especially if you reach out to me at my email. 
 
-We will then take care of the issue as soon as possible.
+I will then take care of the issue as soon as possible.
 
 > You must never report security related issues, vulnerabilities or bugs including sensitive information to the issue tracker, or elsewhere in public. Instead sensitive bugs must be sent by email to vignesh.vaidyanathan@hololinked.dev.
-<!-- You may add a PGP key to allow the messages to be sent encrypted as well. -->
+
 
 ## I Want To Contribute
 
 > ### Legal Notice <!-- omit in toc -->
-> When contributing to this project, you must agree that you have authored 100% of the content, that you have the necessary rights to the content and that the content you contribute may be provided under the project license.
+> When contributing to this project, you must agree that you have authored 100% of the content, that you have the necessary rights to the content and that the content you contribute may be provided under the project license (for example, you copied code with MIT, BSD License). Content from GPL/LGPL license is discouraged. 
 
 Developers are always welcome to contribute to the code base. If you want to tackle any issues, un-existing features, let me know (at my email), I can create some 
-open issues and features which I was never able to solve or did not have the time. The lack of issues or features in the Issues section of github does not mean the project 
+open issues and features which I was never able to solve or did not have the time. The lack of issues or features in the [Issues](https://github.com/VigneshVSV/hololinked/issues) section of github does not mean the project 
 is considered feature complete. 
 
-There are also repositories in [React](https://github.com/VigneshVSV/hololinked-portal), [Documentation](https://github.com/VigneshVSV/hololinked-docs) which needs significant improvement, 
-[examples](https://github.com/VigneshVSV/hololinked-examples) which can use your skills. 
+There are also repositories in 
+- [React](https://github.com/VigneshVSV/hololinked-portal) as a admin level client
+- [Documentation](https://github.com/VigneshVSV/hololinked-docs) in sphinx which needs significant improvement in How-To's, beginner level docs which may teach people concepts of data acquisition or IoT,
+  Docstring or API documentation of this repository itself 
+- [examples](https://github.com/VigneshVSV/hololinked-examples) in nodeJS, Dashboard GUIs or server implementations using this package
+
+which can use your skills. 
 
 ### Suggesting Enhancements
 
-Please write to me at my email. 
+Please write to me at my email. Once the idea is clear, you can fork and make a pull request. 
 
 ## Attribution
 This guide is based on the **contributing-gen**. [Make your own](https://github.com/bttger/contributing-gen)!
