@@ -775,14 +775,14 @@ class ThingDescription(Schema):
             if '/change-event' in resource.URL_path:
                 continue
             self.events[name] = EventAffordance.generate_schema(resource, self.instance, self.authority)
-        for name, resource in inspect._getmembers(self.instance, lambda o : isinstance(o, Thing), getattr_without_descriptor_read):
-            if resource is self.instance or isinstance(resource, EventLoop):
-                continue
-            if self.links is None:
-                self.links = []
-            link = Link()
-            link.build(resource, self.instance, self.authority)
-            self.links.append(link.asdict())
+        # for name, resource in inspect._getmembers(self.instance, lambda o : isinstance(o, Thing), getattr_without_descriptor_read):
+        #     if resource is self.instance or isinstance(resource, EventLoop):
+        #         continue
+        #     if self.links is None:
+        #         self.links = []
+        #     link = Link()
+        #     link.build(resource, self.instance, self.authority)
+        #     self.links.append(link.asdict())
     
 
     def add_top_level_forms(self):
