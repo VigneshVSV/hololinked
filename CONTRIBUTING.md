@@ -7,20 +7,20 @@ All types of contributions are encouraged and valued.
 > And if you like the project, but just don't have time to contribute, that's fine. There are other easy ways to support the project and show your appreciation, which we would also be very happy about:
 > - Star the project
 > - Tweet about it or share in social media
-> - Create examples & refer this project in your project's readme. I can add your example in my [example repository](https://github.com/VigneshVSV/hololinked-examples) if its really helpful, 
-  including use cases in more sophisticated integrations.  
-> - Mention the project at local meetups/conferences and tell your friends/colleagues.
+> - Create examples & refer this project in your project's readme. I can add your example in my [example repository](https://github.com/VigneshVSV/hololinked-examples) if its really helpful, including use cases in more sophisticated integrations
+> - Mention the project at local meetups/conferences and tell your friends/colleagues
+> - Donate to cover the costs of maintaining it
 
 
 ## I Have a Question
 
 Do feel free to reach out to me at vignesh.vaidyanathan@hololinked.dev. I will try my very best to respond. 
 
-Nevertheless, if you want to ask a question, one may also refer the available how-to section of the [Documentation](https://hololinked.readthedocs.io/en/latest/index.html).
+Nevertheless, one may also refer the available how-to section of the [Documentation](https://hololinked.readthedocs.io/en/latest/index.html).
 If the documentation is insufficient for any reason including being poorly documented, one may open a new discussion in the [Q&A](https://github.com/VigneshVSV/hololinked/discussions/categories/q-a) section of GitHub discussions. 
 
-For questions related to workings of HTTP, basic concepts of python like descriptors, decorators, JSON schema etc., it is also advisable to search the internet for answers first.
-For generic questions related to web of things standards or its ideas, I recommended to join web of things [discord](https://discord.com/invite/RJNYJsEgnb) group and [community](https://www.w3.org/community/wot/) group.
+For questions related to workings of HTTP, JSON schema, basic concepts of python like descriptors, decorators etc., it is also advisable to search the internet for answers first.
+For generic questions related to web of things standards or its ideas, I recommend to join web of things [discord](https://discord.com/invite/RJNYJsEgnb) group and [community](https://www.w3.org/community/wot/) group.
 
 If you believe your question might also be a bug, you might want to search for existing [Issues](https://github.com/VigneshVSV/hololinked/issues) that might help you. 
 In case you have found a suitable issue and still need clarification, you can write your question in this issue. If an issue is not found:
@@ -52,13 +52,16 @@ There are also repositories in
 - [React](https://github.com/VigneshVSV/hololinked-portal) for an admin level client
 - [Documentation](https://github.com/VigneshVSV/hololinked-docs) in sphinx which needs significant improvement in How-To's, beginner level docs which may teach people concepts of data acquisition or IoT,
   Docstring or API documentation of this repository itself 
-- [examples](https://github.com/VigneshVSV/hololinked-examples) in nodeJS, Dashboard/PyQt GUIs or server implementations using this package
+- [Examples](https://github.com/VigneshVSV/hololinked-examples) in nodeJS, Dashboard/PyQt GUIs or server implementations using this package
 
-which can use your skills. You can also suggest what else can be contributed.
+which can use your skills. 
+
 
 ### Suggesting Enhancements
 
+You can also suggest what else can be contributed.
 Please write to me at my email. Once the idea is clear, you can fork and make a pull request. 
+
 
 ## Attribution
 This guide is based on the **contributing-gen**. [Make your own](https://github.com/bttger/contributing-gen)!
