@@ -9,12 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - properties are now "observable" and push change events when read or written & value has changed
-- Input & output JSON schema can be specified for actions, where input schema is used for validation of arguments
+- input & output JSON schema can be specified for actions, where input schema is used for validation of arguments
 - TD has read/write properties' forms at thing level, event data schema
-- Change log
+- change log
+- some unit tests
 
 ### Changed
-- Event are to specified as descriptors and are not allowed as instance attributes. Specify at class level to 
+- events are to specified as descriptors and are not allowed as instance attributes. Specify at class level to 
   automatically obtain a instance specific event.  
 
 ### Fixed
@@ -26,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [v0.1.2] - 2024-06-06
 
 ### Added
-- First public release to pip, docs are the best source to document this release. Checkout commit 
+- first public release to pip, docs are the best source to document this release. Checkout commit 
   [04b75a73c28cab298eefa30746bbb0e06221b81c] and build docs if at all necessary.
  
 
