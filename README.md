@@ -128,7 +128,8 @@ Those familiar with Web of Things (WoT) terminology may note that these properti
 ```
 If you are not familiar with Web of Things or the term "property affordance", consider the above JSON as a description of 
 what the property represents and how to interact with it from somewhere else. Such a JSON is both human-readable, yet consumable 
-by a client provider to create a client object. 
+by a client provider to create a client object to interact with the property in the way the property demands. You, as the developer,
+only need to use the client.  
 
 The URL path segment `../spectrometer/..` in href field is taken from the `instance_name` which was specified in the `__init__`. 
 This is a mandatory key word argument to the parent class `Thing` to generate a unique name/id for the instance. One should use URI compatible strings.
@@ -282,19 +283,22 @@ if __name__ == '__main__':
 
 Here one can see the use of `instance_name` and why it turns up in the URL path.
 
-The intention behind specifying HTTP URL paths and methods directly on object's members is to 
-- eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in queueing commands issued to instruments
-- or, write an additional boiler-plate HTTP to RPC bridge or HTTP request handler design to object oriented design bridge
-- or, find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events, yet appeals deeply to the object oriented python world. 
-
-See a list of currently supported features [below](#currently-supported). <br/> 
-
-##### NOTE - The package is under active development. Contributors welcome. 
+##### NOTE - The package is under active development. Contributors welcome, please check CONTRIBUTING.md. 
 
 - [example repository](https://github.com/VigneshVSV/hololinked-examples) - detailed examples for both clients and servers
 - [helper GUI](https://github.com/VigneshVSV/hololinked-portal) - view & interact with your object's methods, properties and events. 
+ 
+See a list of currently supported features [below](#currently-supported). <br/> 
+You may use a script deployment and automation tool to remote stop and start servers, in an attempt to remotly control your hardware scripts. 
+
+### Further Reading
 
 <br/> 
+The intention behind specifying HTTP URL paths and methods directly on object's members is to 
+- eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in queueing commands issued to instruments
+- or, write an additional boiler-plate HTTP to RPC bridge or HTTP request handler code to object oriented code bridge
+- or, find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events, yet appeals deeply to the object oriented python world. 
+
 Ultimately, as expected, the redirection from the HTTP side to the object is mediated by ZeroMQ which implements the fully fledged RPC server that queues all the HTTP requests to execute them one-by-one on the hardware/object. The HTTP server can also communicate with the RPC server over ZeroMQ's INPROC (for the non-expert = multithreaded applications, at least in python) or IPC (for the non-expert = multiprocess applications) transport methods. In the example above, INPROC is used by default. There is no need for yet another TCP from HTTP to TCP to ZeroMQ transport athough this is also supported. 
 <br/> 
 Serialization-Deserialization overheads are also already reduced. For example, when pushing an event from the object which gets automatically tunneled as a HTTP SSE or returning a reply for an action from the object, there is no JSON deserialization-serialization overhead when the message passes through the HTTP server. The message is serialized once on the object side but passes transparently through the HTTP server.     
@@ -304,7 +308,6 @@ To know more about client side scripting, please look into the documentation [Ho
 
 ### Currently Supported
 
-- indicate HTTP verb & URL path directly on object's methods, properties and events.
 - control method execution and property write with a custom finite state machine.
 - database (Postgres, MySQL, SQLite - based on SQLAlchemy) support for storing and loading properties  when object dies and restarts. 
 - auto-generate Thing Description for Web of Things applications. 
