@@ -526,6 +526,8 @@ class Thing(Parameterized, metaclass=ThingMeta):
         self.message_broker = self.rpc_server.inner_inproc_server
         self.event_publisher = self.rpc_server.event_publisher 
 
+        print("context", self.message_broker.context, self.event_publisher.context, self.rpc_server.context)
+
         from .eventloop import EventLoop
         self.event_loop = EventLoop(
                     instance_name=f'{self.instance_name}/eventloop', 
