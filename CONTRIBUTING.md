@@ -32,8 +32,7 @@ In case you have found a suitable issue and still need clarification, you can wr
   - Possibly your input and the output
   - Can you reliably reproduce the issue? 
   
-One may submit a bug report at any level of information, especially if you reached out to me at my email upfront. If you also know how to fix it,
-lets discuss, once the idea is clear, you can fork and make a pull request. 
+One may submit a bug report at any level of information, especially if you reached out to me at my email upfront. If you also know how to fix it, lets discuss, once the idea is clear, you can fork and make a pull request. 
 
 Otherwise, I will then take care of the issue as soon as possible.
 
@@ -43,24 +42,14 @@ Otherwise, I will then take care of the issue as soon as possible.
 ## I Want To Contribute
 
 > ### Legal Notice <!-- omit in toc -->
-> When contributing to this project, you must agree that you have authored 100% of the content or that you have the necessary rights to the content. The content you contribute is allowed to be provided under the project license (for example, you copied code with MIT, BSD License). Content from GPL/LGPL license is discouraged. 
+> When contributing to this project, you must agree that you have authored 100% of the content or that you have the necessary rights to the content. For example, you copied code from projects with MIT/BSD License. Content from GPL-related licenses may be maintained in a separate repository as an add-on. 
 
-Developers are always welcome to contribute to the code base. If you want to tackle any issues, un-existing features, let me know (at my email), I can create some 
-open issues and features which I was never able to solve or did not have the time. The lack of issues or features in the [Issues](https://github.com/VigneshVSV/hololinked/issues) section of github does not mean the project is considered feature complete or I dont have ideas what to do next. On the contrary, there is tons of work to do. 
+Developers are always welcome to contribute to the code base. If you want to tackle any issues, un-existing features, let me know (at my email), I can create some open issues and features which I was never able to solve or did not have the time. You can also suggest what else can be contributed functionally or conceptually or also simply code-refactoring. The lack of issues or features in the [Issues](https://github.com/VigneshVSV/hololinked/issues) section of github does not mean the project is considered feature complete or I dont have ideas what to do next. On the contrary, there is tons of work to do. 
 
-There are also repositories in 
-- [React](https://github.com/VigneshVSV/hololinked-portal) for an admin level client
-- [Documentation](https://github.com/VigneshVSV/hololinked-docs) in sphinx which needs significant improvement in How-To's, beginner level docs which may teach people concepts of data acquisition or IoT,
-  Docstring or API documentation of this repository itself 
-- [Examples](https://github.com/VigneshVSV/hololinked-examples) in nodeJS, Dashboard/PyQt GUIs or server implementations using this package
-
-which can use your skills. 
-
-
-### Suggesting Enhancements
-
-You can also suggest what else can be contributed.
-Please write to me at my email. Once the idea is clear, you can fork and make a pull request. 
+There are also repositories which can use your skills:
+- An [admin client](https://github.com/VigneshVSV/hololinked-portal) in react
+- [Documentation](https://github.com/VigneshVSV/hololinked-docs) in sphinx which needs significant improvement in How-To's, beginner level docs which may teach people concepts of data acquisition or IoT, Docstring or API documentation of this repository itself 
+- [Examples](https://github.com/VigneshVSV/hololinked-examples) in nodeJS, Dashboard/PyQt GUIs or server implementations using this package. Hardware implementations of unexisting examples are also welcome, I can open a directory where people can search for code based on hardware and just download your code. 
 
 
 ## Attribution
