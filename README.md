@@ -288,20 +288,20 @@ Here one can see the use of `instance_name` and why it turns up in the URL path.
 - [example repository](https://github.com/VigneshVSV/hololinked-examples) - detailed examples for both clients and servers
 - [helper GUI](https://github.com/VigneshVSV/hololinked-portal) - view & interact with your object's methods, properties and events. 
  
-See a list of currently supported features [below](#currently-supported). <br/> 
-You may use a script deployment and automation tool to remote stop and start servers, in an attempt to remotly control your hardware scripts. 
+See a list of currently supported features [below](#currently-supported). You may use a script deployment/automation tool to remote stop and start servers, in an attempt to remotely control your hardware scripts. 
 
 ### Further Reading
 
-<br/> 
 The intention behind specifying HTTP URL paths and methods directly on object's members is to 
-- eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in queueing commands issued to instruments
+- eliminate the need to implement a detailed HTTP server (& its API) which generally poses problems in queueing commands issued to instruments (at least non-modbus & scientific ones)
 - or, write an additional boiler-plate HTTP to RPC bridge or HTTP request handler code to object oriented code bridge
 - or, find a reasonable HTTP-RPC implementation which supports all three of properties, actions and events, yet appeals deeply to the object oriented python world. 
 
-Ultimately, as expected, the redirection from the HTTP side to the object is mediated by ZeroMQ which implements the fully fledged RPC server that queues all the HTTP requests to execute them one-by-one on the hardware/object. The HTTP server can also communicate with the RPC server over ZeroMQ's INPROC (for the non-expert = multithreaded applications, at least in python) or IPC (for the non-expert = multiprocess applications) transport methods. In the example above, INPROC is used by default. There is no need for yet another TCP from HTTP to TCP to ZeroMQ transport athough this is also supported. 
-<br/> 
-Serialization-Deserialization overheads are also already reduced. For example, when pushing an event from the object which gets automatically tunneled as a HTTP SSE or returning a reply for an action from the object, there is no JSON deserialization-serialization overhead when the message passes through the HTTP server. The message is serialized once on the object side but passes transparently through the HTTP server.     
+This is based on the original assumption that segregation of hardware resources in software is best done when they are divided as properties, actions and events. 
+
+Ultimately, as expected, the redirection from the HTTP side to the object is mediated by ZeroMQ which implements the fully fledged RPC server that queues all the HTTP requests to execute them one-by-one on the hardware/object. The HTTP server can also communicate with the RPC server over ZeroMQ's INPROC (for the non-expert = multithreaded applications, at least in python) or IPC (for the non-expert = multiprocess applications) transport methods. In the example above, INPROC is used by default, which is also the fastest transport between two threads - one thread serving the HTTP server and one where the Thing's properties, actions and events run. There is no need for yet another TCP from HTTP to TCP to ZeroMQ transport athough this is also supported. 
+
+Serialization-Deserialization overheads are also already reduced. For example, when pushing an event from the object which gets automatically tunneled as a HTTP SSE or returning a reply for an action from the object, there is no JSON deserialization-serialization overhead when the message passes through the HTTP server. The message is serialized once on the object side but passes transparently through the HTTP server. Therefore, there is a minor optimization over the serialization, when not implemented in this fashion can be time consuming when sending large data. If you hand-write a RPC client within a HTTP server, you may have to work little harder to get this optimization.     
 
 One may use the HTTP API according to one's beliefs (including letting the package auto-generate it), although it is mainly intended for web development and cross platform clients like the [node-wot](https://github.com/eclipse-thingweb/node-wot) HTTP(s) client. The node-wot client is the recommended Javascript client for this package as one can seamlessly plugin code developed from this package to the rest of the IoT tools, protocols & standardizations, or do scripting on the browser or nodeJS. Please check node-wot docs on how to consume [Thing Descriptions](https://www.w3.org/TR/wot-thing-description11) to call actions, read & write properties or subscribe to events. A Thing Description will be automatically generated if absent as shown in JSON examples above or can be supplied manually. 
 To know more about client side scripting, please look into the documentation [How-To](https://hololinked.readthedocs.io/en/latest/howto/index.html) section.
