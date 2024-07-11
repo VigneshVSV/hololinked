@@ -114,7 +114,8 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
                 "target for action or is not a function/method. " +
                 f"Given type {type(obj)}"
             )
-            
+    if callable(URL_path):
+        raise TypeError("URL_path should be a string, not a function/method, did you decorate your action wrongly?")
     return inner 
 
 
