@@ -5,10 +5,13 @@ from types import FunctionType, MethodType
 from inspect import iscoroutinefunction, getfullargspec
 
 from ..param.parameterized import ParameterizedFunction
-from .utils import pep8_to_URL_path
+from .utils import pep8_to_URL_path, isclassmethod
 from .dataklasses import ActionInfoValidator
 from .constants import USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, JSON
 from .config import global_config
+
+
+
 
    
 def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.POST, 
@@ -46,7 +49,7 @@ def action(URL_path : str = USE_OBJECT_NAME, http_method : str = HTTP_METHODS.PO
     
     def inner(obj):
         original = obj
-        if isinstance(obj, classmethod):
+        if isclassmethod(obj):
             obj = obj.__func__
         if obj.__name__.startswith('__'):
             raise ValueError(f"dunder objects cannot become remote : {obj.__name__}")

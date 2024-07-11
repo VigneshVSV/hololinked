@@ -181,6 +181,20 @@ def getattr_without_descriptor_read(instance, key):
     return getattr(instance, key, None) # we can deal with None where we use this getter, so dont raise AttributeError  
 
 
+def isclassmethod(method):
+    """https://stackoverflow.com/questions/19227724/check-if-a-function-uses-classmethod"""
+    bound_to = getattr(method, '__self__', None)
+    if not isinstance(bound_to, type):
+        # must be bound to a class
+        return False
+    name = method.__name__
+    for cls in bound_to.__mro__:
+        descriptor = vars(cls).get(name)
+        if descriptor is not None:
+            return isinstance(descriptor, classmethod)
+    return False
+
+
 __all__ = [
     get_IP_from_interface.__name__,
     format_exception_as_json.__name__,
@@ -188,7 +202,8 @@ __all__ = [
     get_default_logger.__name__,
     run_coro_sync.__name__,
     run_callable_somehow.__name__,
-    get_signature.__name__
+    get_signature.__name__,
+    isclassmethod.__name__
 ]
 
 
