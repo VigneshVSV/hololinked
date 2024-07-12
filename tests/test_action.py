@@ -1,46 +1,42 @@
 import asyncio
+import typing
 import unittest
 import logging
+import multiprocessing
 from hololinked.server.dataklasses import ActionInfoValidator
 from hololinked.server.thing import Thing, action
 from hololinked.server.utils import isclassmethod
 from hololinked.param import ParameterizedFunction
+from hololinked.client import ObjectProxy
 from hololinked.server.properties import Number, String, ClassSelector
-from utils import TestCase
+try:
+    from .utils import TestCase
+    from .things import TestThing
+except ImportError:
+    from utils import TestCase
+    from things import start_thing_in_separate_process 
+
 
 
 class TestThing(Thing):
 
-    def get_protocols(self):
-        protocols = []
-        if self.rpc_server.inproc_server is not None and self.rpc_server.inproc_server.socket_address.startswith('inproc://'):
-            protocols.append('INPROC')
-        if self.rpc_server.ipc_server is not None and self.rpc_server.ipc_server.socket_address.startswith('ipc://'): 
-            protocols.append('IPC')
-        if self.rpc_server.tcp_server is not None and self.rpc_server.tcp_server.socket_address.startswith('tcp://'): 
-            protocols.append('TCP')
-        return protocols
-
-    def test_echo(self, value):
+    def action_echo(self, value):
         return value
 
     @classmethod
-    def test_echo_with_classmethod(self, value):
+    def action_echo_with_classmethod(self, value):
         return value
     
-    async def test_echo_async(self, value):
+    async def action_echo_async(self, value):
         await asyncio.sleep(0.1)
         return value
     
     @classmethod
-    async def tesc_echo_async_with_classmethod(self, value):
+    async def action_echo_async_with_classmethod(self, value):
         await asyncio.sleep(0.1)
         return value
     
-    def extra_method(self, value):
-        return value
-    
-    class foo(ParameterizedFunction):
+    class typed_action(ParameterizedFunction):
 
         arg1 = Number(bounds=(0, 10), step=0.5, default=5, crop_to_bounds=True, 
                     doc='arg1 description')
@@ -52,7 +48,7 @@ class TestThing(Thing):
             return instance.instance_name, arg1, arg2, arg3
 
 
-    class foobar(ParameterizedFunction):
+    class typed_action_without_call(ParameterizedFunction):
 
         arg1 = Number(bounds=(0, 10), step=0.5, default=5, crop_to_bounds=True, 
                     doc='arg1 description')
@@ -61,7 +57,7 @@ class TestThing(Thing):
                             default=5, doc='arg3 description')
 
 
-    class async_foo(ParameterizedFunction):
+    class typed_action_async(ParameterizedFunction):
             
         arg1 = Number(bounds=(0, 10), step=0.5, default=5, crop_to_bounds=True, 
                     doc='arg1 description')
@@ -74,6 +70,20 @@ class TestThing(Thing):
             return instance.instance_name, arg1, arg2, arg3
 
 
+    def __internal__(self, value):
+        return value
+
+    def incorrectly_decorated_method(self, value):
+        return value
+    
+    def not_an_action(self, value):
+        return value
+    
+    async def not_an_async_action(self, value):
+        await asyncio.sleep(0.1)
+        return value
+    
+
 
 class TestAction(TestCase):
 
@@ -82,27 +92,30 @@ class TestAction(TestCase):
         self.thing_cls = TestThing 
 
 
-    def test_action(self):
+    def test_allowed_actions(self):
         # instance method can be decorated with action
-        self.assertEqual(self.thing_cls.test_echo, action()(self.thing_cls.test_echo))
+        self.assertEqual(self.thing_cls.action_echo, action()(self.thing_cls.action_echo))
         # classmethod can be decorated with action
-        self.assertEqual(self.thing_cls.test_echo_with_classmethod, action()(self.thing_cls.test_echo_with_classmethod))
-        self.assertTrue(isclassmethod(self.thing_cls.test_echo_with_classmethod))
+        self.assertEqual(self.thing_cls.action_echo_with_classmethod, 
+                        action()(self.thing_cls.action_echo_with_classmethod))
+        self.assertTrue(isclassmethod(self.thing_cls.action_echo_with_classmethod))
         # async methods can be decorated with action    
-        self.assertEqual(self.thing_cls.test_echo_async, action()(self.thing_cls.test_echo_async))
+        self.assertEqual(self.thing_cls.action_echo_async, 
+                        action()(self.thing_cls.action_echo_async))
         # async classmethods can be decorated with action
-        self.assertEqual(self.thing_cls.tesc_echo_async_with_classmethod, 
-                         action()(self.thing_cls.tesc_echo_async_with_classmethod))
+        self.assertEqual(self.thing_cls.action_echo_async_with_classmethod, 
+                        action()(self.thing_cls.action_echo_async_with_classmethod))
+        self.assertTrue(isclassmethod(self.thing_cls.action_echo_async_with_classmethod))
         # parameterized function can be decorated with action
-        self.assertEqual(self.thing_cls.foo, action(safe=True)(self.thing_cls.foo))
-        self.assertEqual(self.thing_cls.foobar, action(idempotent=False)(self.thing_cls.foobar))
-        self.assertEqual(self.thing_cls.async_foo, action(synchronous=False)(self.thing_cls.async_foo))
-
-
-    def test_action_info(self):
+        self.assertEqual(self.thing_cls.typed_action, action(safe=True)(self.thing_cls.typed_action))
+        self.assertEqual(self.thing_cls.typed_action_without_call, action(idempotent=True)(self.thing_cls.typed_action_without_call))
+        self.assertEqual(self.thing_cls.typed_action_async, action(synchronous=True)(self.thing_cls.typed_action_async))
+       
+        
+    def test_remote_info(self):
         # basic check if the remote_info is correct, although this test is not necessary, not recommended and 
         # neither particularly useful
-        remote_info = self.thing_cls.test_echo._remote_info
+        remote_info = self.thing_cls.action_echo._remote_info
         self.assertIsInstance(remote_info, ActionInfoValidator)
         assert isinstance(remote_info, ActionInfoValidator) # type definition
         self.assertTrue(remote_info.isaction)
@@ -110,8 +123,10 @@ class TestAction(TestCase):
         self.assertFalse(remote_info.isparameterized)
         self.assertFalse(remote_info.iscoroutine)
         self.assertFalse(remote_info.safe)  
+        self.assertFalse(remote_info.idempotent)
+        self.assertFalse(remote_info.synchronous)
 
-        remote_info = self.thing_cls.test_echo_async._remote_info
+        remote_info = self.thing_cls.action_echo_async._remote_info
         self.assertIsInstance(remote_info, ActionInfoValidator)
         assert isinstance(remote_info, ActionInfoValidator) # type definition
         self.assertTrue(remote_info.isaction)
@@ -119,17 +134,21 @@ class TestAction(TestCase):
         self.assertFalse(remote_info.isproperty)
         self.assertFalse(remote_info.isparameterized)
         self.assertFalse(remote_info.safe)
+        self.assertFalse(remote_info.idempotent)
+        self.assertFalse(remote_info.synchronous)
 
-        remote_info = self.thing_cls.test_echo_async._remote_info
+        remote_info = self.thing_cls.action_echo_with_classmethod._remote_info
         self.assertIsInstance(remote_info, ActionInfoValidator)
         assert isinstance(remote_info, ActionInfoValidator) # type definition
         self.assertTrue(remote_info.isaction)
-        self.assertTrue(remote_info.iscoroutine)
+        self.assertFalse(remote_info.iscoroutine)
         self.assertFalse(remote_info.isproperty)
         self.assertFalse(remote_info.isparameterized)
         self.assertFalse(remote_info.safe)
+        self.assertFalse(remote_info.idempotent)
+        self.assertFalse(remote_info.synchronous)
 
-        remote_info = self.thing_cls.foo._remote_info
+        remote_info = self.thing_cls.typed_action._remote_info
         self.assertIsInstance(remote_info, ActionInfoValidator)
         assert isinstance(remote_info, ActionInfoValidator)
         self.assertTrue(remote_info.isaction)
@@ -137,13 +156,101 @@ class TestAction(TestCase):
         self.assertFalse(remote_info.isproperty)
         self.assertTrue(remote_info.isparameterized)
         self.assertTrue(remote_info.safe)
+        self.assertFalse(remote_info.idempotent)
+        self.assertFalse(remote_info.synchronous)
 
-    def test_api(self):
+        remote_info = self.thing_cls.typed_action_without_call._remote_info
+        self.assertIsInstance(remote_info, ActionInfoValidator)
+        assert isinstance(remote_info, ActionInfoValidator)
+        self.assertTrue(remote_info.isaction)
+        self.assertFalse(remote_info.iscoroutine)
+        self.assertFalse(remote_info.isproperty)
+        self.assertTrue(remote_info.isparameterized)
+        self.assertFalse(remote_info.safe)
+        self.assertTrue(remote_info.idempotent)
+        self.assertFalse(remote_info.synchronous)
+
+        remote_info = self.thing_cls.typed_action_async._remote_info
+        self.assertIsInstance(remote_info, ActionInfoValidator)
+        assert isinstance(remote_info, ActionInfoValidator)
+        self.assertTrue(remote_info.isaction)
+        self.assertTrue(remote_info.iscoroutine)
+        self.assertFalse(remote_info.isproperty)
+        self.assertTrue(remote_info.isparameterized)
+        self.assertFalse(remote_info.safe)
+        self.assertFalse(remote_info.idempotent)
+        self.assertTrue(remote_info.synchronous)
+
+
+    def test_api_and_invalid_actions(self):
         # done allow action decorator to be terminated without '()' on a method
         with self.assertRaises(TypeError) as ex:
-           action(self.thing_cls.extra_method)
+           action(self.thing_cls.incorrectly_decorated_method)
         self.assertTrue(str(ex.exception).startswith("URL_path should be a string, not a function/method, did you decorate"))
         
+        # dunder methods cannot be decorated with action
+        with self.assertRaises(ValueError) as ex:
+            action()(self.thing_cls.__internal__)
+        self.assertTrue(str(ex.exception).startswith("dunder objects cannot become remote"))
+
+        # only functions and methods can be decorated with action
+        for obj in [self.thing_cls, str, 1, 1.0, 'Str', True, None, object(), type, property]:
+            with self.assertRaises(TypeError) as ex:
+                action()(obj) # not an action
+            self.assertTrue(str(ex.exception).startswith("target for action or is not a function/method."))
+
+        with self.assertRaises(ValueError) as ex:
+            action(safe=True, some_kw=1)
+        self.assertTrue(str(ex.exception).startswith("Only 'safe', 'idempotent', 'synchronous' are allowed"))
+            
+
+    def test_exposed_actions(self):
+        self.assertTrue(hasattr(self.thing_cls.action_echo, '_remote_info'))
+        done_queue = multiprocessing.Queue()
+        start_thing_in_separate_process(self.thing_cls, instance_name='test-action', done_queue=done_queue,
+                                        log_level=logging.ERROR+10, prerun_callback=expose_actions)
+
+        thing_client = ObjectProxy('test-action', log_level=logging.ERROR) # type: TestThing
+
+        self.assertTrue(thing_client.action_echo(1) == 1)
+        self.assertTrue(thing_client.action_echo_async("string") == "string")
+        self.assertTrue(thing_client.typed_action(arg1=1, arg2='hello', arg3=5) == ['test-action', 1, 'hello', 5])
+        self.assertTrue(thing_client.typed_action_async(arg1=2.5, arg2='hello', arg3='foo') == ['test-action', 2.5, 'hello', 'foo'])
+
+        with self.assertRaises(NotImplementedError) as ex:
+            thing_client.typed_action_without_call(arg1=1, arg2='hello', arg3=5), 
+        self.assertTrue(str(ex.exception).startswith("Subclasses must implement __call__"))
+        
+        with self.assertRaises(AttributeError) as ex:
+            thing_client.__internal__(1)
+        self.assertTrue(str(ex.exception).startswith("'ObjectProxy' object has no attribute '__internal__'"))
+
+        with self.assertRaises(AttributeError) as ex:
+            thing_client.not_an_action("foo")
+        self.assertTrue(str(ex.exception).startswith("'ObjectProxy' object has no attribute 'not_an_action'"))
+
+        with self.assertRaises(AttributeError) as ex:
+            thing_client.not_an_async_action(1)
+        self.assertTrue(str(ex.exception).startswith("'ObjectProxy' object has no attribute 'not_an_async_action'"))
+
+        thing_client.exit()
+
+        self.assertTrue(done_queue.get() == 'test-action')
+
+
+
+def expose_actions(thing_cls):
+    action()(thing_cls.action_echo)
+        # classmethod can be decorated with action   
+    action()(thing_cls.action_echo_with_classmethod)   
+    # async methods can be decorated with action       
+    action()(thing_cls.action_echo_async)
+    # async classmethods can be decorated with action    
+    action()(thing_cls.action_echo_async_with_classmethod)
+    # parameterized function can be decorated with action
+    action(safe=True)(thing_cls.typed_action)
+    action(idempotent=True)(thing_cls.typed_action_without_call)
+    action(synchronous=True)(thing_cls.typed_action_async)
 
 
 
