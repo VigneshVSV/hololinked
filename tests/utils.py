@@ -1,5 +1,7 @@
 import unittest
 
+
+
 class TestResult(unittest.TextTestResult):
     def addSuccess(self, test):
         super().addSuccess(test)
@@ -18,3 +20,9 @@ class TestResult(unittest.TextTestResult):
 
 class TestRunner(unittest.TextTestRunner):
     resultclass = TestResult
+
+
+class TestCase(unittest.TestCase):
+    
+    def setUp(self):
+        print() # dont concatenate with results printed by unit test

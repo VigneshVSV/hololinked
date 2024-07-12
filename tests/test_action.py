@@ -10,10 +10,10 @@ from hololinked.param import ParameterizedFunction
 from hololinked.client import ObjectProxy
 from hololinked.server.properties import Number, String, ClassSelector
 try:
-    from .utils import TestCase
+    from .utils import TestCase, TestRunner
     from .things import TestThing
 except ImportError:
-    from utils import TestCase
+    from utils import TestCase, TestRunner
     from things import start_thing_in_separate_process 
 
 
@@ -255,9 +255,4 @@ def expose_actions(thing_cls):
 
 
 if __name__ == '__main__':
-    try:
-        from utils import TestRunner
-    except ImportError:
-        from .utils import TestRunner
-
     unittest.main(testRunner=TestRunner())

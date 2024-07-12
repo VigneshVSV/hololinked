@@ -5,15 +5,21 @@ import multiprocessing
 import logging
 import zmq.asyncio
 
-from hololinked.server import Thing, action
+from hololinked.server import Thing
 from hololinked.client import ObjectProxy
 from hololinked.server.eventloop import EventLoop
+try:
+    from .things import TestThing, OceanOpticsSpectrometer
+    from .utils import TestCase
+except ImportError:
+    from things import TestThing, OceanOpticsSpectrometer
+    from utils import TestCase
 
 
+class TestThingRun(TestCase):
 
-class TestThingRun(unittest.TestCase):
-
-    def setUp(self):
+    @classmethod    
+    def setUpClass(self):
         self.thing_cls = Thing 
 
     def test_thing_run_and_exit(self):
@@ -43,36 +49,28 @@ class TestThingRun(unittest.TestCase):
         self.assertEqual(done_queue.get(), 'test-run-3')
 
     
-    def test_thing_run_and_exit_with_httpserver(self):
-        EventLoop.get_async_loop() # creates the event loop if absent
-        context = zmq.asyncio.Context()
-        T = threading.Thread(target=start_thing_with_http_server, args=('test-run-4', context), daemon=True)
-        T.start()       
-        thing_client = ObjectProxy('test-run-4', log_level=logging.WARN, context=context) # type: Thing
-        self.assertEqual(thing_client.get_protocols(), ['INPROC']) 
-        thing_client.exit()
-        T.join()
+    # def test_thing_run_and_exit_with_httpserver(self):
+    #     difficult case, currently not supported - https://github.com/zeromq/pyzmq/issues/1354
+    #     EventLoop.get_async_loop() # creates the event loop if absent
+    #     context = zmq.asyncio.Context()
+    #     T = threading.Thread(target=start_thing_with_http_server, args=('test-run-4', context), daemon=True)
+    #     T.start()       
+    #     thing_client = ObjectProxy('test-run-4', log_level=logging.WARN, context=context) # type: Thing
+    #     self.assertEqual(thing_client.get_protocols(), ['INPROC']) 
+    #     thing_client.exit()
+    #     T.join()
+
+
+class TestOceanOpticsSpectrometer(TestThing):
+
+    @classmethod
+    def setUpClass(self):
+        self.thing_cls = OceanOpticsSpectrometer
+
+        
         
 
-class TestThing(Thing):
-
-    @action()
-    def get_protocols(self):
-        protocols = []
-        if self.rpc_server.inproc_server is not None and self.rpc_server.inproc_server.socket_address.startswith('inproc://'):
-            protocols.append('INPROC')
-        if self.rpc_server.ipc_server is not None and self.rpc_server.ipc_server.socket_address.startswith('ipc://'): 
-            protocols.append('IPC')
-        if self.rpc_server.tcp_server is not None and self.rpc_server.tcp_server.socket_address.startswith('tcp://'): 
-            protocols.append('TCP')
-        return protocols
-
-    @action()
-    def test_echo(self, value):
-        return value
-    
-
-def start_thing(instance_name : str, protocols : typing.List[str] =['IPC'], tcp_socket_address : str = None,
+def start_thing(instance_name : str, protocols : typing.List[str] = ['IPC'], tcp_socket_address : str = None,
                 done_queue : typing.Optional[multiprocessing.Queue] = None) -> None:
     thing = TestThing(instance_name=instance_name) #, log_level=logging.WARN)
     thing.run(zmq_protocols=protocols, tcp_socket_address=tcp_socket_address)

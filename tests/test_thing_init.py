@@ -5,23 +5,24 @@ import warnings
 from hololinked.server import Thing
 from hololinked.server.schema_validators import JsonSchemaValidator, BaseSchemaValidator
 from hololinked.server.serializers import JSONSerializer, PickleSerializer, MsgpackSerializer
+from hololinked.server.td import ThingDescription
 from hololinked.server.utils import get_default_logger 
 from hololinked.server.logger import RemoteAccessHandler
-from tests.things.spectrometer import OceanOpticsSpectrometer
+try:
+    from .things import OceanOpticsSpectrometer
+    from .utils import TestCase
+except ImportError:
+    from things import OceanOpticsSpectrometer
+    from utils import TestCase
 
 
-
-class TestThing(unittest.TestCase):
+class TestThing(TestCase):
     """Test Thing class from hololinked.server.thing module."""
     
     @classmethod
     def setUpClass(self):
         self.thing_cls = Thing
         
-    def setUp(self):
-        print() # dont concatenate with results printed by unit test
-   
-
     def test_instance_name(self):
         # instance name must be a string and cannot be changed after set
         thing = self.thing_cls(instance_name="test_instance_name", log_level=logging.WARN)
@@ -151,6 +152,15 @@ class TestThing(unittest.TestCase):
         self.assertIsNone(thing.rpc_server)
         self.assertIsNone(thing.message_broker)
         self.assertIsNone(thing.event_publisher)
+
+    
+    def test_resource_generation(self):
+        # basic test only to make sure nothing is fundamentally wrong
+        thing = self.thing_cls(instance_name="test_servers_init", log_level=logging.WARN)
+        self.assertIsInstance(thing.get_thing_description(), dict)
+        self.assertIsInstance(thing.httpserver_resources, dict)
+        self.assertIsInstance(thing.zmq_resources, dict)
+        # self.assertIsInstance(thing.gui_resources, dict)
 
 
 class TestOceanOpticsSpectrometer(TestThing):
