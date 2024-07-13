@@ -29,36 +29,36 @@ class TestRPC(TestCase):
         self.thing_client.exit()
 
 
-    # def test_1_normal_client(self):
-    #     # First test a simple single-threaded client and make sure it succeeds 
-    #     # all requests  
-    #     done_queue = multiprocessing.Queue()
-    #     start_client(done_queue)
-    #     self.assertEqual(done_queue.get(), True)
+    def test_1_normal_client(self):
+        # First test a simple single-threaded client and make sure it succeeds 
+        # all requests  
+        done_queue = multiprocessing.Queue()
+        start_client(done_queue)
+        self.assertEqual(done_queue.get(), True)
 
-    # def test_2_threaded_client(self):
-    #     # Then test a multi-threaded client and make sure it succeeds all requests
-    #     done_queue = multiprocessing.Queue()
-    #     start_client(done_queue, 'threading')
-    #     self.assertEqual(done_queue.get(), True)
+    def test_2_threaded_client(self):
+        # Then test a multi-threaded client and make sure it succeeds all requests
+        done_queue = multiprocessing.Queue()
+        start_client(done_queue, 'threading')
+        self.assertEqual(done_queue.get(), True)
 
-    # def test_3_async_client(self):
-    #     # Then an async client
-    #     done_queue = multiprocessing.Queue()
-    #     start_client(done_queue, 'async')
-    #     self.assertEqual(done_queue.get(), True)
+    def test_3_async_client(self):
+        # Then an async client
+        done_queue = multiprocessing.Queue()
+        start_client(done_queue, 'async')
+        self.assertEqual(done_queue.get(), True)
 
-    # def test_4_async_multiple_client(self):
-    #     # Then an async client with multiple coroutines/futures
-    #     done_queue = multiprocessing.Queue()
-    #     start_client(done_queue, 'async_multiple')
-    #     self.assertEqual(done_queue.get(), True)
+    def test_4_async_multiple_client(self):
+        # Then an async client with multiple coroutines/futures
+        done_queue = multiprocessing.Queue()
+        start_client(done_queue, 'async_multiple')
+        self.assertEqual(done_queue.get(), True)
 
-    # def test_5_http_client(self):
-    #     # Then a HTTP client which uses a message mapped ZMQ client pool on the HTTP server
-    #     done_queue = multiprocessing.Queue()
-    #     start_client(done_queue, 'http')
-    #     self.assertEqual(done_queue.get(), True)
+    def test_5_http_client(self):
+        # Then a HTTP client which uses a message mapped ZMQ client pool on the HTTP server
+        done_queue = multiprocessing.Queue()
+        start_client(done_queue, 'http')
+        self.assertEqual(done_queue.get(), True)
 
 
     def test_6_multiple_clients(self):
