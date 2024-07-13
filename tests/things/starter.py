@@ -1,5 +1,5 @@
 import typing, multiprocessing, threading, logging
-from hololinked.server import ThingMeta
+from hololinked.server import HTTPServer, ThingMeta
 
 
 def run_thing(
@@ -17,6 +17,11 @@ def run_thing(
     thing.run(zmq_protocols=protocols, tcp_socket_address=tcp_socket_address)
     if done_queue is not None:
         done_queue.put(instance_name)
+
+
+def start_http_server(instance_name : str) -> None:
+    H = HTTPServer([instance_name], log_level=logging.WARN)  
+    H.listen()
 
 
 def start_thing_forked(
@@ -42,6 +47,13 @@ def start_thing_forked(
                             log_level=log_level,
                             prerun_callback=prerun_callback
                         ), daemon=True
+                    ).start()
+        if not http_server:
+            return
+        multiprocessing.Process(
+                        target=start_http_server, 
+                        args=(instance_name,), 
+                        daemon=True
                     ).start()
     else:
         threading.Thread(

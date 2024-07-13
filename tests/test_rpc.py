@@ -1,6 +1,5 @@
 import threading, random, asyncio, requests
 import logging, multiprocessing, unittest
-from hololinked.server.thing import Thing, action
 from hololinked.client import ObjectProxy
 
 try:
@@ -17,8 +16,12 @@ class TestRPC(TestCase):
     @classmethod
     def setUpClass(self):
         self.thing_cls = TestThing
-        start_thing_forked(self.thing_cls, instance_name='test-rpc',
-                                    log_level=logging.WARN)   
+        start_thing_forked(
+                        thing_cls=self.thing_cls, 
+                        instance_name='test-rpc',
+                        log_level=logging.WARN,
+                        http_server=True
+                    )   
         self.thing_client = ObjectProxy('test-rpc') # type: TestThing
 
     @classmethod
@@ -46,8 +49,13 @@ class TestRPC(TestCase):
         start_client(done_queue, 'async_multiple')
         self.assertEqual(done_queue.get(), True)
 
+    def test_5_http_client(self):
+        done_queue = multiprocessing.Queue()
+        start_client(done_queue, 'http')
+        self.assertEqual(done_queue.get(), True)
 
-    def test_5_multiple_clients(self):
+
+    def test_6_multiple_clients(self):
         done_queue_1 = multiprocessing.Queue()
         start_client(done_queue_1)
 
@@ -62,12 +70,16 @@ class TestRPC(TestCase):
 
         done_queue_5 = multiprocessing.Queue()
         start_client(done_queue_5, 'async_multiple')
+
+        done_queue_6 = multiprocessing.Queue()
+        start_client(done_queue_6, 'http')
        
         self.assertEqual(done_queue_1.get(), True)
         self.assertEqual(done_queue_2.get(), True)
         self.assertEqual(done_queue_3.get(), True)
         self.assertEqual(done_queue_4.get(), True)
         self.assertEqual(done_queue_5.get(), True)
+        self.assertEqual(done_queue_6.get(), True)
 
 
 
@@ -80,6 +92,8 @@ def start_client(done_queue : multiprocessing.Queue, typ : str = 'normal'):
         return multiprocessing.Process(target=async_client, args=(done_queue,)).start()
     elif typ == 'async_multiple':
         return multiprocessing.Process(target=async_client_multiple, args=(done_queue,)).start()
+    elif typ == 'http':
+        return multiprocessing.Process(target=http_client, args=(done_queue,)).start()
     raise NotImplementedError(f"client type {typ} not implemented or unknown.")
 
 
@@ -167,16 +181,30 @@ def async_client_multiple(done_queue : multiprocessing.Queue = None):
     if done_queue is not None:
         done_queue.put(success)
 
+
 def http_client(done_queue : multiprocessing.Queue = None):
     success = True
-    
-    for i in range(1000):
-        value = gen_random_data()
-        if value != requests.post(
-                        'http://localhost:8000/test-rpc/test_echo', 
-                        json={'value': value}
-                    ):
-            success = False
+    session = requests.Session()
+
+    def worker(id : int):
+        for i in range(1000):
+            value = gen_random_data()
+            ret =  session.post(
+                            'http://localhost:8080/test-rpc/test-echo', 
+                            json={'value': value},
+                            headers = {'Content-Type': 'application/json'}
+                        )       
+            print(id, ret, value)
+            if value != ret.json():
+                success = False
+                break
+            
+    T1 = threading.Thread(target=worker, args=(1,))
+    T2 = threading.Thread(target=worker, args=(2,))
+    T1.start()
+    T2.start()
+    T1.join()
+    T2.join()
 
     if done_queue is not None:
         done_queue.put(success)

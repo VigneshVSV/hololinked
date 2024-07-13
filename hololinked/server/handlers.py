@@ -401,4 +401,26 @@ class ThingsHandler(BaseHandler):
         self.finish()
 
 
+class StopHandler(BaseHandler):
+    """Stops the tornado HTTP server"""
 
+    def initialize(self, owner = None) -> None:
+        from .HTTPServer import HTTPServer
+        assert isinstance(owner, HTTPServer)
+        self.owner = owner    
+        self.allowed_clients = self.owner.allowed_clients
+    
+    async def post(self):
+        if not self.has_access_control:
+            self.set_status(401, 'forbidden')
+        else:
+            try:
+                # Stop the Tornado server
+                asyncio.get_event_loop().call_soon(lambda : asyncio.create_task(self.owner.stop()))
+                self.set_status(204, "ok")
+                self.set_header("Access-Control-Allow-Credentials", "true")
+            except Exception as ex:
+                self.set_status(500, str(ex))
+        self.finish()
+
+    

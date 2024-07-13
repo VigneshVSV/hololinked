@@ -16,11 +16,11 @@ from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector, Typ
 from .constants import ZMQ_PROTOCOLS, CommonRPC, HTTPServerTypes, ResourceTypes, ServerMessage
 from .utils import get_IP_from_interface
 from .dataklasses import HTTPResource, ServerSentEvent
-from .utils import get_default_logger, run_coro_sync
+from .utils import get_default_logger
 from .serializers import JSONSerializer
 from .database import ThingInformation
 from .zmq_message_brokers import  AsyncZMQClient, MessageMappedZMQClientPool
-from .handlers import RPCHandler, BaseHandler, EventHandler, ThingsHandler
+from .handlers import RPCHandler, BaseHandler, EventHandler, ThingsHandler, StopHandler
 from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
 from .config import global_config
 
@@ -42,7 +42,8 @@ class HTTPServer(Parameterized):
     #                 When no SSL configurations are provided, defaults to 1.1" ) # type: float
     logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, 
                     doc="logging.Logger" ) # type: logging.Logger
-    log_level = Selector(objects=[logging.DEBUG, logging.INFO, logging.ERROR, logging.CRITICAL, logging.ERROR], 
+    log_level = Selector(objects=[logging.DEBUG, logging.INFO, logging.ERROR, logging.WARN, 
+                                logging.CRITICAL, logging.ERROR], 
                     default=logging.INFO, 
                     doc="""alternative to logger, this creates an internal logger with the specified log level 
                     along with a IO stream handler.""" ) # type: int
@@ -147,7 +148,8 @@ class HTTPServer(Parameterized):
             
         self.app = Application(handlers=[
             (r'/remote-objects', ThingsHandler, dict(request_handler=self.request_handler, 
-                                                        event_handler=self.event_handler))
+                                                        event_handler=self.event_handler)),
+            (r'/stop', StopHandler, dict(owner=self))
         ])
         
         self.zmq_client_pool = MessageMappedZMQClientPool(self.things, identity=self._IP, 
@@ -217,10 +219,14 @@ class HTTPServer(Parameterized):
         self.logger.info(f'started webserver at {self._IP}, ready to receive requests.')
         self.event_loop.start()
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
+        """
+        Stop the event loop & the HTTP server. This method is async and should be awaited, mostly within a request
+        handler. The stop handler at the path '/stop' with POST request is already implemented.
+        """
         self.tornado_instance.stop()
-        run_coro_sync(self.tornado_instance.close_all_connections())
-        self.event_loop.close()    
+        await self.tornado_instance.close_all_connections()
+        self.event_loop.stop()
 
 
     async def update_router_with_things(self) -> None:
