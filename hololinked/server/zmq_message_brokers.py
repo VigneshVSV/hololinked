@@ -28,6 +28,7 @@ EXCEPTION   = b'EXCEPTION'
 INTERRUPT   = b'INTERRUPT'
 ONEWAY      = b'ONEWAY'
 SERVER_DISCONNECTED = 'EVENT_DISCONNECTED'
+EXIT = b'EXIT'
 
 EVENT       = b'EVENT'
 EVENT_SUBSCRIPTION = b'EVENT_SUBSCRIPTION'
@@ -207,8 +208,8 @@ class BaseZMQ:
         if not self.logger:
             self.logger = get_default_logger('{}|{}|{}|{}'.format(self.__class__.__name__, 
                                                 socket_type, protocol, identity), kwargs.get('log_level', logging.INFO))
-        self.logger.info("created socket {} with address {} and {}".format(get_socket_type_name(socket_type), socket_address,
-                                                            "bound" if bind else "connected"))
+        self.logger.info("created socket {} with address {} & identity {} and {}".format(get_socket_type_name(socket_type), socket_address,
+                                                            identity, "bound" if bind else "connected"))
 
    
 class BaseAsyncZMQ(BaseZMQ):
@@ -241,8 +242,11 @@ class BaseSyncZMQ(BaseZMQ):
         Overloads ``create_socket()`` to create, bind/connect a synchronous socket. A (synchronous) context is created 
         if none is supplied. 
         """
-        if context and not isinstance(context, zmq.Context):
-            raise TypeError("sync ZMQ message broker accepts only sync ZMQ context. supplied type {}".format(type(context)))
+        if context: 
+            if not isinstance(context, zmq.Context):
+                raise TypeError("sync ZMQ message broker accepts only sync ZMQ context. supplied type {}".format(type(context)))
+            if isinstance(context, zmq.asyncio.Context):
+                raise TypeError("sync ZMQ message broker accepts only sync ZMQ context. supplied type {}".format(type(context)))
         context = context or zmq.Context()
         super().create_socket(identity=identity, bind=bind, context=context, protocol=protocol, 
                             socket_type=socket_type, **kwargs)
@@ -895,6 +899,9 @@ class RPCServer(BaseZMQServer):
     poll_timeout: int, default 25
         time in milliseconds to poll the sockets specified under ``procotols``. Useful for calling ``stop_polling()``
         where the max delay to stop polling will be ``poll_timeout``
+    **kwargs:
+        tcp_socket_address: str
+            address of the TCP socket, if not given, a random port is chosen
     """
 
     def __init__(self, instance_name : str, *, server_type : Enum, context : typing.Union[zmq.asyncio.Context, None] = None, 
@@ -909,6 +916,7 @@ class RPCServer(BaseZMQServer):
             protocols = [protocols]
         else:
             raise TypeError(f"unsupported protocols type : {type(protocols)}")
+        tcp_socket_address = kwargs.pop('tcp_socket_address', None)
         kwargs["http_serializer"] = self.http_serializer
         kwargs["zmq_serializer"] = self.zmq_serializer
         self.inproc_server = self.ipc_server = self.tcp_server = self.event_publisher = None
@@ -923,7 +931,8 @@ class RPCServer(BaseZMQServer):
         # initialise every externally visible protocol
         if ZMQ_PROTOCOLS.TCP in protocols or "TCP" in protocols:
             self.tcp_server = AsyncPollingZMQServer(instance_name=instance_name, server_type=server_type, 
-                                    context=self.context, protocol=ZMQ_PROTOCOLS.TCP, poll_timeout=poll_timeout, **kwargs)
+                                    context=self.context, protocol=ZMQ_PROTOCOLS.TCP, poll_timeout=poll_timeout, 
+                                    socket_address=tcp_socket_address, **kwargs)
             self.poller.register(self.tcp_server.socket, zmq.POLLIN)
             event_publisher_protocol = ZMQ_PROTOCOLS.TCP
         if ZMQ_PROTOCOLS.IPC in protocols or "IPC" in protocols: 
@@ -1018,11 +1027,42 @@ class RPCServer(BaseZMQServer):
         await self.inner_inproc_client.handshake_complete()
         if self.inproc_server:
             eventloop.call_soon(lambda : asyncio.create_task(self.recv_instruction(self.inproc_server)))
-        if self.tcp_server:
-            eventloop.call_soon(lambda : asyncio.create_task(self.recv_instruction(self.tcp_server)))
         if self.ipc_server:
             eventloop.call_soon(lambda : asyncio.create_task(self.recv_instruction(self.ipc_server)))
+        if self.tcp_server:
+            eventloop.call_soon(lambda : asyncio.create_task(self.recv_instruction(self.tcp_server)))
        
+
+    def stop_polling(self):
+        """
+        stop polling method ``poll()``
+        """
+        self.stop_poll = True
+        self._instructions_event.set()
+        if self.inproc_server is not None:
+            async def kill_inproc_server():
+                temp_client = AsyncZMQClient(server_instance_name=self.instance_name, identity=f'{self.instance_name}-inproc-killer',
+                                        context=self.context, client_type=PROXY, protocol=ZMQ_PROTOCOLS.INPROC, logger=self.logger) 
+                await temp_client.handshake_complete()
+                await temp_client.socket.send_multipart(temp_client.craft_empty_message_with_type(EXIT))
+                temp_client.exit()
+            asyncio.get_event_loop().call_soon(lambda : asyncio.create_task(kill_inproc_server()))
+        if self.ipc_server is not None:
+            temp_client = SyncZMQClient(server_instance_name=self.instance_name, identity=f'{self.instance_name}-ipc-killer',
+                                    client_type=PROXY, protocol=ZMQ_PROTOCOLS.IPC, logger=self.logger) 
+            temp_client.socket.send_multipart(temp_client.craft_empty_message_with_type(EXIT))
+            temp_client.exit()
+        if self.tcp_server is not None:
+            socket_address = self.tcp_server.socket_address
+            if '/*:' in self.tcp_server.socket_address:
+                socket_address = self.tcp_server.socket_address.replace('*', 'localhost')
+            # print("TCP socket address", self.tcp_server.socket_address)
+            temp_client = SyncZMQClient(server_instance_name=self.instance_name, identity=f'{self.instance_name}-tcp-killer',
+                                    client_type=PROXY, protocol=ZMQ_PROTOCOLS.TCP, logger=self.logger,
+                                    socket_address=socket_address)
+            temp_client.socket.send_multipart(temp_client.craft_empty_message_with_type(EXIT))
+            temp_client.exit()   
+
 
     async def recv_instruction(self, server : AsyncZMQServer):
         eventloop = asyncio.get_event_loop()
@@ -1034,6 +1074,8 @@ class RPCServer(BaseZMQServer):
                     handshake_task = asyncio.create_task(self._handshake(original_instruction, socket))
                     eventloop.call_soon(lambda : handshake_task)
                     continue
+                if original_instruction[CM_INDEX_MESSAGE_TYPE] == EXIT:
+                    break
                 timeout = self._get_timeout_from_instruction(original_instruction)
                 ready_to_process_event = None
                 timeout_task = None
@@ -1052,6 +1094,7 @@ class RPCServer(BaseZMQServer):
                 self._instructions.append((original_instruction, ready_to_process_event, 
                                                             timeout_task, socket))
             self._instructions_event.set()
+        self.logger.info(f"stopped polling for server '{server.identity}' {server.socket_address[0:3].upper() if server.socket_address[0:3] in ['ipc', 'tcp'] else 'INPROC'}")
            
 
     async def tunnel_message_to_things(self):
@@ -1076,7 +1119,7 @@ class RPCServer(BaseZMQServer):
             else:
                 await self._instructions_event.wait()
                 self._instructions_event.clear()
-        
+        self.logger.info("stopped tunneling messages to things")
 
     async def process_timeouts(self, original_client_message : typing.List, ready_to_process_event : asyncio.Event,
                                timeout : typing.Optional[float], origin_socket : zmq.Socket) -> bool:
@@ -1325,8 +1368,12 @@ class BaseZMQClient(BaseZMQ):
         BaseZMQ.exit(self)
         try:
             self.poller.unregister(self.socket)
+            # TODO - there is some issue here while quitting 
+            # print("poller exception did not occur 1")
             if self._monitor_socket is not None:
+                # print("poller exception did not occur 2")
                 self.poller.unregister(self._monitor_socket)
+                # print("poller exception did not occur 3")
         except Exception as ex:
             self.logger.warn(f"unable to deregister from poller - {str(ex)}")
 
@@ -1378,7 +1425,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
 
     def __init__(self, server_instance_name : str, identity : str, client_type = HTTP_SERVER, 
                 handshake : bool = True, protocol : str = ZMQ_PROTOCOLS.IPC, 
-                context : typing.Union[zmq.asyncio.Context, None] = None,
+                context : typing.Union[zmq.Context, None] = None,
                 **kwargs) -> None:
         BaseZMQClient.__init__(self, server_instance_name=server_instance_name, 
                             client_type=client_type, **kwargs)
@@ -1387,6 +1434,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         self.poller = zmq.Poller()
         self.poller.register(self.socket, zmq.POLLIN)
         self._terminate_context = context == None
+        # print("context on client", self.context)
         if handshake:
             self.handshake(kwargs.pop("handshake_timeout", 60000))
     
@@ -2113,8 +2161,7 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
             raise AttributeError(f"event {event._name} already found in list of events, please use another name.")
         self.event_ids.add(event._unique_identifier)
         self.events.add(event) 
-        self.logger.info("registered event '{}' serving at PUB socket with address : {}".format(event._name, 
-                                                                                            self.socket_address))
+        
                
     def publish(self, unique_identifier : bytes, data : typing.Any, *, zmq_clients : bool = True, 
                         http_clients : bool = True, serialize : bool = True) -> None: 
