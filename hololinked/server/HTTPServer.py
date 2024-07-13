@@ -156,7 +156,7 @@ class HTTPServer(Parameterized):
                                                     context=self._zmq_socket_context,
                                                     protocol=self._zmq_protocol
                                                 )
-        print("client pool context", self.zmq_client_pool.context)
+        # print("client pool context", self.zmq_client_pool.context)
         event_loop = asyncio.get_event_loop()
         event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
         event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))

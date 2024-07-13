@@ -112,7 +112,7 @@ class EventLoop(RemoteObject):
     def __post_init__(self):
         super().__post_init__()
         self.logger.info("Event loop with name '{}' can be started using EventLoop.run().".format(self.instance_name))   
-        return 
+
 
     # example of overloading
     @remote_method()
@@ -121,6 +121,8 @@ class EventLoop(RemoteObject):
         Stops the event loop and all its things. Generally, this leads
         to exiting the program unless some code follows the ``run()`` method.  
         """
+        for thing in self.things:
+            thing.exit()
         raise BreakAllLoops
     
 
@@ -225,11 +227,12 @@ class EventLoop(RemoteObject):
         """
         self.request_listener_loop = self.get_async_loop()
         rpc_servers = [thing.rpc_server for thing in self.things]
+        futures = []
         for rpc_server in rpc_servers:
-            self.request_listener_loop.call_soon(lambda : asyncio.create_task(rpc_server.poll()))
-            self.request_listener_loop.call_soon(lambda : asyncio.create_task(rpc_server.tunnel_message_to_things()))
+            futures.append(rpc_server.poll())
+            futures.append(rpc_server.tunnel_message_to_things())
         self.logger.info("starting external message listener thread")
-        self.request_listener_loop.run_forever()
+        self.request_listener_loop.run_until_complete(asyncio.gather(*futures))
         self.logger.info("exiting external listener event loop {}".format(self.instance_name))
         self.request_listener_loop.close()
     
@@ -243,10 +246,8 @@ class EventLoop(RemoteObject):
         thing_executor_loop = self.get_async_loop()
         self.logger.info(f"starting thing executor loop in thread {threading.get_ident()} for {[obj.instance_name for obj in things]}")
         thing_executor_loop.run_until_complete(
-            asyncio.gather(
-                *[self.run_single_target(instance) 
-                    for instance in things] 
-        ))
+            asyncio.gather(*[self.run_single_target(instance) for instance in things])
+        )
         self.logger.info(f"exiting event loop in thread {threading.get_ident()}")
         thing_executor_loop.close()
 

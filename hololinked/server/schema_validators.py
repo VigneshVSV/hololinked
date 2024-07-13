@@ -22,6 +22,8 @@ class BaseSchemaValidator: # type definition
     Base class for all schema validators. 
     Serves as a type definition. 
     """
+    def __init__(self, schema : JSON) -> None:
+        self.schema = schema
 
     def validate(self, data) -> None:
         """
@@ -41,8 +43,8 @@ try:
         one should try to use msgspec's struct concept.
         """
 
-        def __init__(self, schema : JSON):
-            self.schema = schema
+        def __init__(self, schema : JSON) -> None:
+            super().__init__(schema)
             self.validator = fastjsonschema.compile(schema)
 
         def validate(self, data) -> None:
@@ -75,12 +77,12 @@ class JsonSchemaValidator(BaseSchemaValidator):
     Somewhat slow, consider msgspec if possible. 
     """
     
-    def __init__(self, schema):
-        self.schema = schema
+    def __init__(self, schema) -> None:
         jsonschema.Draft7Validator.check_schema(schema)
+        super().__init__(schema)
         self.validator = jsonschema.Draft7Validator(schema)
 
-    def validate(self, data):
+    def validate(self, data) -> None:
         self.validator.validate(data)
 
     def json(self):

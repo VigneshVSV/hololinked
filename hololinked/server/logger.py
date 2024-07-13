@@ -96,7 +96,8 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
         self._push_events = False
         self._events_thread = None
 
-    events = Event(name='log-events', URL_path='/events', doc='stream logs', schema=log_message_schema)
+    events = Event(friendly_name='log-events', URL_path='/events', doc='stream logs', 
+                schema=log_message_schema)
 
     stream_interval = Number(default=1.0, bounds=(0.025, 60.0), crop_to_bounds=True, step=0.05,
                         URL_path='/stream-interval', doc="interval at which logs should be published to a client.")

@@ -5,6 +5,7 @@ import ssl
 import typing
 import warnings
 import zmq
+import zmq.asyncio
 
 from ..param.parameterized import Parameterized, ParameterizedMetaclass 
 from .constants import (JSON, LOGLEVEL, ZMQ_PROTOCOLS, HTTP_METHODS)
@@ -132,7 +133,8 @@ class Thing(Parameterized, metaclass=ThingMeta):
         # defines some internal fixed attributes. attributes created by us that require no validation but 
         # cannot be modified are called _internal_fixed_attributes
         obj._internal_fixed_attributes = ['_internal_fixed_attributes', 'instance_resources',
-                                        '_httpserver_resources', '_zmq_resources', '_owner']        
+                                        '_httpserver_resources', '_zmq_resources', '_owner', 'rpc_server', 'message_broker',
+                                        '_event_publisher']        
         return obj
 
 
@@ -204,9 +206,9 @@ class Thing(Parameterized, metaclass=ThingMeta):
         self._owner : typing.Optional[Thing] = None 
         self._internal_fixed_attributes : typing.List[str]
         self._full_URL_path_prefix : str
-        self.rpc_server : typing.Optional[RPCServer]
-        self.message_broker : typing.Optional[AsyncPollingZMQServer]
-        self._event_publisher : typing.Optional[EventPublisher]
+        self.rpc_server  = None # type: typing.Optional[RPCServer]
+        self.message_broker = None # type : typing.Optional[AsyncPollingZMQServer]
+        self._event_publisher = None # type : typing.Optional[EventPublisher]
         self._gui = None # filler for a future feature
         self._prepare_resources()
         self.load_properties_from_DB()
@@ -310,7 +312,6 @@ class Thing(Parameterized, metaclass=ThingMeta):
     def _get_properties(self, **kwargs) -> typing.Dict[str, typing.Any]:
         """
         """
-        print("Request was made")
         skip_props = ["httpserver_resources", "zmq_resources", "gui_resources", "GUI", "object_info"]
         for prop_name in skip_props:
             if prop_name in kwargs:
@@ -353,8 +354,20 @@ class Thing(Parameterized, metaclass=ThingMeta):
         values: Dict[str, Any]
             dictionary of property names and its values
         """
+        produced_error = False
+        errors = ''
         for name, value in values.items():
-            setattr(self, name, value)
+            try:
+                setattr(self, name, value)
+            except Exception as ex:
+                self.logger.error(f"could not set attribute {name} due to error {str(ex)}")
+                errors += f'{name} : {str(ex)}\n'
+                produced_error = True
+        if produced_error:
+            ex = RuntimeError("Some properties could not be set due to errors. " + 
+                            "Check exception notes or server logs for more information.")
+            ex.__notes__ = errors
+            raise ex from None
 
     @action(URL_path='/properties', http_method=HTTP_METHODS.POST)
     def _add_property(self, name : str, prop : JSON) -> None:
@@ -368,10 +381,11 @@ class Thing(Parameterized, metaclass=ThingMeta):
         prop: Property
             property object
         """
+        raise NotImplementedError("this method will be implemented properly in a future release")
         prop = Property(**prop)
         self.properties.add(name, prop)
         self._prepare_resources()
-
+        # instruct the clients to fetch the new resources
 
     @property
     def event_publisher(self) -> EventPublisher:
@@ -379,14 +393,11 @@ class Thing(Parameterized, metaclass=ThingMeta):
         event publishing PUB socket owning object, valid only after 
         ``run()`` is called, otherwise raises AttributeError.
         """
-        try:
-            return self._event_publisher 
-        except AttributeError:
-            raise AttributeError("event publisher not yet created") from None
-                
+        return self._event_publisher 
+                   
     @event_publisher.setter
     def event_publisher(self, value : EventPublisher) -> None:
-        if hasattr(self, '_event_publisher'):
+        if self._event_publisher is not None:
             raise AttributeError("Can set event publisher only once")
         
         def recusively_set_event_publisher(obj : Thing, publisher : EventPublisher) -> None:
@@ -396,6 +407,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
                 e = evt.__get__(obj, type(obj)) 
                 e.publisher = publisher 
                 evt._remote_info.socket_address = publisher.socket_address
+                self.logger.info(f"registered event '{evt.friendly_name}' serving at PUB socket with address : {publisher.socket_address}")
             for name, subobj in inspect._getmembers(obj, lambda o: isinstance(o, Thing), getattr_without_descriptor_read):
                 if name == '_owner':
                     continue 
@@ -413,10 +425,6 @@ class Thing(Parameterized, metaclass=ThingMeta):
         """
         if not hasattr(self, 'db_engine'):
             return
-        for name, resource in inspect._getmembers(self, lambda o : isinstance(o, Thing), 
-                                                    getattr_without_descriptor_read): 
-            if name == '_owner':
-                continue
         missing_properties = self.db_engine.create_missing_properties(self.__class__.properties.db_init_objects,
                                                                     get_missing_properties=True)
         # 4. read db_init and db_persist objects
@@ -475,8 +483,11 @@ class Thing(Parameterized, metaclass=ThingMeta):
         started using the run() method, the eventloop is also killed. This method can
         only be called remotely.
         """
+        if self.rpc_server is None:
+            return 
         if self._owner is None:
-            raise BreakInnerLoop
+            self.rpc_server.stop_polling()
+            raise BreakInnerLoop # stops the inner loop of the object
         else:
             warnings.warn("call exit on the top object, composed objects cannot exit the loop.", RuntimeWarning)
  
@@ -506,13 +517,19 @@ class Thing(Parameterized, metaclass=ThingMeta):
         **kwargs
             tcp_socket_address: str, optional
                 socket_address for TCP access, for example: tcp://0.0.0.0:61234
+            context: zmq.asyncio.Context, optional
+                zmq context to be used. If not supplied, a new context is created.
+                For INPROC clients, you need to provide a context.
         """
         # expose_eventloop: bool, False
         #     expose the associated Eventloop which executes the object. This is generally useful for remotely 
         #     adding more objects to the same event loop.
         # dont specify http server as a kwarg, as the other method run_with_http_server has to be used
-        
-        context = zmq.asyncio.Context()
+        context = kwargs.get('context', None)
+        if context is not None and not isinstance(context, zmq.asyncio.Context):
+            raise TypeError("context must be an instance of zmq.asyncio.Context")
+        context = context or zmq.asyncio.Context()
+
         self.rpc_server = RPCServer(
                                 instance_name=self.instance_name, 
                                 server_type=self.__server_type__.value, 
@@ -520,13 +537,11 @@ class Thing(Parameterized, metaclass=ThingMeta):
                                 protocols=zmq_protocols, 
                                 zmq_serializer=self.zmq_serializer, 
                                 http_serializer=self.http_serializer, 
-                                socket_address=kwargs.get('tcp_socket_address', None),
+                                tcp_socket_address=kwargs.get('tcp_socket_address', None),
                                 logger=self.logger
                             ) 
         self.message_broker = self.rpc_server.inner_inproc_server
         self.event_publisher = self.rpc_server.event_publisher 
-
-        print("context", self.message_broker.context, self.event_publisher.context, self.rpc_server.context)
 
         from .eventloop import EventLoop
         self.event_loop = EventLoop(
@@ -599,8 +614,11 @@ class Thing(Parameterized, metaclass=ThingMeta):
         
         self.run(
             zmq_protocols=ZMQ_PROTOCOLS.INPROC,
-            http_server=http_server
-        )
+            http_server=http_server,
+            context=kwargs.get('context', None)
+        ) # blocks until exit is called
+
+        http_server.tornado_instance.stop()
 
        
 

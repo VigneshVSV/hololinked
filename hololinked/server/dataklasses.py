@@ -12,7 +12,7 @@ from types import FunctionType, MethodType
 from ..param.parameters import String, Boolean, Tuple, TupleSelector, ClassSelector, Parameter
 from ..param.parameterized import ParameterizedMetaclass, ParameterizedFunction
 from .constants import JSON, USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, REGEX, ResourceTypes, http_methods 
-from .utils import get_signature, getattr_without_descriptor_read
+from .utils import get_signature, getattr_without_descriptor_read, pep8_to_URL_path
 from .config import global_config
 from .schema_validators import BaseSchemaValidator
 
@@ -555,16 +555,14 @@ def get_organised_resources(instance):
             instance_resources[f"{fullpath}/read"] = data_cls
             instance_resources[f"{fullpath}/write"] = data_cls  
             instance_resources[f"{fullpath}/delete"] = data_cls  
-            if prop.observable:
-                assert isinstance(prop._observable_event, Event), f"observable event not yet set for {prop.name}. logic error."
-                evt_fullpath = f"{instance._full_URL_path_prefix}{prop._observable_event.URL_path}"
-                setattr(instance, prop._observable_event.name, EventDispatcher(prop._observable_event.name, 
-                                                                            evt_fullpath, instance))
-                # name, obj_name, unique_identifer, socket_address
-                prop._observable_event._remote_info.obj_name = prop._observable_event.name
-                prop._observable_event._remote_info.unique_identifier = evt_fullpath
-                httpserver_resources[evt_fullpath] = prop._observable_event._remote_info
-                # zmq_resources[evt_fullpath] = prop._observable_event._remote_info
+            if prop._observable:
+                # There is no real philosophy behind this logic flow, we just set the missing information.
+                assert isinstance(prop._observable_event_descriptor, Event), f"observable event not yet set for {prop.name}. logic error."
+                evt_fullpath = f"{instance._full_URL_path_prefix}{prop._observable_event_descriptor.URL_path}"
+                setattr(instance, prop._observable_event_descriptor._obj_name, EventDispatcher(evt_fullpath))
+                prop._observable_event_descriptor._remote_info.unique_identifier = evt_fullpath
+                httpserver_resources[evt_fullpath] = prop._observable_event_descriptor._remote_info
+                zmq_resources[evt_fullpath] = prop._observable_event_descriptor._remote_info
     # Methods
     for name, resource in inspect._getmembers(instance, lambda f : inspect.ismethod(f) or (
                                 hasattr(f, '_remote_info') and isinstance(f._remote_info, ActionInfoValidator)),
@@ -611,8 +609,7 @@ def get_organised_resources(instance):
         # above assertion is only a typing convenience
         fullpath = f"{instance._full_URL_path_prefix}{resource.URL_path}"
         resource._remote_info.unique_identifier = fullpath
-        resource._remote_info.obj_name = name
-        setattr(instance, name, EventDispatcher(resource.name, resource._remote_info.unique_identifier, owner_inst=instance))
+        setattr(instance, name, EventDispatcher(resource._remote_info.unique_identifier))
         httpserver_resources[fullpath] = resource._remote_info
         zmq_resources[fullpath] = resource._remote_info
     # Other objects
