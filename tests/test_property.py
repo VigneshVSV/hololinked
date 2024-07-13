@@ -130,6 +130,8 @@ class TestProperty(TestCase):
             attempt += 1
 
         self.thing_client.subscribe_event('observable_list_prop_change_event', cb)
+        time.sleep(3)
+        # Calm down for event publisher to connect fully as there is no handshake for events
         for value in propective_values:
             self.thing_client.observable_list_prop = value
 
@@ -153,6 +155,8 @@ class TestProperty(TestCase):
             attempt += 1
 
         self.thing_client.subscribe_event('observable_readonly_prop_change_event', cb)
+        time.sleep(3)
+        # Calm down for event publisher to connect fully as there is no handshake for events
         for _ in propective_values:
             self.thing_client.observable_readonly_prop
 
@@ -160,7 +164,7 @@ class TestProperty(TestCase):
             if attempt == len(propective_values):
                 break
             # wait for the callback to be called
-            time.sleep(0.2)
+            time.sleep(0.1)
 
         self.thing_client.unsubscribe_event('observable_readonly_prop_change_event')
         self.assertEqual(result, propective_values)
