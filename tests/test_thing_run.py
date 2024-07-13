@@ -49,7 +49,7 @@ class TestThingRun(TestCase):
         self.assertEqual(done_queue.get(), 'test-run-3')
 
     
-    def test_thing_run_and_exit_with_httpserver(self):
+    # def test_thing_run_and_exit_with_httpserver(self):
         # EventLoop.get_async_loop() # creates the event loop if absent
         # context = zmq.asyncio.Context()
         # T = threading.Thread(target=start_thing_with_http_server, args=('test-run-4', context), daemon=True)
