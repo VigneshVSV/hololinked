@@ -422,5 +422,3 @@ class StopHandler(BaseHandler):
             except Exception as ex:
                 self.set_status(500, str(ex))
         self.finish()
-
-    

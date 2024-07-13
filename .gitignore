@@ -10,6 +10,7 @@ old/
 doc/build
 doc/source/generated
 extra-packages 
+tests/test-rpc-results.txt
 # comment tests until good organisation comes about
 
 # vs-code 

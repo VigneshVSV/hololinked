@@ -156,7 +156,8 @@ class HTTPServer(Parameterized):
                                                     deserialize_server_messages=False, handshake=False,
                                                     http_serializer=self.serializer, 
                                                     context=self._zmq_socket_context,
-                                                    protocol=self._zmq_protocol
+                                                    protocol=self._zmq_protocol,
+                                                    logger=self.logger
                                                 )
         # print("client pool context", self.zmq_client_pool.context)
         event_loop = asyncio.get_event_loop()
