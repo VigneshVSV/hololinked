@@ -931,9 +931,14 @@ class ClassSelector(SelectorBase):
                 raise_ValueError("{} property {} value must be an instance of {}, not {}.".format(
                     self.__class__.__name__, self.name, self._get_class_name(), value), self)
         else:
-            if not issubclass(value, self.class_):
-               raise_ValueError("{} property {} must be a subclass of {}, not {}.".format(
-                    self.__class__.__name__, self.name, self._get_class_name(), value.__name__), self)
+            try:
+                if not issubclass(value, self.class_):
+                    raise_ValueError("{} property {} must be a subclass of {}, not {}.".format(
+                        self.__class__.__name__, self.name, self._get_class_name(), value.__name__), self)
+            except TypeError as ex:
+                if str(ex).startswith("issubclass() arg 1 must be a class"):
+                    raise_ValueError("Value must be a class, not an instance.", self) 
+                raise ex from None # raise other type errors anyway                 
         return value
 
     @property
