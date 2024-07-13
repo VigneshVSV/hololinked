@@ -28,15 +28,16 @@ class Event:
     schema: JSON
         schema of the event, if the event is JSON complaint. HTTP clients can validate the data with this schema. There
         is no validation on server side.
-    security: Any
-        security necessary to access this event.
     """
+    # security: Any
+    #     security necessary to access this event.
+
     __slots__ = ['friendly_name', '_internal_name', '_obj_name', '_remote_info', 
-                'doc', 'schema', 'URL_path', 'security', 'label']
+                'doc', 'schema', 'URL_path', 'security', 'label', 'owner']
 
 
     def __init__(self, friendly_name : str, URL_path : typing.Optional[str] = None, doc : typing.Optional[str] = None, 
-                schema : typing.Optional[JSON] = None, security : typing.Optional[BaseSecurityDefinition] = None,
+                schema : typing.Optional[JSON] = None, # security : typing.Optional[BaseSecurityDefinition] = None,
                 label : typing.Optional[str] = None) -> None:
         self.friendly_name = friendly_name 
         self.doc = doc 
@@ -44,7 +45,7 @@ class Event:
             jsonschema.Draft7Validator.check_schema(schema)
         self.schema = schema
         self.URL_path = URL_path or f'/{pep8_to_URL_path(friendly_name)}'
-        self.security = security
+        # self.security = security
         self.label = label
         self._remote_info = ServerSentEvent(name=friendly_name)
 
@@ -52,6 +53,7 @@ class Event:
         self._internal_name = f"{pep8_to_URL_path(name)}-dispatcher"
         self._obj_name = name
         self._remote_info.obj_name = name
+        self.owner = owner
 
     def __get__(self, obj : ParameterizedMetaclass, objtype : typing.Optional[type] = None) -> "EventDispatcher":
         try:

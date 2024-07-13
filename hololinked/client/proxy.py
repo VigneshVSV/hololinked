@@ -671,7 +671,8 @@ class _RemoteMethod:
         elif self._schema_validator:
             self._schema_validator.validate(kwargs)
         self._last_return_value = await self._async_zmq_client.async_execute(instruction=self._instruction, 
-                                        arguments=kwargs, invokation_timeout=self._invokation_timeout, raise_client_side_exception=True,
+                                        arguments=kwargs, invokation_timeout=self._invokation_timeout, 
+                                        raise_client_side_exception=True,
                                         argument_schema=self._schema)
         return self.last_return_value # note the missing underscore
 
