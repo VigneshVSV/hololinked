@@ -49,16 +49,16 @@ class TestThingRun(TestCase):
         self.assertEqual(done_queue.get(), 'test-run-3')
 
     
-    # def test_thing_run_and_exit_with_httpserver(self):
-    #     difficult case, currently not supported - https://github.com/zeromq/pyzmq/issues/1354
-    #     EventLoop.get_async_loop() # creates the event loop if absent
-    #     context = zmq.asyncio.Context()
-    #     T = threading.Thread(target=start_thing_with_http_server, args=('test-run-4', context), daemon=True)
-    #     T.start()       
-    #     thing_client = ObjectProxy('test-run-4', log_level=logging.WARN, context=context) # type: Thing
-    #     self.assertEqual(thing_client.get_protocols(), ['INPROC']) 
-    #     thing_client.exit()
-    #     T.join()
+    def test_thing_run_and_exit_with_httpserver(self):
+        # EventLoop.get_async_loop() # creates the event loop if absent
+        # context = zmq.asyncio.Context()
+        # T = threading.Thread(target=start_thing_with_http_server, args=('test-run-4', context), daemon=True)
+        # T.start()       
+        # # difficult case, currently not supported - https://github.com/zeromq/pyzmq/issues/1354
+        # thing_client = ObjectProxy('test-run-4', log_level=logging.WARN, context=context) # type: Thing
+        # self.assertEqual(thing_client.get_protocols(), ['INPROC']) 
+        # thing_client.exit()
+        # T.join()
 
 
 class TestOceanOpticsSpectrometer(TestThing):

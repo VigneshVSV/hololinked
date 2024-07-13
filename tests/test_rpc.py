@@ -29,33 +29,41 @@ class TestRPC(TestCase):
         self.thing_client.exit()
 
 
-    def test_1_normal_client(self):
-        done_queue = multiprocessing.Queue()
-        start_client(done_queue)
-        self.assertEqual(done_queue.get(), True)
+    # def test_1_normal_client(self):
+    #     # First test a simple single-threaded client and make sure it succeeds 
+    #     # all requests  
+    #     done_queue = multiprocessing.Queue()
+    #     start_client(done_queue)
+    #     self.assertEqual(done_queue.get(), True)
 
-    def test_2_threaded_client(self):
-        done_queue = multiprocessing.Queue()
-        start_client(done_queue, 'threading')
-        self.assertEqual(done_queue.get(), True)
+    # def test_2_threaded_client(self):
+    #     # Then test a multi-threaded client and make sure it succeeds all requests
+    #     done_queue = multiprocessing.Queue()
+    #     start_client(done_queue, 'threading')
+    #     self.assertEqual(done_queue.get(), True)
 
-    def test_3_async_client(self):
-        done_queue = multiprocessing.Queue()
-        start_client(done_queue, 'async')
-        self.assertEqual(done_queue.get(), True)
+    # def test_3_async_client(self):
+    #     # Then an async client
+    #     done_queue = multiprocessing.Queue()
+    #     start_client(done_queue, 'async')
+    #     self.assertEqual(done_queue.get(), True)
 
-    def test_4_async_multiple_client(self):
-        done_queue = multiprocessing.Queue()
-        start_client(done_queue, 'async_multiple')
-        self.assertEqual(done_queue.get(), True)
+    # def test_4_async_multiple_client(self):
+    #     # Then an async client with multiple coroutines/futures
+    #     done_queue = multiprocessing.Queue()
+    #     start_client(done_queue, 'async_multiple')
+    #     self.assertEqual(done_queue.get(), True)
 
-    def test_5_http_client(self):
-        done_queue = multiprocessing.Queue()
-        start_client(done_queue, 'http')
-        self.assertEqual(done_queue.get(), True)
+    # def test_5_http_client(self):
+    #     # Then a HTTP client which uses a message mapped ZMQ client pool on the HTTP server
+    #     done_queue = multiprocessing.Queue()
+    #     start_client(done_queue, 'http')
+    #     self.assertEqual(done_queue.get(), True)
 
 
     def test_6_multiple_clients(self):
+        # Then parallely run all of them at once and make sure they all succeed
+        # which means the server can request accept from anywhere at any time and not fail
         done_queue_1 = multiprocessing.Queue()
         start_client(done_queue_1)
 
@@ -109,9 +117,11 @@ def gen_random_data():
 def normal_client(done_queue : multiprocessing.Queue = None):
     success = True
     client = ObjectProxy('test-rpc') # type: TestThing
-    for i in range(1000):
+    for i in range(2000):
         value = gen_random_data()
-        if value != client.test_echo(value):
+        ret = client.test_echo(value)
+        # print("single-thread", 1, i, value, ret)
+        if value != ret:
             success = False
             break
 
@@ -123,17 +133,19 @@ def threading_client(done_queue : multiprocessing.Queue = None):
     success = True
     client = ObjectProxy('test-rpc') # type: TestThing
 
-    def message_thread():
+    def message_thread(id : int):
         nonlocal success, client
-        for i in range(500):
+        for i in range(1000):
             value = gen_random_data()
-            if value != client.test_echo(value):
+            ret = client.test_echo(value)
+            # print("multi-threaded", id, i, value, ret)
+            if value != ret:
                 success = False
                 break
 
-    T1 = threading.Thread(target=message_thread)
-    T2 = threading.Thread(target=message_thread)
-    T3 = threading.Thread(target=message_thread)
+    T1 = threading.Thread(target=message_thread, args=(1,))
+    T2 = threading.Thread(target=message_thread, args=(2,))
+    T3 = threading.Thread(target=message_thread, args=(3,))
     T1.start()
     T2.start()
     T3.start()
@@ -151,10 +163,11 @@ def async_client(done_queue : multiprocessing.Queue = None):
 
     async def message_coro():
         nonlocal success, client
-        for i in range(500):
+        for i in range(2000):
             value = gen_random_data()
-            # print(i)
-            if value != await client.async_invoke('test_echo', value):
+            ret = await client.async_invoke('test_echo', value)
+            # print("async", 1, i, value, ret)
+            if value != ret:
                 success = False
                 break
 
@@ -169,10 +182,11 @@ def async_client_multiple(done_queue : multiprocessing.Queue = None):
 
     async def message_coro(id):
         nonlocal success, client
-        for i in range(500):
+        for i in range(1000):
             value = gen_random_data()
-            # print(id, i)
-            if value != await client.async_invoke('test_echo', value):
+            ret = await client.async_invoke('test_echo', value)
+            # print("multi-coro", id, i, value, ret)
+            if value != ret:
                 success = False
                 break
 
@@ -192,9 +206,9 @@ def http_client(done_queue : multiprocessing.Queue = None):
             ret =  session.post(
                             'http://localhost:8080/test-rpc/test-echo', 
                             json={'value': value},
-                            headers = {'Content-Type': 'application/json'}
+                            headers={'Content-Type': 'application/json'}
                         )       
-            print(id, ret, value)
+            # print("http", id, i, value, ret)
             if value != ret.json():
                 success = False
                 break
