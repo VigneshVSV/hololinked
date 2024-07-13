@@ -44,6 +44,7 @@ class TestEvent(TestCase):
     def tearDownClass(self):
         self.thing_client.exit()
     
+    
     def test_1_event(self):
         attempts = 100 
         self.thing_client.total_number_of_events = attempts

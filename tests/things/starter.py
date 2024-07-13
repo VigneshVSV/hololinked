@@ -27,7 +27,8 @@ def start_thing_forked(
     done_queue : typing.Optional[multiprocessing.Queue] = None,
     log_level : int = logging.WARN,
     prerun_callback : typing.Optional[typing.Callable] = None,
-    as_process : bool = True
+    as_process : bool = True,
+    http_server : bool = False
 ):
     if as_process:
         multiprocessing.Process(
