@@ -381,20 +381,20 @@ class ObjectProxy:
             return method(names=names)
         
     
-    def set_properties(self, values : typing.Dict[str, typing.Any], oneway : bool = False, 
-                            noblock : bool = False) -> None:
+    def set_properties(self, oneway : bool = False, noblock : bool = False,
+                       **properties : typing.Dict[str, typing.Any]) -> None:
         """
         set properties whose name is specified by keys of a dictionary
 
         Parameters
         ----------
-        values: Dict[str, Any] 
-            name and value of properties to be set
         oneway: bool, default False 
             only send an instruction to set the property but do not fetch the reply.
             (irrespective of whether set was successful or not)
         noblock: bool, default False 
             request the set property but collect the reply later using a reply id
+        **properties: Dict[str, Any]
+            name and value of properties to be set
 
         Raises
         ------
@@ -403,19 +403,19 @@ class ObjectProxy:
         Exception:
             server raised exception are propagated
         """
-        if not isinstance(values, dict):
-            raise ValueError("set_properties values must be dictionary with property names as key")
+        if len(properties) == 0:
+            raise ValueError("no properties given to set_properties")
         method = getattr(self, '_set_properties', None) # type: _RemoteMethod
         if not method:
             raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
         if oneway:
-            method.oneway(values=values)
+            method.oneway(**properties)
         elif noblock:
-            msg_id = method.noblock(values=values)
+            msg_id = method.noblock(**properties)
             self._noblock_messages[msg_id] = method
             return msg_id
         else:
-            return method(values=values)
+            return method(**properties)
         
 
     async def async_get_properties(self, names) -> None:
@@ -454,6 +454,8 @@ class ObjectProxy:
         Exception:
             server raised exception are propagated
         """
+        if len(properties) == 0:
+            raise ValueError("no properties given to set_properties")
         method = getattr(self, '_set_properties', None) # type: _RemoteMethod
         if not method:
             raise RuntimeError("Client did not load server resources correctly. Report issue at github.")
