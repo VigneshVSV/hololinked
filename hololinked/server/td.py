@@ -230,11 +230,11 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
             form.contentType = "application/json"
             self.forms.append(form.asdict())
 
-        if property.observable:
-            self.observable = property.observable
+        if property._observable:
+            self.observable = property._observable
             form = Form()
             form.op = 'observeproperty'
-            form.href = f"{authority}{owner._full_URL_path_prefix}{property._observable_event.URL_path}"
+            form.href = f"{authority}{owner._full_URL_path_prefix}{property._observable_event_descriptor.URL_path}"
             form.htv_methodName = "GET"
             form.subprotocol = "sse"
             form.contentType = "text/plain"
@@ -637,7 +637,7 @@ class EventAffordance(InteractionAffordance):
         super().__init__()
     
     def build(self, event : Event, owner : Thing, authority : str) -> None:
-        self.title = event.label or event.name 
+        self.title = event.label or event._obj_name 
         if event.doc:
             self.description = self.format_doc(event.doc)
         if event.schema:
