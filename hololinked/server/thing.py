@@ -7,7 +7,7 @@ import warnings
 import zmq
 import zmq.asyncio
 
-from ..param.parameterized import Parameterized, ParameterizedMetaclass 
+from ..param.parameterized import Parameterized, ParameterizedMetaclass, edit_constant as edit_constant_parameters
 from .constants import (JSON, LOGLEVEL, ZMQ_PROTOCOLS, HTTP_METHODS)
 from .database import ThingDB, ThingInformation
 from .serializers import _get_serializer_from_user_given_options, BaseSerializer, JSONSerializer
@@ -278,7 +278,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         # 3. enter properties to DB if not already present 
         if self.object_info.class_name != self.__class__.__name__:
             raise ValueError("Fetched instance name and class name from database not matching with the ", 
-                " current Thing class/subclass. You might be reusing an instance name of another subclass ", 
+                "current Thing class/subclass. You might be reusing an instance name of another subclass ", 
                 "and did not remove the old data from database. Please clean the database using database tools to ", 
                 "start fresh.")
 
@@ -304,7 +304,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
 
     
     @property
-    def properties(self):
+    def properties(self) -> ClassProperties:
         """container for the property descriptors of the object."""
         return self.parameters
 
@@ -426,14 +426,16 @@ class Thing(Parameterized, metaclass=ThingMeta):
         if not hasattr(self, 'db_engine'):
             return
         missing_properties = self.db_engine.create_missing_properties(self.__class__.properties.db_init_objects,
-                                                                    get_missing_properties=True)
+                                                                    get_missing_property_names=True)
         # 4. read db_init and db_persist objects
-        for db_param in self.db_engine.get_all_properties():
-            try:
-                if db_param.name not in missing_properties:
-                    setattr(obj, db_param.name, db_param.value) # type: ignore
-            except Exception as ex:
-                self.logger.error(f"could not set attribute {db_param.name} due to error {str(ex)}")
+        with edit_constant_parameters(self):
+            for db_prop, value in self.db_engine.get_all_properties().items():
+                try:
+                    prop_desc = self.properties.descriptors[db_prop]
+                    if (prop_desc.db_init or prop_desc.db_persist) and db_prop not in missing_properties:
+                        setattr(self, db_prop, value) # type: ignore
+                except Exception as ex:
+                    self.logger.error(f"could not set attribute {db_prop} due to error {str(ex)}")
 
         
     @action(URL_path='/resources/postman-collection', http_method=HTTP_METHODS.GET)
