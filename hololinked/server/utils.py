@@ -195,6 +195,30 @@ def isclassmethod(method):
     return False
 
 
+def issubklass(obj, cls):
+    """
+    Safely check if `obj` is a subclass of `cls`.
+
+    Parameters:
+    obj: The object to check if it's a subclass.
+    cls: The class (or tuple of classes) to compare against.
+
+    Returns:
+    bool: True if `obj` is a subclass of `cls`, False otherwise.
+    """
+    try:
+        # Check if obj is a class or a tuple of classes
+        if isinstance(obj, type):
+            return issubclass(obj, cls)
+        elif isinstance(obj, tuple):
+            # Ensure all elements in the tuple are classes
+            return all(isinstance(o, type) for o in obj) and issubclass(obj, cls)
+        else:
+            return False
+    except TypeError:
+        return False
+  
+
 __all__ = [
     get_IP_from_interface.__name__,
     format_exception_as_json.__name__,
