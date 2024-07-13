@@ -1,5 +1,4 @@
-import logging
-import typing, multiprocessing
+import typing, multiprocessing, threading, logging
 from hololinked.server import ThingMeta
 
 
@@ -20,16 +19,18 @@ def run_thing(
         done_queue.put(instance_name)
 
 
-def start_thing_in_separate_process(
+def start_thing_forked(
     thing_cls : ThingMeta, 
     instance_name : str, 
     protocols : typing.List[str] = ['IPC'], 
     tcp_socket_address : str = None,
     done_queue : typing.Optional[multiprocessing.Queue] = None,
     log_level : int = logging.WARN,
-    prerun_callback : typing.Optional[typing.Callable] = None
+    prerun_callback : typing.Optional[typing.Callable] = None,
+    as_process : bool = True
 ):
-    multiprocessing.Process(
+    if as_process:
+        multiprocessing.Process(
                         target=run_thing,
                         kwargs=dict(
                             thing_cls=thing_cls,
@@ -41,4 +42,20 @@ def start_thing_in_separate_process(
                             prerun_callback=prerun_callback
                         ), daemon=True
                     ).start()
+    else:
+        threading.Thread(
+            target=run_thing,
+            kwargs=dict(
+                thing_cls=thing_cls,
+                instance_name=instance_name,
+                protocols=protocols,
+                tcp_socket_address=tcp_socket_address,
+                done_queue=done_queue,
+                log_level=log_level,
+                prerun_callback=prerun_callback
+            ), daemon=True
+        ).start()
+    
+
+
     

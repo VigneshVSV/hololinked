@@ -14,7 +14,7 @@ try:
     from .things import TestThing
 except ImportError:
     from utils import TestCase, TestRunner
-    from things import start_thing_in_separate_process 
+    from things import start_thing_forked 
 
 
 
@@ -92,7 +92,7 @@ class TestAction(TestCase):
         self.thing_cls = TestThing 
 
 
-    def test_allowed_actions(self):
+    def test_1_allowed_actions(self):
         # instance method can be decorated with action
         self.assertEqual(self.thing_cls.action_echo, action()(self.thing_cls.action_echo))
         # classmethod can be decorated with action
@@ -112,7 +112,7 @@ class TestAction(TestCase):
         self.assertEqual(self.thing_cls.typed_action_async, action(synchronous=True)(self.thing_cls.typed_action_async))
        
         
-    def test_remote_info(self):
+    def test_2_remote_info(self):
         # basic check if the remote_info is correct, although this test is not necessary, not recommended and 
         # neither particularly useful
         remote_info = self.thing_cls.action_echo._remote_info
@@ -182,7 +182,7 @@ class TestAction(TestCase):
         self.assertTrue(remote_info.synchronous)
 
 
-    def test_api_and_invalid_actions(self):
+    def test_3_api_and_invalid_actions(self):
         # done allow action decorator to be terminated without '()' on a method
         with self.assertRaises(TypeError) as ex:
            action(self.thing_cls.incorrectly_decorated_method)
@@ -204,10 +204,10 @@ class TestAction(TestCase):
         self.assertTrue(str(ex.exception).startswith("Only 'safe', 'idempotent', 'synchronous' are allowed"))
             
 
-    def test_exposed_actions(self):
+    def test_4_exposed_actions(self):
         self.assertTrue(hasattr(self.thing_cls.action_echo, '_remote_info'))
         done_queue = multiprocessing.Queue()
-        start_thing_in_separate_process(self.thing_cls, instance_name='test-action', done_queue=done_queue,
+        start_thing_forked(self.thing_cls, instance_name='test-action', done_queue=done_queue,
                                         log_level=logging.ERROR+10, prerun_callback=expose_actions)
 
         thing_client = ObjectProxy('test-action', log_level=logging.ERROR) # type: TestThing
