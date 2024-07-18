@@ -317,7 +317,7 @@ Again, please check examples or the code for explanations. Documentation is bein
 
 ### Contact
 
-Contributors welcome for all my projects related to hololinked including web apps. Please write to my contact email available at my [website](https://hololinked.dev). The contributing file is currently only boilerplate and need not be adhered. 
+Contributors welcome for all my projects related to hololinked including web apps. Please write to my contact email available at my [website](https://hololinked.dev). 
 
 
 
