@@ -23,8 +23,8 @@ Each device or thing can be controlled systematically when their design in softw
 - actions are methods which issue commands like connect/disconnect, execute a control routine, start/stop measurement, or run arbitray python logic
 - events can asynchronously communicate/push (arbitrary) data to a client (say, a GUI), like alarm messages, streaming measured quantities etc.
 
-It does not even matter whether you are controlling your device locally or remotely, what protocol you use, what is the nature of the client etc., 
-one has to provide these three interactions with the hardware. The base class which enables this classification is the `Thing` class. Any class that inherits the `Thing` class 
+It does not even matter whether you are controlling your hardware locally or remotely, what protocol you use, what is the nature of the client etc., 
+one has to provide these three interactions with the hardware. In this package, the base class which enables this classification is the `Thing` class. Any class that inherits the `Thing` class 
 can instantiate properties, actions and events which 
 become visible to a client in this segragated manner. For example, consider an optical spectrometer, the following code is possible:
 
@@ -228,9 +228,10 @@ class OceanOpticsSpectrometer(Thing):
     def stop_acquisition(self):
         self._run = False 
 ```
+Events can stream live data without polling or push data to a client whose generation in time is uncontrollable. 
 
 In WoT Terminology, such an event becomes specified as an event affordance (or a description of 
-what the event represents and how to subscribe to it) with subprotocol SSE:
+what the event represents and how to subscribe to it) with subprotocol SSE (HTTP-SSE):
 
 ```JSON
 "intensity_measurement_event": {
@@ -283,7 +284,7 @@ if __name__ == '__main__':
     O.run_with_http_server(ssl_context=ssl_context)
 ```
 
-Here one can see the use of `instance_name` and why it turns up in the URL path.
+Here one can see the use of `instance_name` and why it turns up in the URL path. See the detailed example of the above code [here](https://gitlab.com/hololinked-examples/oceanoptics-spectrometer/-/blob/simple/oceanoptics_spectrometer/device.py?ref_type=heads). 
 
 ##### NOTE - The package is under active development. Contributors welcome, please check CONTRIBUTING.md. 
 
@@ -299,11 +300,11 @@ One may use the HTTP API according to one's beliefs (including letting the packa
 ### Currently Supported
 
 - control method execution and property write with a custom finite state machine.
-- database (Postgres, MySQL, SQLite - based on SQLAlchemy) support for storing and loading properties  when object dies and restarts. 
+- database (Postgres, MySQL, SQLite - based on SQLAlchemy) support for storing and loading properties when the object dies and restarts. 
 - auto-generate Thing Description for Web of Things applications. 
 - use serializer of your choice (except for HTTP) - MessagePack, JSON, pickle etc. & extend serialization to suit your requirement. HTTP Server will support only JSON serializer to maintain compatibility with node-wot. Default is JSON serializer based on msgspec.
 - asyncio compatible - async RPC server event-loop and async HTTP Server - write methods in async 
-- choose from multiple ZeroMQ transport methods; run HTTP Server & python object in separate processes or in the same process, serve multiple objects with same HTTP server etc. 
+- choose from multiple ZeroMQ transport methods - run HTTP Server & python object in separate processes, or the same process, serve multiple objects with the same HTTP server, run direct ZMQ-TCP server without HTTP details, expose only a dashboard or web page on the network without exposing the hardware itself - are some of the possibilities one can achieve by choosing ZMQ transport methods
 
 Again, please check examples or the code for explanations. Documentation is being activety improved. 
 
