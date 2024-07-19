@@ -2,14 +2,38 @@ import asyncio
 import zmq.asyncio
 import typing
 import uuid
-from tornado.web import RequestHandler, StaticFileHandler
+from tornado.web import RequestHandler, StaticFileHandler, HTTPError
 from tornado.iostream import StreamClosedError
+from argon2 import PasswordHasher
+from sqlalchemy import select, delete, update
+from sqlalchemy import Integer, String, JSON, ARRAY, Boolean, BLOB
+from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, MappedAsDataclass, Session
+from sqlalchemy.ext import asyncio as asyncio_ext
+
+from hololinked.server.auth import LoginCredentials, UserSession
 
 
 from .dataklasses import HTTPResource, ServerSentEvent
 from .utils import *
 from .zmq_message_brokers import AsyncEventConsumer, EventConsumer
+from .config import global_config
+from .serializers import JSONSerializer
 from .schema_validators import BaseSchemaValidator
+
+
+
+
+
+def for_authenticated_user(method):
+    async def authenticated_method(self : "BaseHandler", *args, **kwargs) -> None:
+        if self.current_user_valid:
+            return await method(self, *args, **kwargs)
+        self.set_status(403)
+        self.set_custom_default_headers()
+        self.finish()
+        return
+    return authenticated_method
+
 
 
 class BaseHandler(RequestHandler):
@@ -36,6 +60,8 @@ class BaseHandler(RequestHandler):
         self.serializer = self.owner.serializer
         self.logger = self.owner.logger
         self.allowed_clients = self.owner.allowed_clients
+        self.mem_session = self.owner.mem_session
+        self.disk_session = self.owner.disk_session
        
     def set_headers(self) -> None:
         """
@@ -87,6 +113,28 @@ class BaseHandler(RequestHandler):
             return True
         return False
     
+    @property
+    def current_user_valid(self) -> bool:
+        """
+        check if current user is a valid user for accessing authenticated resources
+        """
+        user = self.get_signed_cookie('user', None) 
+        if user is None:
+            return False
+        with self.mem_session() as session:
+            session : Session
+            stmt = select(UserSession).filter_by(session_key=user)
+            data = session.execute(stmt)
+            data = data.scalars().all()
+            if len(data) == 0:
+                return False
+            if len(data) > 1:
+                raise HTTPError("session ID not unique, internal logic error - contact developers (https://github.com/VigneshVSV/hololinked/issues)") 
+            data = data[0]
+            if (data.session_key == user and data.origin == self.request.headers.get("Origin") and
+                    data.user_agent == self.request.headers.get("User-Agent") and data.remote_IP == self.request.remote_ip):
+                return True        
+            
     def set_access_control_allow_headers(self) -> None:
         """
         For credential login, access control allow headers cannot be a wildcard '*'. 
@@ -98,9 +146,18 @@ class BaseHandler(RequestHandler):
             headers += ", " + self.request.headers["Access-Control-Request-Headers"]
         self.set_header("Access-Control-Allow-Headers", headers)
 
+    def set_access_control_allow_origin(self) -> None:
+        """
+        For credential login, access control allow origin cannot be '*',
+        See: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#examples_of_access_control_scenarios
+        """
+        origin = self.request.headers.get("Origin")
+        if origin is not None and (origin in self.CORS or origin + '/' in self.CORS):
+            self.set_header("Access-Control-Allow-Origin", origin)
 
 
-class RPCHandler(BaseHandler):
+
+class ActionHandler(BaseHandler):
     """
     Handler for property read-write and method calls
     """
@@ -209,6 +266,10 @@ class RPCHandler(BaseHandler):
                 self.write(reply)
         self.finish()
         
+
+class PropertyHandler(ActionHandler):
+
+    
     
         
 class EventHandler(BaseHandler):
@@ -421,4 +482,51 @@ class StopHandler(BaseHandler):
                 self.set_header("Access-Control-Allow-Credentials", "true")
             except Exception as ex:
                 self.set_status(500, str(ex))
+        self.finish()
+
+
+   
+class LoginHandler(BaseHandler):
+    """
+    performs login and supplies a signed cookie for session
+    """
+    async def post(self):
+        if not self.headers_ok: 
+            return
+        try:
+            body = JSONSerializer.generic_loads(self.request.body)
+            email = body["email"]
+            password = body["password"]
+            rememberme = body["rememberme"]
+            async with self.disk_session() as session: 
+                session : asyncio_ext.AsyncSession
+                stmt = select(LoginCredentials).filter_by(email=email)
+                data = await session.execute(stmt)
+                data = data.scalars().all() # type: typing.List[LoginCredentials]
+            if len(data) == 0:
+                self.set_status(401, "authentication failed - username not found")    
+            else:
+                data = data[0] # type: LoginCredentials
+                ph = PasswordHasher(time_cost=global_config.PWD_HASHER_TIME_COST)
+                if ph.verify(data.password, password):
+                    self.set_status(204, "logged in")
+                    cookie_value = bytes(str(uuid.uuid4()), encoding = 'utf-8')
+                    self.set_signed_cookie("user", cookie_value, httponly=True,  
+                                            secure=True, samesite="strict", 
+                                            expires_days=30 if rememberme else None)
+                with self.mem_session() as session:
+                    session : Session
+                    session.add(UserSession(email=email, session_key=cookie_value,
+                            origin=self.request.headers.get("Origin"),
+                            user_agent=self.request.headers.get("User-Agent"),
+                            remote_IP=self.request.remote_ip
+                        )
+                    )
+                    session.commit()
+        except Exception as ex:
+            ex_str = str(ex)
+            if ex_str.startswith("password does not match"):
+                ex_str = "username or password not correct"
+            self.set_status(500, f"authentication failed - {ex_str}")
+        self.set_custom_default_headers()
         self.finish()
