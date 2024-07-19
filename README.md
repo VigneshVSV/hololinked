@@ -17,8 +17,10 @@ Or, clone the repository (develop branch for latest codebase) and install `pip i
 ### Usage/Quickstart
 
 `hololinked` is compatible with the [Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software. 
-Each device or thing can be controlled systematically when their design in software is segregated into properties, actions and events. In object oriented terms:
-- the hardware is represented by a class 
+Each device or thing can be controlled systematically when their design in software is segregated into properties, actions and events. It does not matter whether you are 
+controlling your device locally or remotely, what protocol you use, what is the nature of the client etc., one has to provide these three interactions with the hardware. 
+In object oriented terms:
+- the hardware is (generally) represented by a class 
 - properties are validated get-set attributes of the class which may be used to model hardware settings, hold captured/computed data or generic network accessible quantities
 - actions are methods which issue commands like connect/disconnect, execute a control routine, start/stop measurement, or run arbitray python logic
 - events can asynchronously communicate/push (arbitrary) data to a client (say, a GUI), like alarm messages, streaming measured quantities etc.
