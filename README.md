@@ -304,7 +304,7 @@ One may use the HTTP API according to one's beliefs (including letting the packa
 - auto-generate Thing Description for Web of Things applications. 
 - use serializer of your choice (except for HTTP) - MessagePack, JSON, pickle etc. & extend serialization to suit your requirement. HTTP Server will support only JSON serializer to maintain compatibility with node-wot. Default is JSON serializer based on msgspec.
 - asyncio compatible - async RPC server event-loop and async HTTP Server - write methods in async 
-- choose from multiple ZeroMQ transport methods - run HTTP Server & python object in separate processes, or the same process, serve multiple objects with the same HTTP server, run direct ZMQ-TCP server without HTTP details, expose only a dashboard or web page on the network without exposing the hardware itself - are some of the possibilities one can achieve by choosing ZMQ transport methods
+- choose from multiple ZeroMQ transport methods - run HTTP Server & python object in separate processes or the same process, serve multiple objects with the same HTTP server, run direct ZMQ-TCP server without HTTP details, expose only a dashboard or web page on the network without exposing the hardware itself - are some of the possibilities one can achieve by choosing ZMQ transport methods
 
 Again, please check examples or the code for explanations. Documentation is being activety improved. 
 
@@ -321,10 +321,3 @@ Again, please check examples or the code for explanations. Documentation is bein
 ### Contact
 
 Contributors welcome for all my projects related to hololinked including web apps. Please write to my contact email available at my [website](https://hololinked.dev). 
-
-
-
-
-
-
-
