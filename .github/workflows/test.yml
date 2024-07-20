@@ -1,0 +1,40 @@
+name: Python Unit Tests
+
+on:
+    push:
+        branches:
+            - develop
+            - main
+    pull_request:
+        branches:
+            - main
+
+jobs:
+    test:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v2
+
+            - name: Set up Python
+              uses: actions/setup-python@v2
+              with:
+                python-version: 3.11
+
+            - name: Install dependencies
+              run: pip install -r requirements.txt
+
+            - name: Run unit tests
+              run: python -m unittest discover -s tests -p 'test_*.py'
+
+            - name: Generate coverage report
+              run: |
+                pip install coverage
+                coverage run -m unittest discover -s tests -p 'test_*.py'
+                coverage report -m
+
+            - name: Upload coverage report to codecov
+              uses: codecov/codecov-action@v4.0.1
+              with:
+                token: ${{ secrets.CODECOV_TOKEN }}
