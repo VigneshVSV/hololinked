@@ -22,6 +22,7 @@ from .database import ThingInformation
 from .zmq_message_brokers import  AsyncZMQClient, MessageMappedZMQClientPool
 from .handlers import RPCHandler, BaseHandler, EventHandler, ThingsHandler, StopHandler
 from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
+from .eventloop import EventLoop
 from .config import global_config
 
 
@@ -160,12 +161,16 @@ class HTTPServer(Parameterized):
                                                     logger=self.logger
                                                 )
         # print("client pool context", self.zmq_client_pool.context)
-        event_loop = asyncio.get_event_loop()
+        event_loop = EventLoop.get_async_loop() # sets async loop for a non-possessing thread as well
         event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
         event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
         event_loop.call_soon(lambda : asyncio.create_task(self.zmq_client_pool.poll()) )
         for client in self.zmq_client_pool:
             event_loop.call_soon(lambda : asyncio.create_task(client._handshake(timeout=60000)))
+
+        self.tornado_event_loop = None 
+        # set value based on what event loop we use, there is some difference 
+        # between the asyncio event loop and the tornado event loop
         
         # if self.protocol_version == 2:
         #     raise NotImplementedError("Current HTTP2 is not implemented.")
@@ -215,10 +220,11 @@ class HTTPServer(Parameterized):
         the inner tornado instance's (``HTTPServer.tornado_instance``) listen() method. 
         """
         assert self.all_ok, 'HTTPServer all is not ok before starting' # Will always be True or cause some other exception   
-        self.event_loop = ioloop.IOLoop.current()
+        self.tornado_event_loop = ioloop.IOLoop.current()
         self.tornado_instance.listen(port=self.port, address=self.address)    
         self.logger.info(f'started webserver at {self._IP}, ready to receive requests.')
-        self.event_loop.start()
+        self.tornado_event_loop.start()
+
 
     async def stop(self) -> None:
         """
@@ -226,10 +232,12 @@ class HTTPServer(Parameterized):
         handler. The stop handler at the path '/stop' with POST request is already implemented.
         """
         self.tornado_instance.stop()
+        self.zmq_client_pool.stop_polling()
         await self.tornado_instance.close_all_connections()
-        self.event_loop.stop()
-
-
+        if self.tornado_event_loop is not None:
+            self.tornado_event_loop.stop()
+        
+       
     async def update_router_with_things(self) -> None:
         """
         updates HTTP router with paths from ``Thing`` (s)
