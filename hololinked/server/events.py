@@ -32,7 +32,7 @@ class Event:
     # security: Any
     #     security necessary to access this event.
 
-    __slots__ = ['friendly_name', '_internal_name', '_obj_name', '_remote_info', 
+    __slots__ = ['friendly_name', '_internal_name', '_obj_name',
                 'doc', 'schema', 'URL_path', 'security', 'label', 'owner']
 
 
@@ -47,12 +47,11 @@ class Event:
         self.URL_path = URL_path or f'/{pep8_to_URL_path(friendly_name)}'
         # self.security = security
         self.label = label
-        self._remote_info = ServerSentEvent(name=friendly_name)
+       
 
     def __set_name__(self, owner : ParameterizedMetaclass, name : str) -> None:
         self._internal_name = f"{pep8_to_URL_path(name)}-dispatcher"
         self._obj_name = name
-        self._remote_info.obj_name = name
         self.owner = owner
 
     def __get__(self, obj : ParameterizedMetaclass, objtype : typing.Optional[type] = None) -> "EventDispatcher":
@@ -65,6 +64,9 @@ class Event:
     def __set__(self, obj : Parameterized, value : typing.Any) -> None:
         if isinstance(value, EventDispatcher):
             if not obj.__dict__.get(self._internal_name, None):
+                value._remote_info.name = self.friendly_name
+                value._remote_info.obj_name = self._obj_name
+                value._owner_inst = obj
                 obj.__dict__[self._internal_name] = value 
             else:
                 raise AttributeError(f"Event object already assigned for {self._obj_name}. Cannot reassign.") 
@@ -81,6 +83,8 @@ class EventDispatcher:
     def __init__(self, unique_identifier : str) -> None:
         self._unique_identifier = bytes(unique_identifier, encoding='utf-8')         
         self._publisher = None
+        self._remote_info = ServerSentEvent(unique_identifier=unique_identifier)
+        self._owner_inst = None
 
     @property
     def publisher(self) -> "EventPublisher": 

@@ -176,7 +176,7 @@ class Property(Parameter):
         self.fcomparator = fcomparator
         self.metadata = metadata
         self._observable = observable
-        self._observable_event_descriptor : Event 
+        self._observable_event_descriptor : Event = None
         self._remote_info = None
         if remote:
             self._remote_info = RemoteResourceInfoValidator(

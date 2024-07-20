@@ -388,12 +388,13 @@ class ServerSentEvent(SerializableDataclass):
     what: str, default EVENT
         is it a property, method/action or event?
     """
-    name : str
+    name : str = field(default=UNSPECIFIED)
     obj_name : str = field(default=UNSPECIFIED)
     unique_identifier : str = field(default=UNSPECIFIED)
     socket_address : str = field(default=UNSPECIFIED)
     what : str = field(default=ResourceTypes.EVENT)
 
+    
 
 @dataclass
 class GUIResources(SerializableDataclass):
@@ -436,20 +437,24 @@ class GUIResources(SerializableDataclass):
 
     def build(self, instance):
         from .thing import Thing
+        from .events import Event
+
         assert isinstance(instance, Thing), f"got invalid type {type(instance)}"
 
         self.instance_name = instance.instance_name
         self.inheritance = [class_.__name__ for class_ in instance.__class__.mro()]
         self.classdoc = instance.__class__.__doc__.splitlines() if instance.__class__.__doc__ is not None else None
         self.GUI = instance.GUI
+
         self.events = {
             event._unique_identifier.decode() : dict(
-                name = event._name,
+                name = event._remote_info.name,
                 instruction = event._unique_identifier.decode(),
                 owner = event._owner_inst.__class__.__name__,
                 owner_instance_name =  event._owner_inst.instance_name,
                 address = instance.event_publisher.socket_address
             ) for event in instance.event_publisher.events
+
         }
         self.actions = dict()
         self.properties = dict()
@@ -559,10 +564,11 @@ def get_organised_resources(instance):
                 # There is no real philosophy behind this logic flow, we just set the missing information.
                 assert isinstance(prop._observable_event_descriptor, Event), f"observable event not yet set for {prop.name}. logic error."
                 evt_fullpath = f"{instance._full_URL_path_prefix}{prop._observable_event_descriptor.URL_path}"
-                setattr(instance, prop._observable_event_descriptor._obj_name, EventDispatcher(evt_fullpath))
-                prop._observable_event_descriptor._remote_info.unique_identifier = evt_fullpath
-                httpserver_resources[evt_fullpath] = prop._observable_event_descriptor._remote_info
-                zmq_resources[evt_fullpath] = prop._observable_event_descriptor._remote_info
+                dispatcher = EventDispatcher(evt_fullpath)
+                setattr(instance, prop._observable_event_descriptor._obj_name, dispatcher)
+                # prop._observable_event_descriptor._remote_info.unique_identifier = evt_fullpath
+                httpserver_resources[evt_fullpath] = dispatcher._remote_info
+                zmq_resources[evt_fullpath] = dispatcher._remote_info
     # Methods
     for name, resource in inspect._getmembers(instance, lambda f : inspect.ismethod(f) or (
                                 hasattr(f, '_remote_info') and isinstance(f._remote_info, ActionInfoValidator)),
@@ -608,10 +614,11 @@ def get_organised_resources(instance):
            continue 
         # above assertion is only a typing convenience
         fullpath = f"{instance._full_URL_path_prefix}{resource.URL_path}"
-        resource._remote_info.unique_identifier = fullpath
-        setattr(instance, name, EventDispatcher(resource._remote_info.unique_identifier))
-        httpserver_resources[fullpath] = resource._remote_info
-        zmq_resources[fullpath] = resource._remote_info
+        # resource._remote_info.unique_identifier = fullpath
+        dispatcher = EventDispatcher(fullpath)
+        setattr(instance, name, dispatcher) # resource._remote_info.unique_identifier))
+        httpserver_resources[fullpath] = dispatcher._remote_info
+        zmq_resources[fullpath] = dispatcher._remote_info
     # Other objects
     for name, resource in inspect._getmembers(instance, lambda o : isinstance(o, Thing), getattr_without_descriptor_read):
         assert isinstance(resource, Thing), ("thing children query from inspect.ismethod is not a Thing",

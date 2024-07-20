@@ -7,11 +7,12 @@ from hololinked.server.schema_validators import JsonSchemaValidator, BaseSchemaV
 from hololinked.server.serializers import JSONSerializer, PickleSerializer, MsgpackSerializer
 from hololinked.server.utils import get_default_logger 
 from hololinked.server.logger import RemoteAccessHandler
+from hololinked.client import ObjectProxy
 try:
-    from .things import OceanOpticsSpectrometer
+    from .things import OceanOpticsSpectrometer, start_thing_forked
     from .utils import TestCase
 except ImportError:
-    from things import OceanOpticsSpectrometer
+    from things import OceanOpticsSpectrometer, start_thing_forked
     from utils import TestCase
 
 
@@ -164,7 +165,12 @@ class TestThing(TestCase):
         self.assertIsInstance(thing.get_thing_description(), dict)
         self.assertIsInstance(thing.httpserver_resources, dict)
         self.assertIsInstance(thing.zmq_resources, dict)
-        # self.assertIsInstance(thing.gui_resources, dict)
+
+        start_thing_forked(self.thing_cls, instance_name='test-gui-resource-generation', log_level=logging.WARN)
+        thing_client = ObjectProxy('test-gui-resource-generation')
+        self.assertIsInstance(thing_client.gui_resources, dict)
+        thing_client.exit()
+
 
 
 class TestOceanOpticsSpectrometer(TestThing):

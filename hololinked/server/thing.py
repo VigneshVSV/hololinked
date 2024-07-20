@@ -180,6 +180,15 @@ class Thing(Parameterized, metaclass=ThingMeta):
         """
         if instance_name.startswith('/'):
             instance_name = instance_name[1:]
+        # Type definitions
+        self._owner : typing.Optional[Thing] = None 
+        self._internal_fixed_attributes : typing.List[str]
+        self._full_URL_path_prefix : str
+        self.rpc_server  = None # type: typing.Optional[RPCServer]
+        self.message_broker = None # type : typing.Optional[AsyncPollingZMQServer]
+        self._event_publisher = None # type : typing.Optional[EventPublisher]
+        self._gui = None # filler for a future feature
+        # serializer
         if not isinstance(serializer, JSONSerializer) and serializer != 'json' and serializer is not None:
             raise TypeError("serializer key word argument must be JSONSerializer. If one wishes to use separate serializers " +
                             "for python clients and HTTP clients, use zmq_serializer and http_serializer keyword arguments.")
@@ -203,13 +212,6 @@ class Thing(Parameterized, metaclass=ThingMeta):
 
 
     def __post_init__(self):
-        self._owner : typing.Optional[Thing] = None 
-        self._internal_fixed_attributes : typing.List[str]
-        self._full_URL_path_prefix : str
-        self.rpc_server  = None # type: typing.Optional[RPCServer]
-        self.message_broker = None # type : typing.Optional[AsyncPollingZMQServer]
-        self._event_publisher = None # type : typing.Optional[EventPublisher]
-        self._gui = None # filler for a future feature
         self._prepare_resources()
         self.load_properties_from_DB()
         self.logger.info(f"initialialised Thing class {self.__class__.__name__} with instance name {self.instance_name}")
@@ -406,7 +408,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
                 # above is type definition
                 e = evt.__get__(obj, type(obj)) 
                 e.publisher = publisher 
-                evt._remote_info.socket_address = publisher.socket_address
+                e._remote_info.socket_address = publisher.socket_address
                 self.logger.info(f"registered event '{evt.friendly_name}' serving at PUB socket with address : {publisher.socket_address}")
             for name, subobj in inspect._getmembers(obj, lambda o: isinstance(o, Thing), getattr_without_descriptor_read):
                 if name == '_owner':

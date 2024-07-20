@@ -182,7 +182,7 @@ class TestProperty(TestCase):
         self.assertTrue(not os.path.exists(file_path))
     	
         # test db commit property
-        thing = TestThing(instance_name='test-db-operations', use_default_db=True)
+        thing = TestThing(instance_name='test-db-operations', use_default_db=True, log_level=logging.WARN)
         self.assertEqual(thing.db_commit_number_prop, 0) # 0 is default just for reference
         thing.db_commit_number_prop = 100
         self.assertEqual(thing.db_commit_number_prop, 100)
@@ -203,7 +203,7 @@ class TestProperty(TestCase):
         del thing
 
         # delete thing and reload from database 
-        thing = TestThing(instance_name='test-db-operations', use_default_db=True)
+        thing = TestThing(instance_name='test-db-operations', use_default_db=True, log_level=logging.WARN)
         self.assertEqual(thing.db_init_int_prop, TestThing.db_init_int_prop.default)
         self.assertEqual(thing.db_persist_selector_prop, 'c')
         self.assertNotEqual(thing.db_commit_number_prop, 100)
@@ -212,7 +212,7 @@ class TestProperty(TestCase):
         # check db init prop with a different value in database apart from default
         thing.db_engine.set_property('db_init_int_prop', 101)
         del thing
-        thing = TestThing(instance_name='test-db-operations', use_default_db=True)
+        thing = TestThing(instance_name='test-db-operations', use_default_db=True, log_level=logging.WARN)
         self.assertEqual(thing.db_init_int_prop, 101)
 
 
