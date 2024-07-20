@@ -1,6 +1,5 @@
 import sys 
 import os
-from types import FunctionType, MethodType
 import warnings
 import subprocess
 import asyncio
@@ -8,9 +7,8 @@ import importlib
 import typing 
 import threading
 import logging
+import tracemalloc
 from uuid import uuid4
-
-from hololinked.param.parameterized import ParameterizedFunction
 
 from .constants import HTTP_METHODS
 from .utils import format_exception_as_json
@@ -22,6 +20,10 @@ from .property import Property
 from .properties import ClassSelector, TypedList, List, Boolean, TypedDict
 from .action import action as remote_method
 from .logger import ListHandler
+
+
+if global_config.TRACE_MALLOC:
+    tracemalloc.start()
 
 
 def set_event_loop_policy():
@@ -233,6 +235,8 @@ class EventLoop(RemoteObject):
             futures.append(rpc_server.tunnel_message_to_things())
         self.logger.info("starting external message listener thread")
         self.request_listener_loop.run_until_complete(asyncio.gather(*futures))
+        pending_tasks = asyncio.all_tasks(self.request_listener_loop)
+        self.request_listener_loop.run_until_complete(asyncio.gather(*pending_tasks))
         self.logger.info("exiting external listener event loop {}".format(self.instance_name))
         self.request_listener_loop.close()
     
