@@ -67,6 +67,7 @@ class TestProperty(TestCase):
 
     @classmethod
     def setUpClass(self):
+        print("test property")
         self.thing_cls = TestThing
         start_thing_forked(self.thing_cls, instance_name='test-property',
                                     log_level=logging.WARN)
@@ -74,6 +75,7 @@ class TestProperty(TestCase):
 
     @classmethod
     def tearDownClass(self):
+        print("tear down test property")
         self.thing_client.exit()
 
 

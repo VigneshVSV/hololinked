@@ -20,7 +20,13 @@ class TestThingRun(TestCase):
 
     @classmethod    
     def setUpClass(self):
+        print("test Thing run")
         self.thing_cls = Thing 
+
+    @classmethod
+    def tearDownClass(self):
+        # Code to clean up any resources or configurations after each test case
+        print("tear down test Thing run")
 
     def test_thing_run_and_exit(self):
         # should be able to start and end with exactly the specified protocols
@@ -41,7 +47,7 @@ class TestThingRun(TestCase):
         self.assertEqual(done_queue.get(), 'test-run-2') 
         
         done_queue = multiprocessing.Queue()
-        multiprocessing.Process(target=start_thing, args=('test-run-3', ['IPC', 'INPROC', 'TCP'], 'tcp://*:60000'), 
+        multiprocessing.Process(target=start_thing, args=('test-run-3', ['IPC', 'INPROC', 'TCP'], 'tcp://*:59000'), 
                                 kwargs=dict(done_queue=done_queue), daemon=True).start()
         thing_client = ObjectProxy('test-run-3', log_level=logging.WARN) # type: Thing
         self.assertEqual(thing_client.get_protocols(), ['INPROC', 'IPC', 'TCP'])

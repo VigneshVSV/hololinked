@@ -15,6 +15,7 @@ class TestRPC(TestCase):
 
     @classmethod
     def setUpClass(self):
+        print("test RPC")
         self.thing_cls = TestThing
         start_thing_forked(
                         thing_cls=self.thing_cls, 
@@ -28,6 +29,7 @@ class TestRPC(TestCase):
        
     @classmethod
     def tearDownClass(self):
+        print("tear down test RPC")
         self.thing_client.exit()
 
 

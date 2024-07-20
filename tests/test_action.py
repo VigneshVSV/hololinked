@@ -89,8 +89,12 @@ class TestAction(TestCase):
 
     @classmethod
     def setUpClass(self):
+        print("test action")
         self.thing_cls = TestThing 
 
+    @classmethod
+    def tearDownClass(self) -> None:
+        print("tear down test action")
 
     def test_1_allowed_actions(self):
         # instance method can be decorated with action

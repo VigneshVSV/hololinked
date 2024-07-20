@@ -20,9 +20,14 @@ class TestThing(TestCase):
     
     @classmethod
     def setUpClass(self):
+        print("test Thing init")
         self.thing_cls = Thing
-        
-    def test_instance_name(self):
+
+    @classmethod
+    def tearDownClass(self) -> None:
+        print("tear down test Thing init")
+
+    def test_1_instance_name(self):
         # instance name must be a string and cannot be changed after set
         thing = self.thing_cls(instance_name="test_instance_name", log_level=logging.WARN)
         self.assertEqual(thing.instance_name, "test_instance_name")
@@ -32,7 +37,7 @@ class TestThing(TestCase):
             del thing.instance_name
 
 
-    def test_logger(self):
+    def test_2_logger(self):
         # logger must have remote access handler if logger_remote_access is True
         logger = get_default_logger("test_logger", log_level=logging.WARN)
         thing = self.thing_cls(instance_name="test_logger_remote_access", logger=logger, logger_remote_access=True)
@@ -47,7 +52,7 @@ class TestThing(TestCase):
         # What if user gives his own remote access handler?
         
 
-    def test_JSON_serializer(self):
+    def test_3_JSON_serializer(self):
         # req 1 - if serializer is not provided, default is JSONSerializer and http and zmq serializers are same
         thing = self.thing_cls(instance_name="test_serializer_when_not_provided", log_level=logging.WARN)
         self.assertIsInstance(thing.zmq_serializer, JSONSerializer)
@@ -76,7 +81,7 @@ class TestThing(TestCase):
         self.assertIsInstance(thing.http_serializer, JSONSerializer)
     
 
-    def test_other_serializers(self):
+    def test_4_other_serializers(self):
         # req 1 - http_serializer cannot be anything except than JSON
         with self.assertRaises(ValueError) as ex:
             # currenty this has written this as ValueError although TypeError is more appropriate
@@ -120,24 +125,22 @@ class TestThing(TestCase):
                     zmq_serializer=zmq_serializer, log_level=logging.WARN)
 
 
-    def test_schema_validator(self):
+    def test_5_schema_validator(self):
         # schema_validator must be a class or subclass of BaseValidator
         validator = JsonSchemaValidator(schema=True)
         with self.assertRaises(ValueError):
             thing = self.thing_cls(instance_name="test_schema_validator_with_instance", schema_validator=validator)
 
         validator = JsonSchemaValidator
-        thing = self.thing_cls(instance_name="test_schema_validator_with_subclass", schema_validator=validator,
-                    log_level=logging.WARN)
+        thing = self.thing_cls(instance_name="test_schema_validator_with_subclass", schema_validator=validator)
         self.assertEqual(thing.schema_validator, validator)
        
         validator = BaseSchemaValidator
-        thing = self.thing_cls(instance_name="test_schema_validator_with_subclass", schema_validator=validator,
-                    log_level=logging.WARN)
+        thing = self.thing_cls(instance_name="test_schema_validator_with_subclass", schema_validator=validator)
         self.assertEqual(thing.schema_validator, validator)
        
 
-    def test_state(self):
+    def test_6_state(self):
         # state property must be None when no state machine is present
         thing = self.thing_cls(instance_name="test_no_state_machine", log_level=logging.WARN)
         self.assertIsNone(thing.state)
@@ -145,7 +148,7 @@ class TestThing(TestCase):
         # detailed tests should be in another file
       
         
-    def test_servers_init(self):
+    def test_7_servers_init(self):
         # rpc_server, message_broker and event_publisher must be None when not run()
         thing = self.thing_cls(instance_name="test_servers_init", log_level=logging.WARN)
         self.assertIsNone(thing.rpc_server)
@@ -153,7 +156,7 @@ class TestThing(TestCase):
         self.assertIsNone(thing.event_publisher)
 
     
-    def test_resource_generation(self):
+    def test_8_resource_generation(self):
         # basic test only to make sure nothing is fundamentally wrong
         thing = self.thing_cls(instance_name="test_servers_init", log_level=logging.WARN)
         self.assertIsInstance(thing.get_thing_description(), dict)
@@ -166,10 +169,14 @@ class TestOceanOpticsSpectrometer(TestThing):
 
     @classmethod
     def setUpClass(self):
+        print("test OceanOpticsSpectrometer init")
         self.thing_cls = OceanOpticsSpectrometer
 
-    def test_state(self):
-        print()
+    @classmethod
+    def tearDownClass(self) -> None:
+        print("tear down test OceanOpticsSpectrometer init")
+
+    def test_6_state(self):
         # req 1 - state property must be None when no state machine is present
         thing = self.thing_cls(instance_name="test_state_machine", log_level=logging.WARN)
         self.assertIsNotNone(thing.state)

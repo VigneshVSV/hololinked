@@ -1,3 +1,4 @@
+import threading
 import unittest
 
 
@@ -26,3 +27,12 @@ class TestCase(unittest.TestCase):
     
     def setUp(self):
         print() # dont concatenate with results printed by unit test
+
+
+def print_lingering_threads(exclude_daemon=True):
+    alive_threads = threading.enumerate()
+    if exclude_daemon:
+        alive_threads = [t for t in alive_threads if not t.daemon]
+    
+    for thread in alive_threads:
+        print(f"Thread Name: {thread.name}, Thread ID: {thread.ident}, Is Alive: {thread.is_alive()}")
