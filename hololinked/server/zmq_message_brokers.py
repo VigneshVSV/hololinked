@@ -1041,13 +1041,21 @@ class RPCServer(BaseZMQServer):
         self.stop_poll = True
         self._instructions_event.set()
         if self.inproc_server is not None:
-            async def kill_inproc_server():
-                temp_client = AsyncZMQClient(server_instance_name=self.instance_name, identity=f'{self.instance_name}-inproc-killer',
-                                        context=self.context, client_type=PROXY, protocol=ZMQ_PROTOCOLS.INPROC, logger=self.logger) 
-                await temp_client.handshake_complete()
-                await temp_client.socket.send_multipart(temp_client.craft_empty_message_with_type(EXIT))
-                temp_client.exit()
-            asyncio.get_event_loop().call_soon(lambda : asyncio.create_task(kill_inproc_server()))
+            def kill_inproc_server(instance_name, context, logger):
+                # this function does not work when written fully async - reason is unknown
+                try: 
+                    event_loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    event_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(event_loop)
+                temp_inproc_client = AsyncZMQClient(server_instance_name=instance_name,
+                                            identity=f'{self.instance_name}-inproc-killer',
+                                            context=context, client_type=PROXY, protocol=ZMQ_PROTOCOLS.INPROC, 
+                                            logger=logger) 
+                event_loop.run_until_complete(temp_inproc_client.handshake_complete())
+                event_loop.run_until_complete(temp_inproc_client.socket.send_multipart(temp_inproc_client.craft_empty_message_with_type(EXIT)))
+                temp_inproc_client.exit()
+            threading.Thread(target=kill_inproc_server, args=(self.instance_name, self.context, self.logger), daemon=True).start()
         if self.ipc_server is not None:
             temp_client = SyncZMQClient(server_instance_name=self.instance_name, identity=f'{self.instance_name}-ipc-killer',
                                     client_type=PROXY, protocol=ZMQ_PROTOCOLS.IPC, logger=self.logger) 
@@ -1631,6 +1639,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
         self._monitor_socket = self.socket.get_monitor_socket()
         self.poller.register(self._monitor_socket, zmq.POLLIN) 
         self._handshake_event.set()
+
  
     async def handshake_complete(self):
         """
@@ -2033,7 +2042,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
         event_loop = asyncio.get_event_loop()
         event_loop.call_soon(lambda: asyncio.create_task(self.poll()))
 
-    async def stop_polling(self):
+    def stop_polling(self):
         """
         stop polling for replies from server
         """
