@@ -1,7 +1,7 @@
 name: Python Unit Tests
 
 on:
-    workflow_dispatch
+    workflow_dispatch:
     push:
         branches:
             - develop
