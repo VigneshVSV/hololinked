@@ -28,6 +28,8 @@ one has to provide these three interactions with the hardware. In this package, 
 can instantiate properties, actions and events which 
 become visible to a client in this segragated manner. For example, consider an optical spectrometer, the following code is possible:
 
+> This is a fairly mid-level intro, if you are beginner, for another variant check [How-To](https://hololinked.readthedocs.io/en/latest/howto/index.html)
+
 #### Import Statements
 
 ```python
@@ -304,7 +306,11 @@ One may use the HTTP API according to one's beliefs (including letting the packa
 - auto-generate Thing Description for Web of Things applications. 
 - use serializer of your choice (except for HTTP) - MessagePack, JSON, pickle etc. & extend serialization to suit your requirement. HTTP Server will support only JSON serializer to maintain compatibility with node-wot. Default is JSON serializer based on msgspec.
 - asyncio compatible - async RPC server event-loop and async HTTP Server - write methods in async 
-- choose from multiple ZeroMQ transport methods - run HTTP Server & python object in separate processes or the same process, serve multiple objects with the same HTTP server, run direct ZMQ-TCP server without HTTP details, expose only a dashboard or web page on the network without exposing the hardware itself - are some of the possibilities one can achieve by choosing ZMQ transport methods
+- choose from multiple ZeroMQ transport methods. Some of the possibilities one can achieve by choosing ZMQ transport methods:
+  - run HTTP Server & python object in separate processes or the same process
+  - serve multiple objects with the same HTTP server
+  - run direct ZMQ-TCP server without HTTP details
+  - expose only a dashboard or web page on the network without exposing the hardware itself
 
 Again, please check examples or the code for explanations. Documentation is being activety improved. 
 
