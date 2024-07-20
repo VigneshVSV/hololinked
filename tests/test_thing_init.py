@@ -132,11 +132,13 @@ class TestThing(TestCase):
             thing = self.thing_cls(instance_name="test_schema_validator_with_instance", schema_validator=validator)
 
         validator = JsonSchemaValidator
-        thing = self.thing_cls(instance_name="test_schema_validator_with_subclass", schema_validator=validator)
+        thing = self.thing_cls(instance_name="test_schema_validator_with_subclass", schema_validator=validator,
+                    log_level=logging.WARN)
         self.assertEqual(thing.schema_validator, validator)
        
         validator = BaseSchemaValidator
-        thing = self.thing_cls(instance_name="test_schema_validator_with_subclass", schema_validator=validator)
+        thing = self.thing_cls(instance_name="test_schema_validator_with_subclass", schema_validator=validator,
+                    log_level=logging.WARN)
         self.assertEqual(thing.schema_validator, validator)
        
 

@@ -11,6 +11,7 @@ doc/build
 doc/source/generated
 extra-packages 
 tests/test-rpc-results.txt
+tests/run-unittest.bat
 # comment tests until good organisation comes about
 
 # vs-code 
