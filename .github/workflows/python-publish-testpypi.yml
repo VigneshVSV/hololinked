@@ -36,4 +36,4 @@ jobs:
       with:
         user: __token__
         password: ${{ secrets.TEST_PYPI_API_TOKEN }}
-        repositor-url: https://test.pypi.org/legacy/
+        repository-url: https://test.pypi.org/legacy/
