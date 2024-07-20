@@ -4,7 +4,6 @@ on:
     workflow_dispatch:
     push:
         branches:
-            - develop
             - main
     pull_request:
         branches:
@@ -26,10 +25,7 @@ jobs:
             - name: Install dependencies
               run: pip install -r tests/requirements.txt
 
-            - name: Run unit tests
-              run: python -m unittest discover -s tests -p 'test_*.py'
-
-            - name: Generate coverage report
+            - name: Run unit tests and generate coverage report
               run: |
                 pip install coverage
                 coverage run -m unittest discover -s tests -p 'test_*.py'
