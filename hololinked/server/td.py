@@ -613,7 +613,7 @@ class ActionAffordance(InteractionAffordance):
             form.op = 'invokeaction'
             form.href = f'{authority}{owner._full_URL_path_prefix}{action._remote_info.URL_path}'
             form.htv_methodName = method.upper()
-            self.contentEncoding = 'application/json'
+            form.contentType = 'application/json'
             # form.additionalResponses = [AdditionalExpectedResponse().asdict()]
             self.forms.append(form.asdict())
 
