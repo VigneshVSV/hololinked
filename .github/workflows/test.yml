@@ -1,6 +1,7 @@
 name: Python Unit Tests
 
 on:
+    workflow_dispatch
     push:
         branches:
             - develop
@@ -8,7 +9,7 @@ on:
     pull_request:
         branches:
             - main
-
+    
 jobs:
     test:
         runs-on: ubuntu-latest
