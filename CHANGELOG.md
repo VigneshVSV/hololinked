@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- cookie auth & its specification in TD
+
+## [v0.2.1] - 2024-07-21
+
 ### Added
 - properties are now "observable" and push change events when read or written & value has changed
 - input & output JSON schema can be specified for actions, where input schema is used for validation of arguments
@@ -20,9 +25,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - ``class_member`` argument for properties respected more accurately
-
-### Security
-- cookie auth will be added
 
 ## [v0.1.2] - 2024-06-06
 
