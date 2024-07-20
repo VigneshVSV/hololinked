@@ -22,7 +22,7 @@ class TestRPC(TestCase):
                         instance_name='test-rpc',
                         log_level=logging.WARN,
                         protocols=['IPC', 'TCP'],
-                        tcp_socket_address='tcp://*:60000',
+                        tcp_socket_address='tcp://*:58000',
                         http_server=True
                     )   
         self.thing_client = ObjectProxy('test-rpc') # type: TestThing
@@ -67,7 +67,7 @@ class TestRPC(TestCase):
     def test_6_tcp_client(self):
         # Also, for sake, a TCP client
         done_queue = multiprocessing.Queue()
-        start_client(done_queue, tcp_socket_address='tcp://localhost:60000')
+        start_client(done_queue, tcp_socket_address='tcp://localhost:58000')
         self.assertEqual(done_queue.get(), True)
 
 
@@ -93,10 +93,10 @@ class TestRPC(TestCase):
         start_client(done_queue_6, 'http')
 
         done_queue_7 = multiprocessing.Queue()
-        start_client(done_queue_7, typ='threading', tcp_socket_address='tcp://localhost:60000')
+        start_client(done_queue_7, typ='threading', tcp_socket_address='tcp://localhost:58000')
 
         done_queue_8 = multiprocessing.Queue()
-        start_client(done_queue_8, tcp_socket_address='tcp://localhost:60000')
+        start_client(done_queue_8, tcp_socket_address='tcp://localhost:58000')
 
         self.assertEqual(done_queue_1.get(), True)
         self.assertEqual(done_queue_2.get(), True)
