@@ -125,12 +125,16 @@ def run_callable_somehow(method : typing.Union[typing.Callable, typing.Coroutine
         eventloop = asyncio.get_event_loop()
     except RuntimeError:
         eventloop = asyncio.new_event_loop()
-    if eventloop.is_running():    
-        task = lambda : asyncio.create_task(method) # check later if lambda is necessary
-        eventloop.call_soon(task)
+    if asyncio.iscoroutinefunction(method):
+        coro = method()
     else:
-        task = method
-        return eventloop.run_until_complete(task)
+        coro = method
+    if eventloop.is_running():    
+        # task =  # check later if lambda is necessary
+        eventloop.create_task(coro)
+    else:
+        # task = method
+        return eventloop.run_until_complete(coro)
 
 
 def get_signature(callable : typing.Callable) -> typing.Tuple[typing.List[str], typing.List[type]]: 

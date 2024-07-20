@@ -85,7 +85,7 @@ class Configuration:
         # credentials
         "PWD_HASHER_TIME_COST", "PWD_HASHER_MEMORY_COST",
         # Eventloop
-        "USE_UVLOOP",
+        "USE_UVLOOP", "TRACE_MALLOC",
         'validate_schema_on_client', 'validate_schemas'
     ]
 
@@ -103,6 +103,7 @@ class Configuration:
         self.TCP_SOCKET_SEARCH_END_PORT = 65535
         self.PWD_HASHER_TIME_COST = 15
         self.USE_UVLOOP = False
+        self.TRACE_MALLOC = False
         self.validate_schema_on_client = False
         self.validate_schemas = True 
 
