@@ -202,7 +202,7 @@ class Parameter(metaclass=ParameterMetaclass):
     # overhead, Parameters are implemented using __slots__ (see
     # http://www.python.org/doc/2.4/ref/slots.html). 
 
-    __slots__ = ['default', 'doc', 'constant', 'readonly', 'allow_None',
+    __slots__ = ['default', 'doc', 'constant', 'readonly', 'allow_None', 'label',
                 'per_instance_descriptor', 'deepcopy_default', 'class_member', 'precedence', 
                 'owner', 'name', '_internal_name', 'watchers', 'fget', 'fset', 'fdel',
                 '_disable_post_slot_set']
@@ -212,8 +212,8 @@ class Parameter(metaclass=ParameterMetaclass):
     # class is created, owner, name, and _internal_name are
     # set.
 
-    def __init__(self, default : typing.Any, *, doc : typing.Optional[str] = None,
-                constant : bool = False, readonly : bool = False, allow_None : bool = False,
+    def __init__(self, default : typing.Any, *, doc : typing.Optional[str] = None, constant : bool = False, 
+                readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None,
                 per_instance_descriptor : bool = False, deepcopy_default : bool = False, class_member : bool = False,
                 fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
                 fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:  # pylint: disable-msg=R0913
@@ -293,6 +293,7 @@ class Parameter(metaclass=ParameterMetaclass):
         self.constant = constant # readonly is also constant however constants can be set once
         self.readonly = readonly
         self.allow_None = constant or allow_None
+        self.label = label
         self.per_instance_descriptor = per_instance_descriptor
         self.deepcopy_default = deepcopy_default
         self.class_member = class_member
@@ -365,6 +366,8 @@ class Parameter(metaclass=ParameterMetaclass):
         instance's value, if one has been set - otherwise produce the
         class's value (default).
         """        
+        if self.class_member:
+            return objtype.__dict__.get(self._internal_name, self.default)
         if obj is None:
             return self 
         if self.fget is not None:     
@@ -398,7 +401,7 @@ class Parameter(metaclass=ParameterMetaclass):
         item in a list).
         """
         if self.readonly:
-            raise_TypeError("Read-only parameter cannot be set/modified.", self)
+            raise_ValueError("Read-only parameter cannot be set/modified.", self)
         
         value = self.validate_and_adapt(value)
 
@@ -409,7 +412,7 @@ class Parameter(metaclass=ParameterMetaclass):
             old = None
             if (obj.__dict__.get(self._internal_name, NotImplemented) != NotImplemented) or self.default is not None: 
                 # Dont even entertain any type of setting, even if its the same value
-                raise_TypeError("Constant parameter cannot be modified.", self)
+                raise_ValueError("Constant parameter cannot be modified.", self)
         else:
             old = obj.__dict__.get(self._internal_name, self.default)
 
@@ -447,6 +450,11 @@ class Parameter(metaclass=ParameterMetaclass):
                 event_dispatcher.call_watcher(watcher, event)
             if not event_dispatcher.state.BATCH_WATCH:
                 event_dispatcher.batch_call_watchers()
+
+    def __delete__(self, obj : typing.Union['Parameterized', typing.Any]) -> None:
+        if self.fdel is not None:
+            return self.fdel(obj)
+        raise NotImplementedError("Parameter deletion not implemented.")
             
     def validate_and_adapt(self, value : typing.Any) -> typing.Any:
         """
@@ -462,8 +470,7 @@ class Parameter(metaclass=ParameterMetaclass):
         """
         All Parameters have slots, not a dict, so we have to support
         pickle and deepcopy ourselves.
-        """
-        
+        """        
         state = {}
         for slot in self.__slots__ + self.__parent_slots__:
             state[slot] = getattr(self, slot)
@@ -1664,7 +1671,7 @@ class InstanceParameters(ClassParameters):
         self._instance_params[param_obj.name] = param_obj_copy
 
 
-    def add_parameter(self, param_name: str, param_obj: Parameter) -> None:
+    def add(self, param_name : str, param_obj : Parameter) -> None:
         setattr(self.owner_inst, param_name, param_obj)
         if param_obj.deepcopy_default:
             self._deep_copy_param_default(param_obj)
@@ -2051,6 +2058,7 @@ class ParameterizedFunction(Parameterized):
     def __new__(cls, *args, **params):
         # Create and __call__() an instance of this class.
         inst = super().__new__(cls)
+        inst.__init__(**params)
         return inst.__call__(*args, **params)
 
 

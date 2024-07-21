@@ -1,10 +1,14 @@
 import typing 
-import threading 
+import threading
+import jsonschema
 
-from ..param import Parameterized
+from ..param.parameterized import Parameterized, ParameterizedMetaclass
+from .constants import JSON 
+from .utils import pep8_to_URL_path
+from .config import global_config
 from .zmq_message_brokers import EventPublisher
-from .data_classes import ServerSentEvent
-
+from .dataklasses import ServerSentEvent
+from .security_definitions import BaseSecurityDefinition
 
 
 class Event:
@@ -19,27 +23,69 @@ class Event:
         name of the event, specified name may contain dashes and can be used on client side to subscribe to this event.
     URL_path: str
         URL path of the event if a HTTP server is used. only GET HTTP methods are supported. 
+    doc: str
+        docstring for the event
+    schema: JSON
+        schema of the event, if the event is JSON complaint. HTTP clients can validate the data with this schema. There
+        is no validation on server side.
     """
+    # security: Any
+    #     security necessary to access this event.
 
-    def __init__(self, name : str, URL_path : typing.Optional[str] = None) -> None:
-        self.name = name 
-        # self.name_bytes = bytes(name, encoding = 'utf-8')
-        if URL_path is not None and not URL_path.startswith('/'):
-            raise ValueError(f"URL_path should start with '/', please add '/' before '{URL_path}'")
-        self.URL_path = URL_path or '/' + name
-        self._unique_identifier = None # type: typing.Optional[str]
-        self._owner = None  # type: typing.Optional[Parameterized]
-        self._remote_info = None # type: typing.Optional[ServerSentEvent]
-        self._publisher = None
-        # above two attributes are not really optional, they are set later. 
+    __slots__ = ['friendly_name', '_internal_name', '_obj_name',
+                'doc', 'schema', 'URL_path', 'security', 'label', 'owner']
 
-    @property
-    def owner(self):
-        """
-        Event owning ``Thing`` object.
-        """
-        return self._owner        
+
+    def __init__(self, friendly_name : str, URL_path : typing.Optional[str] = None, doc : typing.Optional[str] = None, 
+                schema : typing.Optional[JSON] = None, # security : typing.Optional[BaseSecurityDefinition] = None,
+                label : typing.Optional[str] = None) -> None:
+        self.friendly_name = friendly_name 
+        self.doc = doc 
+        if global_config.validate_schemas and schema:
+            jsonschema.Draft7Validator.check_schema(schema)
+        self.schema = schema
+        self.URL_path = URL_path or f'/{pep8_to_URL_path(friendly_name)}'
+        # self.security = security
+        self.label = label
+       
+
+    def __set_name__(self, owner : ParameterizedMetaclass, name : str) -> None:
+        self._internal_name = f"{pep8_to_URL_path(name)}-dispatcher"
+        self._obj_name = name
+        self.owner = owner
+
+    def __get__(self, obj : ParameterizedMetaclass, objtype : typing.Optional[type] = None) -> "EventDispatcher":
+        try:
+            return obj.__dict__[self._internal_name]
+        except KeyError:
+            raise AttributeError("Event object not yet initialized, please dont access now." +
+                                " Access after Thing is running.")
         
+    def __set__(self, obj : Parameterized, value : typing.Any) -> None:
+        if isinstance(value, EventDispatcher):
+            if not obj.__dict__.get(self._internal_name, None):
+                value._remote_info.name = self.friendly_name
+                value._remote_info.obj_name = self._obj_name
+                value._owner_inst = obj
+                obj.__dict__[self._internal_name] = value 
+            else:
+                raise AttributeError(f"Event object already assigned for {self._obj_name}. Cannot reassign.") 
+                # may be allowing to reassign is not a bad idea 
+        else:
+            raise TypeError(f"Supply EventDispatcher object to event {self._obj_name}, not type {type(value)}.")
+
+
+class EventDispatcher:
+    """
+    The actual worker which pushes the event. The separation is necessary between ``Event`` and 
+    ``EventDispatcher`` to allow class level definitions of the ``Event`` 
+    """
+    def __init__(self, unique_identifier : str) -> None:
+        self._unique_identifier = bytes(unique_identifier, encoding='utf-8')         
+        self._publisher = None
+        self._remote_info = ServerSentEvent(unique_identifier=unique_identifier)
+        self._owner_inst = None
+
     @property
     def publisher(self) -> "EventPublisher": 
         """
@@ -66,14 +112,14 @@ class Event:
         serialize: bool, default True
             serialize the payload before pushing, set to False when supplying raw bytes
         **kwargs:
-            rpc_clients: bool, default True
+            zmq_clients: bool, default True
                 pushes event to RPC clients, irrelevant if ``Thing`` uses only one type of serializer (refer to 
-                difference between rpc_serializer and json_serializer).
+                difference between zmq_serializer and http_serializer).
             http_clients: bool, default True
                 pushed event to HTTP clients, irrelevant if ``Thing`` uses only one type of serializer (refer to 
-                difference between rpc_serializer and json_serializer).
+                difference between zmq_serializer and http_serializer).
         """
-        self.publisher.publish(self._unique_identifier, data, rpc_clients=kwargs.get('rpc_clients', True), 
+        self.publisher.publish(self._unique_identifier, data, zmq_clients=kwargs.get('zmq_clients', True), 
                                     http_clients=kwargs.get('http_clients', True), serialize=serialize)
 
 

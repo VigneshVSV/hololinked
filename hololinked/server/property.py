@@ -1,11 +1,13 @@
 import typing
 from types import FunctionType, MethodType
 from enum import Enum
+import warnings
 
-from ..param.parameterized import Parameter, ClassParameters
-from .data_classes import RemoteResourceInfoValidator
+from ..param.parameterized import Parameter, ClassParameters, Parameterized, ParameterizedMetaclass
+from .utils import issubklass, pep8_to_URL_path
+from .dataklasses import RemoteResourceInfoValidator
 from .constants import USE_OBJECT_NAME, HTTP_METHODS
-from .events import Event
+from .events import Event, EventDispatcher
 
 
 
@@ -38,11 +40,11 @@ class Property(Parameter):
         allowed. 
 
     URL_path: str, uses object name by default
-        resource locator under which the attribute is accessible through HTTP. when value is supplied, the variable name 
+        resource locator under which the attribute is accessible through HTTP. When not given, the variable name 
         is used and underscores are replaced with dash
 
     http_method: tuple, default ("GET", "PUT", "DELETE")
-        http methods for read, write, delete respectively 
+        http methods for read, write and delete respectively 
 
     observable: bool, default False
         set to True to receive change events. Supply a function if interested to evaluate on what conditions the change 
@@ -108,8 +110,8 @@ class Property(Parameter):
 
     """
 
-    __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', '_remote_info', 'observable', 
-                '_observable_event', 'fcomparator']
+    __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', '_remote_info', 
+                '_observable', '_observable_event_descriptor', 'fcomparator', '_old_value_internal_name']
     
     # RPC only init - no HTTP methods for those who dont like
     @typing.overload
@@ -138,7 +140,8 @@ class Property(Parameter):
     def __init__(self, default: typing.Any = None, *, doc : typing.Optional[str] = None, constant : bool = False, 
                 readonly : bool = False, allow_None : bool = False, 
                 URL_path : str = USE_OBJECT_NAME, 
-                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (HTTP_METHODS.GET, HTTP_METHODS.PUT), 
+                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                            (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
                 observable : bool = False, change_comparator : typing.Optional[typing.Union[FunctionType, MethodType]] = None,
                 state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
                 db_persist : bool = False, db_init : bool = False, db_commit : bool = False, remote : bool = True,
@@ -150,28 +153,31 @@ class Property(Parameter):
             ) -> None:
         ...
  
-    def __init__(self, default: typing.Any = None, *, doc : typing.Optional[str] = None, constant : bool = False, 
-                readonly : bool = False, allow_None : bool = False, 
+    def __init__(self, default: typing.Any = None, *, 
+                doc : typing.Optional[str] = None, constant : bool = False, 
+                readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
                 URL_path : str = USE_OBJECT_NAME, 
-                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str]] = (HTTP_METHODS.GET, HTTP_METHODS.PUT),
+                http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                            (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
                 state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
                 db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
-                observable : bool = False, change_comparator : typing.Optional[typing.Union[FunctionType, MethodType]] = None, 
-                class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
-                fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None,
-                fcomparator : typing.Optional[typing.Callable] = None,  
+                observable : bool = False, class_member : bool = False, 
+                fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+                fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
                 deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
                 precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None
             ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, allow_None=allow_None,
-                    per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default,
+                    label=label, per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default,
                     class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence)
         self.db_persist = db_persist
         self.db_init    = db_init
         self.db_commit  = db_commit
+        self.fcomparator = fcomparator
         self.metadata = metadata
-        self.observable = observable
-        self._observable_event = None
+        self._observable = observable
+        self._observable_event_descriptor : Event = None
+        self._remote_info = None
         if remote:
             self._remote_info = RemoteResourceInfoValidator(
                 http_method=http_method,
@@ -179,50 +185,73 @@ class Property(Parameter):
                 state=state,
                 isproperty=True
             )
-        else:
-            self._remote_info = None
-        self.fcomparator = fcomparator
-        
-    def _post_slot_set(self, slot : str, old : typing.Any, value : typing.Any) -> None:
-        if slot == 'owner' and self.owner is not None:
-            if self._remote_info is not None:
-                if self._remote_info.URL_path == USE_OBJECT_NAME:
-                    self._remote_info.URL_path = '/' + self.name
-                elif not self._remote_info.URL_path.startswith('/'): 
-                    raise ValueError(f"URL_path should start with '/', please add '/' before '{self._remote_info.URL_path}'")
-                self._remote_info.obj_name = self.name
-            if self.observable:
-                self._observable_event = Event(name=f'observable-{self.name}', 
-                                        URL_path=f'{self._remote_info.URL_path}/change-event')
-            # In principle the above could be done when setting name itself however to simplify
-            # we do it with owner. So we should always remember order of __set_name__ -> 1) attrib_name, 
-            # 2) name and then 3) owner
-        super()._post_slot_set(slot, old, value)
+
+
+    def __set_name__(self, owner: typing.Any, attrib_name: str) -> None:
+        super().__set_name__(owner, attrib_name)
+        self._old_value_internal_name = f'{self._internal_name}_old_value'
+        if self._remote_info is not None:
+            if self._remote_info.URL_path == USE_OBJECT_NAME:
+                self._remote_info.URL_path = f'/{pep8_to_URL_path(self.name)}'
+            elif not self._remote_info.URL_path.startswith('/'): 
+                raise ValueError(f"URL_path should start with '/', please add '/' before '{self._remote_info.URL_path}'")
+            self._remote_info.obj_name = self.name
+        if self._observable:
+            _observable_event_name = f'{self.name}_change_event'  
+            # This is a descriptor object, so we need to set it on the owner class
+            self._observable_event_descriptor = Event(
+                        friendly_name=_observable_event_name,
+                        URL_path=f'{self._remote_info.URL_path}/change-event',
+                        doc=f"change event for {self.name}"
+                    ) # type: Event
+            self._observable_event_descriptor.__set_name__(owner, _observable_event_name)
+            setattr(owner, _observable_event_name, self._observable_event_descriptor)
+          
+
+    def _push_change_event_if_needed(self, obj, value : typing.Any) -> None:
+        """
+        Pushes change event both on read and write if an event publisher object is available
+        on the owning Thing.        
+        """
+        if self._observable and obj.event_publisher:
+            event_dispatcher = getattr(obj, self._observable_event_descriptor._obj_name, None) # type: EventDispatcher
+            old_value = obj.__dict__.get(self._old_value_internal_name, NotImplemented)
+            obj.__dict__[self._old_value_internal_name] = value 
+            if self.fcomparator:
+                if issubklass(self.fcomparator):
+                    if not self.fcomparator(self.owner, old_value, value):
+                        return 
+                elif not self.fcomparator(obj, old_value, value):
+                    return
+            elif not old_value != value:
+                return 
+            event_dispatcher.push(value)       
+
+
+    def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass) -> typing.Any:
+        read_value = super().__get__(obj, objtype)
+        self._push_change_event_if_needed(obj, read_value)
+        return read_value
+    
 
     def _post_value_set(self, obj, value : typing.Any) -> None:
         if (self.db_persist or self.db_commit) and hasattr(obj, 'db_engine'):
-            # from .thing import Thing
-            # assert isinstance(obj, Thing), f"database property {self.name} bound to a non Thing, currently not supported"
-            # uncomment for type definitions
+            from .thing import Thing
+            assert isinstance(obj, Thing), f"database property {self.name} bound to a non Thing, currently not supported"
             obj.db_engine.set_property(self, value)
-        if self.observable and self._observable_event is not None:
-            old_value = obj.__dict__.get(self._internal_name, NotImplemented)
-            obj.__dict__[f'{self._internal_name}_old_value'] = value 
-            if self.fcomparator:
-                if self.fcomparator(old_value, value):
-                    self._observable_event.push(value)               
-            elif old_value != value:
-                self._observable_event.push(value)
+        self._push_change_event_if_needed(obj, value)
         return super()._post_value_set(obj, value)
+    
     
     def comparator(self, func : typing.Callable) -> typing.Callable:
         """
-        Register a getter method by using this as a decorator.
+        Register a comparator method by using this as a decorator to decide when to push
+        a change event.
         """
         self.fcomparator = func 
         return func
     
-    
+
     
 __property_info__ = [
                 'allow_None' , 'class_member', 'db_init', 'db_persist', 
@@ -298,21 +327,7 @@ class ClassProperties(ClassParameters):
                 info[param.name][field] = state.get(field, None) 
         return info 
 
-    @property
-    def visualization_parameters(self):
-        from ..webdashboard.visualization_parameters import VisualizationParameter
-        try:
-            return getattr(self.owner_cls, f'_{self.owner_cls.__name__}_visualization_params')
-        except AttributeError: 
-            paramdict = super().descriptors
-            visual_params = {}
-            for name, desc in paramdict.items():
-                if isinstance(desc, VisualizationParameter):
-                    visual_params[name] = desc
-            setattr(self.owner_cls, f'_{self.owner_cls.__name__}_visualization_params', visual_params)
-        return getattr(self.owner_cls, f'_{self.owner_cls.__name__}_visualization_params')
-
-
+    
   
 __all__ = [
     Property.__name__

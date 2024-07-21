@@ -1,13 +1,16 @@
+import inspect
 import typing 
-import socket
 from dataclasses import dataclass, field
 
-from .data_classes import RemoteResourceInfoValidator
-from .properties import *
-from .constants import JSONSerializable
-from .thing import Thing
-from .properties import Property
+
+from .constants import JSON, JSONSerializable
+from .utils import getattr_without_descriptor_read
+from .dataklasses import ActionInfoValidator
 from .events import Event
+from .properties import *
+from .property import Property
+from .thing import Thing
+from .eventloop import EventLoop
 
 
 
@@ -42,11 +45,13 @@ class Schema:
         """strip tabs, newlines, whitespaces etc."""
         doc_as_list = doc.split('\n')
         final_doc = []
-        for line in doc_as_list:
+        for index, line in enumerate(doc_as_list):
             line = line.lstrip('\n').rstrip('\n')
             line = line.lstrip('\t').rstrip('\t')
             line = line.lstrip('\n').rstrip('\n')
-            line = line.lstrip().rstrip()              
+            line = line.lstrip().rstrip()   
+            if index > 0:
+                line = ' ' + line # add space to left in case of new line            
             final_doc.append(line)
         return ''.join(final_doc)
     
@@ -65,7 +70,17 @@ class JSONSchema:
         dict : 'object',
         list : 'array',
         tuple : 'array',
-        type(None) : 'null'
+        type(None) : 'null',
+        Exception : {
+            "type": "object",
+            "properties": {
+                "message": {"type": "string"},
+                "type": {"type": "string"},
+                "traceback": {"type": "array", "items": {"type": "string"}},
+                "notes": {"type": ["string", "null"]}
+            },
+            "required": ["message", "type", "traceback"]
+        }
     }
 
     _schemas = {
@@ -75,6 +90,13 @@ class JSONSchema:
     @classmethod
     def is_allowed_type(cls, type : typing.Any) -> bool: 
         if type in JSONSchema._replacements.keys():
+            return True 
+        return False 
+    
+    @classmethod
+    def is_supported(cls, typ: typing.Any) -> bool:
+        """"""
+        if typ in JSONSchema._schemas.keys():
             return True 
         return False 
     
@@ -102,12 +124,6 @@ class JSONSchema:
             raise TypeError(f"json schema replacement type must be one of allowed type - 'string', 'object', 'array', 'string', " +
                                 f"'number', 'integer', 'boolean', 'null'. Given value {json_schema_type}")
 
-    @classmethod
-    def is_supported(cls, typ: typing.Any) -> bool:
-        if typ in JSONSchema._schemas.keys():
-            return True 
-        return False 
-    
     @classmethod
     def get(cls, typ : typing.Any):
         """schema for array and objects only supported"""
@@ -160,7 +176,7 @@ class DataSchema(Schema):
 
     def build(self, property : Property, owner : Thing, authority : str) -> None:
         """generates the schema"""
-        self.title = property.name # or property.label
+        self.title = property.label or property.name 
         if property.constant:
             self.const = property.constant 
         if property.readonly:
@@ -199,22 +215,31 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
         """generates the schema"""
         DataSchema.build(self, property, owner, authority)
 
-        if property.observable:
-            self.observable = property.observable
-
         self.forms = []
         for index, method in enumerate(property._remote_info.http_method):
             form = Form()
             # index is the order for http methods for (get, set, delete), generally (GET, PUT, DELETE)
             if (index == 1 and property.readonly) or index >= 2:
-                continue # delete property is not a part of WoT, we also mostly never use it so ignore.
+                continue # delete property is not a part of WoT, we also mostly never use it, so ignore.
             elif index == 0:
                 form.op = 'readproperty'
             elif index == 1:
                 form.op = 'writeproperty'
             form.href = f"{authority}{owner._full_URL_path_prefix}{property._remote_info.URL_path}"
             form.htv_methodName = method.upper()
+            form.contentType = "application/json"
             self.forms.append(form.asdict())
+
+        if property._observable:
+            self.observable = property._observable
+            form = Form()
+            form.op = 'observeproperty'
+            form.href = f"{authority}{owner._full_URL_path_prefix}{property._observable_event_descriptor.URL_path}"
+            form.htv_methodName = "GET"
+            form.subprotocol = "sse"
+            form.contentType = "text/plain"
+            self.forms.append(form.asdict())
+
 
     @classmethod
     def generate_schema(self, property : Property, owner : Thing, authority : str) -> typing.Dict[str, JSONSerializable]:
@@ -353,7 +378,7 @@ class ArraySchema(PropertyAffordance):
             if isinstance(property.item_type, (list, tuple)):
                 for typ in property.item_type:
                     self.items.append(dict(type=JSONSchema.get_type(typ)))
-            else: 
+            elif property.item_type is not None: 
                 self.items.append(dict(type=JSONSchema.get_type(property.item_type)))
         elif isinstance(property, TupleSelector):
             objects = list(property.objects)
@@ -361,7 +386,9 @@ class ArraySchema(PropertyAffordance):
                 if any(types["type"] == JSONSchema._replacements.get(type(obj), None) for types in self.items):
                     continue 
                 self.items.append(dict(type=JSONSchema.get_type(type(obj))))
-        if len(self.items) > 1:
+        if len(self.items) == 0:
+            del self.items
+        elif len(self.items) > 1:
             self.items = dict(oneOf=self.items)
             
 
@@ -456,7 +483,7 @@ class OneOfSchema(PropertyAffordance):
             oneOf = self.oneOf[0]
             self.type = oneOf["type"]
             if oneOf["type"] == 'object':
-                if oneOf.get("properites", NotImplemented) is not NotImplemented:
+                if oneOf.get("properties", NotImplemented) is not NotImplemented:
                     self.properties = oneOf["properties"]
                 if oneOf.get("required", NotImplemented) is not NotImplemented:
                     self.required = oneOf["required"]
@@ -470,6 +497,7 @@ class OneOfSchema(PropertyAffordance):
             del self.oneOf
 
 
+@dataclass
 class EnumSchema(OneOfSchema):
     """
     custom schema to fill enum field of property affordance correctly
@@ -485,11 +513,20 @@ class EnumSchema(OneOfSchema):
         OneOfSchema.build(self, property, owner, authority)
 
 
+@dataclass
+class Link(Schema):
+    href : str
+    anchor : typing.Optional[str]  
+    type : typing.Optional[str] = field(default='application/json')
+    rel : typing.Optional[str] = field(default='next')
 
+    def __init__(self):
+        super().__init__()
+    
+    def build(self, resource : Thing, owner : Thing, authority : str) -> None:
+        self.href = f"{authority}{resource._full_URL_path_prefix}/resources/wot-td"
+        self.anchor = f"{authority}{owner._full_URL_path_prefix}"
 
-
-class Link:
-    pass 
 
 
 @dataclass
@@ -503,20 +540,21 @@ class ExpectedResponse(Schema):
     def __init__(self):
         super().__init__()
 
+
 @dataclass
 class AdditionalExpectedResponse(Schema):
     """
-    Form property.
+    Form field for additional responses which are different from the usual response.
     schema - https://www.w3.org/TR/wot-thing-description11/#additionalexpectedresponse
     """
-    success : bool 
-    contentType : str 
-    schema : typing.Optional[typing.Dict[str, typing.Any]]
+    success : bool = field(default=False)
+    contentType : str = field(default='application/json')
+    schema : typing.Optional[JSON] = field(default='exception')
 
     def __init__(self):
         super().__init__()
 
-
+   
 @dataclass
 class Form(Schema):
     """
@@ -524,21 +562,19 @@ class Form(Schema):
     schema - https://www.w3.org/TR/wot-thing-description11/#form
     """
     href : str 
+    op : str 
+    htv_methodName : str 
+    contentType : typing.Optional[str]
+    additionalResponses : typing.Optional[typing.List[AdditionalExpectedResponse]]
     contentEncoding : typing.Optional[str]
     security : typing.Optional[str]
     scopes : typing.Optional[str]
     response : typing.Optional[ExpectedResponse]
-    additionalResponses : typing.Optional[typing.List[AdditionalExpectedResponse]]
     subprotocol : typing.Optional[str]
-    op : str 
-    htv_methodName : str 
-    subprotocol : str
-    contentType : typing.Optional[str] = field(default='application/json')
     
     def __init__(self):
         super().__init__()
 
-    
     
 @dataclass
 class ActionAffordance(InteractionAffordance):
@@ -556,7 +592,7 @@ class ActionAffordance(InteractionAffordance):
         super(InteractionAffordance, self).__init__()
     
     def build(self, action : typing.Callable, owner : Thing, authority : str) -> None:
-        assert isinstance(action._remote_info, RemoteResourceInfoValidator)
+        assert isinstance(action._remote_info, ActionInfoValidator)
         if action._remote_info.argument_schema: 
             self.input = action._remote_info.argument_schema 
         if action._remote_info.return_value_schema: 
@@ -564,19 +600,21 @@ class ActionAffordance(InteractionAffordance):
         self.title = action.__name__
         if action.__doc__:
             self.description = self.format_doc(action.__doc__)
-        self.safe = True 
-        if (hasattr(owner, 'state_machine') and owner.state_machine is not None and 
-                owner.state_machine.has_object(action._remote_info.obj)):
-            self.idempotent = False 
-        else:
-            self.idempotent = True      
-        self.synchronous = True 
+        if not (hasattr(owner, 'state_machine') and owner.state_machine is not None and 
+                owner.state_machine.has_object(action._remote_info.obj)) and action._remote_info.idempotent:
+            self.idempotent = action._remote_info.idempotent
+        if action._remote_info.synchronous:
+            self.synchronous = action._remote_info.synchronous
+        if action._remote_info.safe:
+            self.safe = action._remote_info.safe 
         self.forms = []
         for method in action._remote_info.http_method:
             form = Form()
             form.op = 'invokeaction'
             form.href = f'{authority}{owner._full_URL_path_prefix}{action._remote_info.URL_path}'
             form.htv_methodName = method.upper()
+            form.contentType = 'application/json'
+            # form.additionalResponses = [AdditionalExpectedResponse().asdict()]
             self.forms.append(form.asdict())
 
     @classmethod
@@ -599,11 +637,17 @@ class EventAffordance(InteractionAffordance):
         super().__init__()
     
     def build(self, event : Event, owner : Thing, authority : str) -> None:
+        self.title = event.label or event._obj_name 
+        if event.doc:
+            self.description = self.format_doc(event.doc)
+        if event.schema:
+            self.data = event.schema
+
         form = Form()
         form.op = "subscribeevent"
         form.href = f"{authority}{owner._full_URL_path_prefix}{event.URL_path}"
-        form.contentType = "text/event-stream"
         form.htv_methodName = "GET"
+        form.contentType = "text/plain"
         form.subprotocol = "sse"
         self.forms = [form.asdict()]
 
@@ -656,9 +700,7 @@ class ThingDescription(Schema):
     type : typing.Optional[typing.Union[str, typing.List[str]]]
     id : str 
     title : str 
-    titles : typing.Optional[typing.Dict[str, str]]
     description : str 
-    descriptions : typing.Optional[typing.Dict[str, str]]
     version : typing.Optional[VersionInfo]
     created : typing.Optional[str] 
     modified : typing.Optional[str]
@@ -671,49 +713,122 @@ class ThingDescription(Schema):
     forms : typing.Optional[typing.List[Form]]
     security : typing.Union[str, typing.List[str]]
     securityDefinitions : SecurityScheme
-
-    skip_properties = ['expose', 'httpserver_resources', 'rpc_resources', 'gui_resources',
+    schemaDefinitions : typing.Optional[typing.List[DataSchema]]
+    
+    skip_properties = ['expose', 'httpserver_resources', 'zmq_resources', 'gui_resources',
                     'events', 'debug_logs', 'warn_logs', 'info_logs', 'error_logs', 'critical_logs',  
                     'thing_description', 'maxlen', 'execution_logs', 'GUI', 'object_info'  ]
 
-    skip_actions = ['_set_properties', '_get_properties', 'push_events', 'stop_events', 
-                    'postman_collection']
+    skip_actions = ['_set_properties', '_get_properties', '_add_property', 'push_events', 'stop_events', 
+                    'get_postman_collection', 'get_thing_description']
 
-    def __init__(self):
+    # not the best code and logic, but works for now
+
+    def __init__(self, instance : Thing, authority : typing.Optional[str] = None, 
+                    allow_loose_schema : typing.Optional[bool] = False) -> None:
         super().__init__()
-    
-    def build(self, instance : Thing, authority = f"https://{socket.gethostname()}:8080", 
-                    allow_loose_schema : typing.Optional[bool] = False) -> typing.Dict[str, typing.Any]: 
+        self.instance = instance
+        self.authority = authority
+        self.allow_loose_schema = allow_loose_schema
+
+
+    def produce(self) -> typing.Dict[str, typing.Any]: 
         self.context = "https://www.w3.org/2022/wot/td/v1.1"
-        self.id = f"{authority}/{instance.instance_name}"
-        self.title = instance.__class__.__name__ 
-        self.description = Schema.format_doc(instance.__doc__) if instance.__doc__ else "no class doc provided" 
+        self.id = f"{self.authority}/{self.instance.instance_name}"
+        self.title = self.instance.__class__.__name__ 
+        self.description = Schema.format_doc(self.instance.__doc__) if self.instance.__doc__ else "no class doc provided" 
         self.properties = dict()
         self.actions = dict()
         self.events = dict()
+        self.forms = NotImplemented
+        self.links = NotImplemented
+        
+        # self.schemaDefinitions = dict(exception=JSONSchema.get_type(Exception))
 
+        self.add_interaction_affordances()
+        self.add_top_level_forms()
+        self.add_security_definitions()
+       
+        return self.asdict()
+    
+
+    def add_interaction_affordances(self):
         # properties and actions
-        for resource in instance.instance_resources.values():
+        for resource in self.instance.instance_resources.values():
             if (resource.isproperty and resource.obj_name not in self.properties and 
                 resource.obj_name not in self.skip_properties and hasattr(resource.obj, "_remote_info") and 
                 resource.obj._remote_info is not None): 
-                self.properties[resource.obj_name] = PropertyAffordance.generate_schema(resource.obj, instance, authority) 
+                if (resource.obj_name == 'state' and hasattr(self.instance, 'state_machine') is None and 
+                            self.instance.state_machine is not None):
+                    continue
+                self.properties[resource.obj_name] = PropertyAffordance.generate_schema(resource.obj, 
+                                                                            self.instance, self.authority) 
             elif (resource.isaction and resource.obj_name not in self.actions and 
                   resource.obj_name not in self.skip_actions and hasattr(resource.obj, '_remote_info')):
-                self.actions[resource.obj_name] = ActionAffordance.generate_schema(resource.obj, instance, authority)
+                self.actions[resource.obj_name] = ActionAffordance.generate_schema(resource.obj, 
+                                                                            self.instance, self.authority)
         # Events
-        for name, resource in vars(instance).items(): 
+        for name, resource in inspect._getmembers(self.instance, lambda o : isinstance(o, Event),
+                                                getattr_without_descriptor_read):
             if not isinstance(resource, Event):
                 continue
-            self.events[name] = EventAffordance.generate_schema(resource, instance, authority)
-
-        self.security = 'unimplemented'
-        self.securityDefinitions = SecurityScheme().build('unimplemented', instance)
-
-        return self.asdict()
+            if '/change-event' in resource.URL_path:
+                continue
+            self.events[name] = EventAffordance.generate_schema(resource, self.instance, self.authority)
+        # for name, resource in inspect._getmembers(self.instance, lambda o : isinstance(o, Thing), getattr_without_descriptor_read):
+        #     if resource is self.instance or isinstance(resource, EventLoop):
+        #         continue
+        #     if self.links is None:
+        #         self.links = []
+        #     link = Link()
+        #     link.build(resource, self.instance, self.authority)
+        #     self.links.append(link.asdict())
     
+
+    def add_top_level_forms(self):
+
+        self.forms = []
+
+        properties_end_point = f"{self.authority}{self.instance._full_URL_path_prefix}/properties"
+
+        readallproperties = Form()
+        readallproperties.href = properties_end_point
+        readallproperties.op = "readallproperties"
+        readallproperties.htv_methodName = "GET"
+        readallproperties.contentType = "application/json"
+        # readallproperties.additionalResponses = [AdditionalExpectedResponse().asdict()]
+        self.forms.append(readallproperties.asdict())
         
+        writeallproperties = Form() 
+        writeallproperties.href = properties_end_point
+        writeallproperties.op = "writeallproperties"   
+        writeallproperties.htv_methodName = "PUT"
+        writeallproperties.contentType = "application/json" 
+        # writeallproperties.additionalResponses = [AdditionalExpectedResponse().asdict()]
+        self.forms.append(writeallproperties.asdict())
+
+        readmultipleproperties = Form()
+        readmultipleproperties.href = properties_end_point
+        readmultipleproperties.op = "readmultipleproperties"
+        readmultipleproperties.htv_methodName = "GET"
+        readmultipleproperties.contentType = "application/json"
+        # readmultipleproperties.additionalResponses = [AdditionalExpectedResponse().asdict()]
+        self.forms.append(readmultipleproperties.asdict())
+
+        writemultipleproperties = Form() 
+        writemultipleproperties.href = properties_end_point
+        writemultipleproperties.op = "writemultipleproperties"   
+        writemultipleproperties.htv_methodName = "PATCH"
+        writemultipleproperties.contentType = "application/json"
+        # writemultipleproperties.additionalResponses = [AdditionalExpectedResponse().asdict()]
+        self.forms.append(writemultipleproperties.asdict())
         
+    def add_security_definitions(self):
+        self.security = 'unimplemented'
+        self.securityDefinitions = SecurityScheme().build('unimplemented', self.instance)
+
+
+
 __all__ = [
     ThingDescription.__name__,
     JSONSchema.__name__

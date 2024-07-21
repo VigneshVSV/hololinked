@@ -1,3 +1,6 @@
-[submodule "hololinked/system_host/assets/hololinked-server-swagger-api"]
-	path = hololinked/system_host/assets/hololinked-server-swagger-api
-	url = https://github.com/VigneshVSV/hololinked-server-swagger-api.git
+[submodule "examples"]
+	path = examples
+	url = https://github.com/VigneshVSV/hololinked-examples.git
+[submodule "doc"]
+	path = doc
+	url = https://github.com/VigneshVSV/hololinked-docs.git

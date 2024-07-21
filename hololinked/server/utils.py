@@ -56,7 +56,7 @@ def format_exception_as_json(exc : Exception) -> typing.Dict[str, typing.Any]:
     }
 
 
-def pep8_to_dashed_URL(word : str) -> str: 
+def pep8_to_URL_path(word : str) -> str: 
     """
     Make an underscored, lowercase form from the expression in the string.
     Example::
@@ -125,12 +125,16 @@ def run_callable_somehow(method : typing.Union[typing.Callable, typing.Coroutine
         eventloop = asyncio.get_event_loop()
     except RuntimeError:
         eventloop = asyncio.new_event_loop()
-    if eventloop.is_running():    
-        task = lambda : asyncio.create_task(method) # check later if lambda is necessary
-        eventloop.call_soon(task)
+    if asyncio.iscoroutinefunction(method):
+        coro = method()
     else:
-        task = method
-        return eventloop.run_until_complete(task)
+        coro = method
+    if eventloop.is_running():    
+        # task =  # check later if lambda is necessary
+        eventloop.create_task(coro)
+    else:
+        # task = method
+        return eventloop.run_until_complete(coro)
 
 
 def get_signature(callable : typing.Callable) -> typing.Tuple[typing.List[str], typing.List[type]]: 
@@ -181,14 +185,53 @@ def getattr_without_descriptor_read(instance, key):
     return getattr(instance, key, None) # we can deal with None where we use this getter, so dont raise AttributeError  
 
 
+def isclassmethod(method):
+    """https://stackoverflow.com/questions/19227724/check-if-a-function-uses-classmethod"""
+    bound_to = getattr(method, '__self__', None)
+    if not isinstance(bound_to, type):
+        # must be bound to a class
+        return False
+    name = method.__name__
+    for cls in bound_to.__mro__:
+        descriptor = vars(cls).get(name)
+        if descriptor is not None:
+            return isinstance(descriptor, classmethod)
+    return False
+
+
+def issubklass(obj, cls):
+    """
+    Safely check if `obj` is a subclass of `cls`.
+
+    Parameters:
+    obj: The object to check if it's a subclass.
+    cls: The class (or tuple of classes) to compare against.
+
+    Returns:
+    bool: True if `obj` is a subclass of `cls`, False otherwise.
+    """
+    try:
+        # Check if obj is a class or a tuple of classes
+        if isinstance(obj, type):
+            return issubclass(obj, cls)
+        elif isinstance(obj, tuple):
+            # Ensure all elements in the tuple are classes
+            return all(isinstance(o, type) for o in obj) and issubclass(obj, cls)
+        else:
+            return False
+    except TypeError:
+        return False
+  
+
 __all__ = [
     get_IP_from_interface.__name__,
     format_exception_as_json.__name__,
-    pep8_to_dashed_URL.__name__,
+    pep8_to_URL_path.__name__,
     get_default_logger.__name__,
     run_coro_sync.__name__,
     run_callable_somehow.__name__,
-    get_signature.__name__
+    get_signature.__name__,
+    isclassmethod.__name__
 ]
 
 

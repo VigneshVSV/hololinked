@@ -2,14 +2,13 @@ import setuptools
 
 # read the contents of your README file
 from pathlib import Path
-this_directory = Path(__file__).parent
-long_description = (this_directory / "README.md").read_text()
+long_description = (Path(__file__).parent/"README.md").read_text()
 
 
 setuptools.setup(
     name="hololinked",
-    version="0.1.2",
-    author="Vignesh Vaidyanathan",
+    version="0.2.1",
+    author="Vigneh Vaidyanathan",
     author_email="vignesh.vaidyanathan@hololinked.dev",
     description="A ZMQ-based Object Oriented RPC tool-kit with HTTP support for instrument control/data acquisition or controlling generic python objects.",
     long_description=long_description,
@@ -41,13 +40,14 @@ setuptools.setup(
     ],    
     python_requires='>=3.7',
     install_requires=[
-        "argon2-cffi>=0.1.10",
+        "argon2-cffi>=23.0.0",
         "ifaddr>=0.2.0",
         "msgspec>=0.18.6",
         "pyzmq>=25.1.0",
         "SQLAlchemy>=2.0.21",
         "SQLAlchemy_Utils>=0.41.1",
-        "tornado>=6.3.3"
+        "tornado>=6.3.3",
+        "jsonschema>=4.22.0"
     ],
     license="BSD-3-Clause",
     license_files=('license.txt', 'licenses/param-LICENSE.txt', 'licenses/pyro-LICENSE.txt'),
