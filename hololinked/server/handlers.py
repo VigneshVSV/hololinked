@@ -5,9 +5,11 @@ import uuid
 from tornado.web import RequestHandler, StaticFileHandler
 from tornado.iostream import StreamClosedError
 
-from .data_classes import HTTPResource, ServerSentEvent
+
+from .dataklasses import HTTPResource, ServerSentEvent
 from .utils import *
 from .zmq_message_brokers import AsyncEventConsumer, EventConsumer
+from .schema_validators import BaseSchemaValidator
 
 
 class BaseHandler(RequestHandler):
@@ -15,7 +17,8 @@ class BaseHandler(RequestHandler):
     Base request handler for RPC operations
     """
 
-    def initialize(self, resource : typing.Union[HTTPResource, ServerSentEvent], owner = None) -> None:
+    def initialize(self, resource : typing.Union[HTTPResource, ServerSentEvent], validator : BaseSchemaValidator, 
+                            owner = None) -> None:
         """
         Parameters
         ----------
@@ -27,6 +30,7 @@ class BaseHandler(RequestHandler):
         from .HTTPServer import HTTPServer
         assert isinstance(owner, HTTPServer)
         self.resource = resource
+        self.schema_validator = validator
         self.owner = owner
         self.zmq_client_pool = self.owner.zmq_client_pool 
         self.serializer = self.owner.serializer
@@ -171,6 +175,8 @@ class RPCHandler(BaseHandler):
             reply = None
             try:
                 arguments, context, timeout = self.get_execution_parameters()
+                if self.schema_validator is not None:
+                    self.schema_validator.validate(arguments)
                 reply = await self.zmq_client_pool.async_execute(
                                         instance_name=self.resource.instance_name, 
                                         instruction=self.resource.instructions.__dict__[http_method], 
@@ -264,7 +270,7 @@ class EventHandler(BaseHandler):
             # fashion as HTTP server should be running purely sync(or normal) python method.
             event_consumer = event_consumer_cls(self.resource.unique_identifier, self.resource.socket_address, 
                                             identity=f"{self.resource.unique_identifier}|HTTPEvent|{uuid.uuid4()}",
-                                            logger=self.logger, json_serializer=self.serializer, 
+                                            logger=self.logger, http_serializer=self.serializer, 
                                             context=self.owner._zmq_event_context if self.resource.socket_address.startswith('inproc') else None)
             event_loop = asyncio.get_event_loop()
             data_header = b'data: %s\n\n'
@@ -310,7 +316,7 @@ class ImageEventHandler(EventHandler):
         try:
             event_consumer = AsyncEventConsumer(self.resource.unique_identifier, self.resource.socket_address, 
                             f"{self.resource.unique_identifier}|HTTPEvent|{uuid.uuid4()}", 
-                            json_serializer=self.serializer, logger=self.logger,
+                            http_serializer=self.serializer, logger=self.logger,
                             context=self.owner._zmq_event_context if self.resource.socket_address.startswith('inproc') else None)         
             self.set_header("Content-Type", "application/x-mpegURL")
             self.write("#EXTM3U\n")
@@ -395,4 +401,24 @@ class ThingsHandler(BaseHandler):
         self.finish()
 
 
+class StopHandler(BaseHandler):
+    """Stops the tornado HTTP server"""
 
+    def initialize(self, owner = None) -> None:
+        from .HTTPServer import HTTPServer
+        assert isinstance(owner, HTTPServer)
+        self.owner = owner    
+        self.allowed_clients = self.owner.allowed_clients
+    
+    async def post(self):
+        if not self.has_access_control:
+            self.set_status(401, 'forbidden')
+        else:
+            try:
+                # Stop the Tornado server
+                asyncio.get_event_loop().call_soon(lambda : asyncio.create_task(self.owner.stop()))
+                self.set_status(204, "ok")
+                self.set_header("Access-Control-Allow-Credentials", "true")
+            except Exception as ex:
+                self.set_status(500, str(ex))
+        self.finish()

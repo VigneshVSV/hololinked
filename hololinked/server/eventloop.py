@@ -7,6 +7,7 @@ import importlib
 import typing 
 import threading
 import logging
+import tracemalloc
 from uuid import uuid4
 
 from .constants import HTTP_METHODS
@@ -19,6 +20,10 @@ from .property import Property
 from .properties import ClassSelector, TypedList, List, Boolean, TypedDict
 from .action import action as remote_method
 from .logger import ListHandler
+
+
+if global_config.TRACE_MALLOC:
+    tracemalloc.start()
 
 
 def set_event_loop_policy():
@@ -49,6 +54,7 @@ class Consumer:
         self.object_cls = object_cls
         self.args = args 
         self.kwargs = kwargs
+
 
 
 RemoteObject = Thing # reading convenience
@@ -108,7 +114,7 @@ class EventLoop(RemoteObject):
     def __post_init__(self):
         super().__post_init__()
         self.logger.info("Event loop with name '{}' can be started using EventLoop.run().".format(self.instance_name))   
-        return 
+
 
     # example of overloading
     @remote_method()
@@ -117,6 +123,8 @@ class EventLoop(RemoteObject):
         Stops the event loop and all its things. Generally, this leads
         to exiting the program unless some code follows the ``run()`` method.  
         """
+        for thing in self.things:
+            thing.exit()
         raise BreakAllLoops
     
 
@@ -221,11 +229,14 @@ class EventLoop(RemoteObject):
         """
         self.request_listener_loop = self.get_async_loop()
         rpc_servers = [thing.rpc_server for thing in self.things]
+        futures = []
         for rpc_server in rpc_servers:
-            self.request_listener_loop.call_soon(lambda : asyncio.create_task(rpc_server.poll()))
-            self.request_listener_loop.call_soon(lambda : asyncio.create_task(rpc_server.tunnel_message_to_things()))
+            futures.append(rpc_server.poll())
+            futures.append(rpc_server.tunnel_message_to_things())
         self.logger.info("starting external message listener thread")
-        self.request_listener_loop.run_forever()
+        self.request_listener_loop.run_until_complete(asyncio.gather(*futures))
+        pending_tasks = asyncio.all_tasks(self.request_listener_loop)
+        self.request_listener_loop.run_until_complete(asyncio.gather(*pending_tasks))
         self.logger.info("exiting external listener event loop {}".format(self.instance_name))
         self.request_listener_loop.close()
     
@@ -239,10 +250,8 @@ class EventLoop(RemoteObject):
         thing_executor_loop = self.get_async_loop()
         self.logger.info(f"starting thing executor loop in thread {threading.get_ident()} for {[obj.instance_name for obj in things]}")
         thing_executor_loop.run_until_complete(
-            asyncio.gather(
-                *[self.run_single_target(instance) 
-                    for instance in things] 
-        ))
+            asyncio.gather(*[self.run_single_target(instance) for instance in things])
+        )
         self.logger.info(f"exiting event loop in thread {threading.get_ident()}")
         thing_executor_loop.close()
 
@@ -315,12 +324,23 @@ class EventLoop(RemoteObject):
                             instance.state_machine.current_state in resource.state):
                 # Note that because we actually find the resource within __prepare_instance__, its already bound
                 # and we dont have to separately bind it. 
+                if resource.schema_validator is not None:
+                    resource.schema_validator.validate(arguments)
+                
                 func = resource.obj
                 args = arguments.pop('__args__', tuple())
                 if resource.iscoroutine:
-                    return await func(*args, **arguments)
+                    if resource.isparameterized:
+                        if len(args) > 0:
+                            raise RuntimeError("parameterized functions cannot have positional arguments")
+                        return await func(resource.bound_obj, *args, **arguments)
+                    return await func(*args, **arguments) # arguments then become kwargs
                 else:
-                    return func(*args, **arguments)
+                    if resource.isparameterized:
+                        if len(args) > 0:
+                            raise RuntimeError("parameterized functions cannot have positional arguments")
+                        return func(resource.bound_obj, *args, **arguments)
+                    return func(*args, **arguments) # arguments then become kwargs
             else: 
                 raise StateMachineError("Thing '{}' is in '{}' state, however command can be executed only in '{}' state".format(
                         instance_name, instance.state, resource.state))
@@ -339,7 +359,9 @@ class EventLoop(RemoteObject):
             elif action == "read":
                 return prop.__get__(owner_inst, type(owner_inst))             
             elif action == "delete":
-                return prop.deleter() # this may not be correct yet
+                if prop.fdel is not None:
+                    return prop.fdel() # this may not be correct yet
+                raise NotImplementedError("This property does not support deletion")
         raise NotImplementedError("Unimplemented execution path for Thing {} for instruction {}".format(instance_name, instruction_str))
 
 

@@ -35,6 +35,18 @@ class ListHandler(logging.Handler):
         })
 
 
+log_message_schema = {
+    "type" : "object",
+    "properties" : {
+        "level" : {"type" : "string" },
+        "timestamp" : {"type" : "string" },
+        "thread_id" : {"type" : "integer"},
+        "message" : {"type" : "string"}
+    },
+    "required" : ["level", "timestamp", "thread_id", "message"],
+    "additionalProperties" : False
+}
+
 
 class RemoteAccessHandler(logging.Handler, RemoteObject):
     """
@@ -81,9 +93,11 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
         self.set_maxlen(maxlen, **kwargs)
         self.stream_interval = stream_interval
         self.diff_logs = []
-        self.event = Event('log-events')
         self._push_events = False
         self._events_thread = None
+
+    events = Event(friendly_name='log-events', URL_path='/events', doc='stream logs', 
+                schema=log_message_schema)
 
     stream_interval = Number(default=1.0, bounds=(0.025, 60.0), crop_to_bounds=True, step=0.05,
                         URL_path='/stream-interval', doc="interval at which logs should be published to a client.")

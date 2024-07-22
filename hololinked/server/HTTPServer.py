@@ -9,18 +9,21 @@ from tornado import ioloop
 from tornado.web import Application
 from tornado.httpserver import HTTPServer as TornadoHTTP1Server
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest
-# from tornado_http2.server import Server as TornadoHTTP2Server 
 
+# from tornado_http2.server import Server as TornadoHTTP2Server 
 from ..param import Parameterized
 from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector, TypedList, String)
-from .constants import CommonRPC, HTTPServerTypes, ResourceTypes, ServerMessage
+from .constants import ZMQ_PROTOCOLS, CommonRPC, HTTPServerTypes, ResourceTypes, ServerMessage
 from .utils import get_IP_from_interface
-from .data_classes import HTTPResource, ServerSentEvent
-from .utils import get_default_logger, run_coro_sync
+from .dataklasses import HTTPResource, ServerSentEvent
+from .utils import get_default_logger
 from .serializers import JSONSerializer
 from .database import ThingInformation
 from .zmq_message_brokers import  AsyncZMQClient, MessageMappedZMQClientPool
-from .handlers import RPCHandler, BaseHandler, EventHandler, ThingsHandler
+from .handlers import RPCHandler, BaseHandler, EventHandler, ThingsHandler, StopHandler
+from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
+from .eventloop import EventLoop
+from .config import global_config
 
 
 
@@ -40,7 +43,8 @@ class HTTPServer(Parameterized):
     #                 When no SSL configurations are provided, defaults to 1.1" ) # type: float
     logger = ClassSelector(class_=logging.Logger, default=None, allow_None=True, 
                     doc="logging.Logger" ) # type: logging.Logger
-    log_level = Selector(objects=[logging.DEBUG, logging.INFO, logging.ERROR, logging.CRITICAL, logging.ERROR], 
+    log_level = Selector(objects=[logging.DEBUG, logging.INFO, logging.ERROR, logging.WARN, 
+                                logging.CRITICAL, logging.ERROR], 
                     default=logging.INFO, 
                     doc="""alternative to logger, this creates an internal logger with the specified log level 
                     along with a IO stream handler.""" ) # type: int
@@ -68,11 +72,17 @@ class HTTPServer(Parameterized):
                             doc="custom web request handler of your choice for property read-write & action execution" ) # type: typing.Union[BaseHandler, RPCHandler]
     event_handler = ClassSelector(default=EventHandler, class_=(EventHandler, BaseHandler), isinstance=False, 
                             doc="custom event handler of your choice for handling events") # type: typing.Union[BaseHandler, EventHandler]
+    schema_validator = ClassSelector(class_=BaseSchemaValidator, default=JsonSchemaValidator, allow_None=True, isinstance=False,
+                        doc="""Validator for JSON schema. If not supplied, a default JSON schema validator is created.""") # type: BaseSchemaValidator
+    
+   
     
     def __init__(self, things : typing.List[str], *, port : int = 8080, address : str = '0.0.0.0', 
                 host : typing.Optional[str] = None, logger : typing.Optional[logging.Logger] = None, log_level : int = logging.INFO, 
                 serializer : typing.Optional[JSONSerializer] = None, ssl_context : typing.Optional[ssl.SSLContext] = None, 
-                certfile : str = None, keyfile : str = None, # protocol_version : int = 1, network_interface : str = 'Ethernet', 
+                schema_validator : typing.Optional[BaseSchemaValidator] = JsonSchemaValidator,
+                certfile : str = None, keyfile : str = None, 
+                # protocol_version : int = 1, network_interface : str = 'Ethernet', 
                 allowed_clients : typing.Optional[typing.Union[str, typing.Iterable[str]]] = None,   
                 **kwargs) -> None:
         """
@@ -114,6 +124,7 @@ class HTTPServer(Parameterized):
             log_level=log_level,
             serializer=serializer or JSONSerializer(), 
             # protocol_version=1, 
+            schema_validator=schema_validator,
             certfile=certfile, 
             keyfile=keyfile,
             ssl_context=ssl_context,
@@ -124,9 +135,9 @@ class HTTPServer(Parameterized):
         )
         self._type = HTTPServerTypes.THING_SERVER
         self._lost_things = dict() # see update_router_with_thing
-        # self._zmq_protocol = zmq_protocol
-        # self._zmq_socket_context = context
-        # self._zmq_event_context = context
+        self._zmq_protocol = ZMQ_PROTOCOLS.IPC
+        self._zmq_socket_context = None 
+        self._zmq_event_context = None
  
     @property
     def all_ok(self) -> bool:
@@ -138,20 +149,28 @@ class HTTPServer(Parameterized):
             
         self.app = Application(handlers=[
             (r'/remote-objects', ThingsHandler, dict(request_handler=self.request_handler, 
-                                                        event_handler=self.event_handler))
+                                                        event_handler=self.event_handler)),
+            (r'/stop', StopHandler, dict(owner=self))
         ])
         
         self.zmq_client_pool = MessageMappedZMQClientPool(self.things, identity=self._IP, 
                                                     deserialize_server_messages=False, handshake=False,
-                                                    json_serializer=self.serializer, context=self._zmq_socket_context,
-                                                    protocol=self._zmq_protocol)
-    
-        event_loop = asyncio.get_event_loop()
+                                                    http_serializer=self.serializer, 
+                                                    context=self._zmq_socket_context,
+                                                    protocol=self._zmq_protocol,
+                                                    logger=self.logger
+                                                )
+        # print("client pool context", self.zmq_client_pool.context)
+        event_loop = EventLoop.get_async_loop() # sets async loop for a non-possessing thread as well
         event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
         event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
         event_loop.call_soon(lambda : asyncio.create_task(self.zmq_client_pool.poll()) )
         for client in self.zmq_client_pool:
             event_loop.call_soon(lambda : asyncio.create_task(client._handshake(timeout=60000)))
+
+        self.tornado_event_loop = None 
+        # set value based on what event loop we use, there is some difference 
+        # between the asyncio event loop and the tornado event loop
         
         # if self.protocol_version == 2:
         #     raise NotImplementedError("Current HTTP2 is not implemented.")
@@ -201,17 +220,24 @@ class HTTPServer(Parameterized):
         the inner tornado instance's (``HTTPServer.tornado_instance``) listen() method. 
         """
         assert self.all_ok, 'HTTPServer all is not ok before starting' # Will always be True or cause some other exception   
-        self.event_loop = ioloop.IOLoop.current()
+        self.tornado_event_loop = ioloop.IOLoop.current()
         self.tornado_instance.listen(port=self.port, address=self.address)    
         self.logger.info(f'started webserver at {self._IP}, ready to receive requests.')
-        self.event_loop.start()
+        self.tornado_event_loop.start()
 
-    def stop(self) -> None:
+
+    async def stop(self) -> None:
+        """
+        Stop the event loop & the HTTP server. This method is async and should be awaited, mostly within a request
+        handler. The stop handler at the path '/stop' with POST request is already implemented.
+        """
         self.tornado_instance.stop()
-        run_coro_sync(self.tornado_instance.close_all_connections())
-        self.event_loop.close()    
-
-
+        self.zmq_client_pool.stop_polling()
+        await self.tornado_instance.close_all_connections()
+        if self.tornado_event_loop is not None:
+            self.tornado_event_loop.stop()
+        
+       
     async def update_router_with_things(self) -> None:
         """
         updates HTTP router with paths from ``Thing`` (s)
@@ -237,16 +263,18 @@ class HTTPServer(Parameterized):
 
                 handlers = []
                 for instruction, http_resource in resources.items():
-                    if http_resource["what"] in [ResourceTypes.PROPERTY, ResourceTypes.ACTION] :
+                    if http_resource["what"] in [ResourceTypes.PROPERTY, ResourceTypes.ACTION]:
                         resource = HTTPResource(**http_resource)
                         handlers.append((resource.fullpath, self.request_handler, dict(
-                                                                resource=resource, 
+                                                                resource=resource,
+                                                                validator=self.schema_validator(resource.argument_schema) if global_config.validate_schema_on_client and resource.argument_schema else None,
                                                                 owner=self                                                     
                                                             )))
                     elif http_resource["what"] == ResourceTypes.EVENT:
                         resource = ServerSentEvent(**http_resource)
                         handlers.append((instruction, self.event_handler, dict(
                                                                 resource=resource,
+                                                                validator=None,
                                                                 owner=self 
                                                             )))
                     """

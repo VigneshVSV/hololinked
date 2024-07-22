@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from ..param import Parameterized
 from .constants import JSONSerializable
 from .config import global_config
-from .utils import pep8_to_dashed_URL
+from .utils import pep8_to_URL_path
 from .serializers import PythonBuiltinJSONSerializer as JSONSerializer, BaseSerializer
 from .property import Property
 
@@ -103,7 +103,7 @@ class BaseDB:
         auto chooses among the different supported databases based on config file and creates the DB URL 
         """
         if config_file is None:
-            folder = f'{global_config.TEMP_DIR}{os.sep}databases{os.sep}{pep8_to_dashed_URL(self.thing_instance.__class__.__name__.lower())}'
+            folder = self.get_temp_dir_for_class_name(self.thing_instance.__class__.__name__)
             if not os.path.exists(folder):
                 os.makedirs(folder)
             return BaseDB.create_sqlite_URL(**dict(file=f'{folder}{os.sep}{self.instance_name}.db'))
@@ -112,6 +112,13 @@ class BaseDB:
             return BaseDB.create_postgres_URL(conf=conf)
         else:
             return BaseDB.create_sqlite_URL(conf=conf)
+    
+    @classmethod
+    def get_temp_dir_for_class_name(self, class_name : str) -> str:
+        """
+        get temporary directory for database files
+        """
+        return f"{global_config.TEMP_DIR}{os.sep}databases{os.sep}{pep8_to_URL_path(class_name)}"
     
     @classmethod
     def create_postgres_URL(cls, conf : str = None, database : typing.Optional[str] = None, 
@@ -162,7 +169,7 @@ class BaseAsyncDB(BaseDB):
         The database to open in the database server specified in config_file (see below)
     serializer: BaseSerializer
         The serializer to use for serializing and deserializing data (for example
-        property serializing before writing to database). Will be the same as rpc_serializer supplied to ``Thing``.
+        property serializing before writing to database). Will be the same as zmq_serializer supplied to ``Thing``.
     config_file: str
         absolute path to database server configuration file
     """
@@ -171,7 +178,7 @@ class BaseAsyncDB(BaseDB):
                 serializer : typing.Optional[BaseSerializer] = None, 
                 config_file : typing.Union[str, None] = None) -> None:
         super().__init__(instance=instance, serializer=serializer, config_file=config_file)
-        self.engine = asyncio_ext.create_async_engine(self.URL, echo=True)
+        self.engine = asyncio_ext.create_async_engine(self.URL)
         self.async_session = sessionmaker(self.engine, expire_on_commit=True, 
                         class_=asyncio_ext.AsyncSession)
         ThingTableBase.metadata.create_all(self.engine)
@@ -190,7 +197,7 @@ class BaseSyncDB(BaseDB):
     serializer: BaseSerializer
         The serializer to use for serializing and deserializing data (for example
         property serializing into database for storage). Will be the same as
-        rpc_serializer supplied to ``Thing``.
+        zmq_serializer supplied to ``Thing``.
     config_file: str
         absolute path to database server configuration file
     """
@@ -199,7 +206,7 @@ class BaseSyncDB(BaseDB):
                 serializer : typing.Optional[BaseSerializer] = None, 
                 config_file : typing.Union[str, None] = None) -> None:
         super().__init__(instance=instance, serializer=serializer, config_file=config_file)
-        self.engine = create_engine(self.URL, echo=True)
+        self.engine = create_engine(self.URL)
         self.sync_session = sessionmaker(self.engine, expire_on_commit=True)
         ThingTableBase.metadata.create_all(self.engine)
         
@@ -389,7 +396,7 @@ class ThingDB(BaseSyncDB):
         with self.sync_session() as session:
             stmt = select(SerializedProperty).filter_by(instance_name=self.instance_name)
             data = session.execute(stmt)
-            existing_props = data.scalars().all() #type: typing.Sequence[SerializedProperty]
+            existing_props = data.scalars().all() # type: typing.Sequence[SerializedProperty]
             if not deserialized:
                 return existing_props
             props = dict()

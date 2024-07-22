@@ -23,82 +23,60 @@ PUT = HTTP_METHODS.PUT
 
 
 class String(Property):
-    """
-    A string property with optional regular expression (regex) matching.
-    """
+    """A string property with optional regular expression (regex) matching."""
+
+    type = 'string' # TD type
 
     __slots__ = ['regex']
 
     def __init__(self, default : typing.Optional[str] = "", *, regex : typing.Optional[str] = None, 
-            doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-		    per_instance_descriptor : bool = False, deepcopy_default : bool = False, class_member : bool = False, 
+            doc : typing.Optional[str] = None, constant : bool = False, 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
             fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, 
-            deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel,
-            precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+            observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+            metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+            deepcopy_default=deepcopy_default, **kwargs)
         self.regex = regex
     
     def validate_and_adapt(self, value : typing.Any) -> str: 
-        self._assert(value, self.regex, self.allow_None)
-        return value
-
-    @classmethod
-    def _assert(obj, value : typing.Any, regex : typing.Optional[str] = None, allow_None : bool = False) -> None: 
-        """
-        the method that implements the validator
-        """
         if value is None: 
-            if allow_None:
+            if self.allow_None:
                 return 
             else:
-                raise_ValueError(f"None not allowed for string type", obj)
+                raise_ValueError(f"None not allowed for string type", self)
         if not isinstance(value, str):
-            raise_TypeError("given value is not string type, but {}.".format(type(value)), obj)
-        if regex is not None:
-            match = re.match(regex, value) 
+            raise_TypeError("given value is not string type, but {}.".format(type(value)), self)
+        if self.regex is not None:
+            match = re.match(self.regex, value) 
             if match is None or match.group(0) != value:
                 # match should be original string, not some substring
-                raise_ValueError("given string value {} does not match regex {}.".format(value, regex), obj)
-
-    @classmethod
-    def isinstance(cls, value : typing.Any, regex : typing.Optional[str] = None, allow_None : bool = False) -> bool:
-        """
-        verify if given value is a string confirming to regex. 
-        
-        Args:
-            value (Any): input value
-            regex (str, None): regex required to match, leave None if unnecessary
-            allow_None (bool): set True if None is tolerated
-
-        Returns:
-            bool: True if conformant, else False. Any exceptions due to wrong inputs resulting in TypeError and ValueError
-                also lead to False
-        """
-        try:
-            cls._assert(value, regex, allow_None)
-            return True
-        except (TypeError, ValueError):
-            return False
+                raise_ValueError("given string value {} does not match regex {}.".format(value, self.regex), self)
+        return value
 
    
 
 class Bytes(String):
     """
-    A bytes property with a default value and optional regular
-    expression (regex) matching.
+    A bytes property with a default value and optional regular expression (regex) matching.
 
     Similar to the string property, but instead of type basestring
     this property only allows objects of type bytes (e.g. b'bytes').
     """
-    @classmethod
-    def _assert(obj, value : typing.Any, regex : typing.Optional[bytes] = None, allow_None : bool = False) -> None:
+
+    def validate_and_adapt(self, value : typing.Any) -> bytes: 
         """
         verify if given value is a bytes confirming to regex. 
         
@@ -112,69 +90,87 @@ class Bytes(String):
             ValueError: if regex does not match
         """
         if value is None: 
-            if allow_None:
+            if self.allow_None:
                 return 
             else:
-                raise_ValueError(f"None not allowed for string type", obj)
+                raise_ValueError(f"None not allowed for string type", self)
         if not isinstance(value, bytes):
-            raise_TypeError("given value is not bytes type, but {}.".format(type(value)), obj)
-        if regex is not None:
-            match = re.match(regex, value) 
+            raise_TypeError("given value is not bytes type, but {}.".format(type(value)), self)
+        if self.regex is not None:
+            match = re.match(self.regex, value) 
             if match is None or match.group(0) != value:
                 # match should be original string, not some substring
-                raise_ValueError("given bytes value {} does not match regex {}.".format(value, regex), obj)
-    
+                raise_ValueError("given bytes value {} does not match regex {}.".format(value, self.regex), self)
+        return value
 
 
 class IPAddress(Property):
+    """String that allows only IP address"""
+
+    type = 'string' # TD type
     
     __slots__ = ['allow_localhost', 'allow_ipv4', 'allow_ipv6']
 
     def __init__(self, default : typing.Optional[str] = "0.0.0.0", *, allow_ipv4 : bool = True, allow_ipv6 : bool = True, 
             allow_localhost : bool = True,
-            doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-		    allow_None : bool = False, per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
-            class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
+            doc : typing.Optional[str] = None, constant : bool = False, 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, 
-            deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
-            precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+            observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+            metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+            deepcopy_default=deepcopy_default, **kwargs)
         self.allow_localhost = allow_localhost 
         self.allow_ipv4 = allow_ipv4
         self.allow_ipv6 = allow_ipv6
 
     def validate_and_adapt(self, value: typing.Any) -> str:
-        self._assert(value, self.allow_ipv4, self.allow_ipv6, self.allow_localhost, self.allow_None)
-        return value
-    
-    @classmethod
-    def _assert(obj, value : typing.Any, allow_ipv4 : bool = True, allow_ipv6 : bool = True,
-                allow_localhost : bool = True, allow_None : bool = False) -> None:
-        if value is None and allow_None:
+        if value is None and self.allow_None:
             return
         if not isinstance(value, str):
-            raise_TypeError('given value for IP address not a string, but type {}'.format(type(value)), obj)
-        if allow_localhost and value == 'localhost':
+            raise_TypeError('given value for IP address not a string, but type {}'.format(type(value)), self)
+        if self.allow_localhost and value == 'localhost':
             return
-        if not ((allow_ipv4 and (obj.isipv4(value) or obj.isipv4cidr(value))) 
-                        or (allow_ipv6 and (obj.isipv6(value) or obj.isipv6cidr(value)))):
-            raise_ValueError("Given value {} is not a valid IP address.".format(value), obj)
-        
-    @classmethod
-    def isinstance(obj, value : typing.Any, allow_ipv4 : bool = True, allow_ipv6 : bool = True ,
-                allow_localhost : bool = True, allow_None : bool = False) -> bool:
-        try:
-            obj._assert(value, allow_ipv4, allow_ipv6, allow_localhost, allow_None)
-            return True
-        except (TypeError, ValueError):
-            return False
-        
+        if not ((self.allow_ipv4 and (self.isipv4(value) or self.isipv4cidr(value))) 
+                        or (self.allow_ipv6 and (self.isipv6(value) or self.isipv6cidr(value)))):
+            raise_ValueError("Given value {} is not a valid IP address.".format(value), self)
+        return value
+  
+    """
+    The MIT License (MIT)
+
+    Copyright (c) 2013 - 2024 Konsta Vesterinen
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy of
+    this software and associated documentation files (the "Software"), to deal in
+    the Software without restriction, including without limitation the rights to
+    use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+    the Software, and to permit persons to whom the Software is furnished to do so,
+    subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+    FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+    COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+    IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+    CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+    """
+
     @classmethod
     def isipv4(obj, value : str) -> bool:
         """
@@ -325,57 +321,61 @@ class Number(Property):
     """
     A numeric property with a default value and optional bounds.
 
-    There are two types of bounds: ``bounds`` and
-    ``softbounds``. ``bounds`` are hard bounds: the property must
-    have a value within the specified range.  The default bounds are
-    (None,None), meaning there are actually no hard bounds.  One or
-    both bounds can be set by specifying a value
-    (e.g. bounds=(None,10) means there is no lower bound, and an upper
+    There are two types of bounds: ``bounds`` and ``softbounds``. 
+    ``bounds`` are hard bounds: the property must ave a value within 
+    the specified range. ``softbounds`` are present to indicate the 
+    typical range of the property, but are not enforced. Setting the 
+    soft bounds allows, for instance, a GUI to know what values to display on
+    sliders for the Number.
+    
+    The default bounds (hard-bounds) are (None, None), meaning there are 
+    actually no hard bounds. One or both bounds can be set by specifying a value
+    (e.g. bounds=(None, 10) means there is no lower bound, and an upper
     bound of 10). Bounds are inclusive by default, but exclusivity
-    can be specified for each bound by setting inclusive_bounds
-    (e.g. inclusive_bounds=(True,False) specifies an exclusive upper
-    bound).
+    can be specified for each bound by setting ``inclusive_bounds``
+    (e.g. inclusive_bounds=(True, False) specifies an exclusive upper bound).
 
-    Using a default value outside the hard
-    bounds, or one that is not numeric, results in an exception.
+    Using a default value outside the hard bounds, or one that is not numeric, 
+    results in an exception.
 
-    As a special case, if allow_None=True (which is true by default if
-    the property has a default of None when declared) then a value
-    of None is also allowed.
+    As a special case, if ``allow_None=True`` then a value of None is also allowed.
 
     A separate function set_in_bounds() is provided that will
     silently crop the given value into the legal range, for use
-    in, for instance, a GUI.
-
-    ``softbounds`` are present to indicate the typical range of
-    the property, but are not enforced. Setting the soft bounds
-    allows, for instance, a GUI to know what values to display on
-    sliders for the Number.
+    in, for instance, a GUI.    
 
     Example of creating a Number::
-        AB = Number(default=0.5, bounds=(None,10), softbounds=(0,1), doc='Distance from A to B.')
-
+        AB = Number(default=0.5, bounds=(None, 10), softbounds=(0, 1), 
+                    doc='Distance from A to B.')
     """
 
     type = 'number'
 
-    __slots__ = ['bounds', 'inclusive_bounds', 'crop_to_bounds', 'dtype', 'step']
+    __slots__ = ['bounds', 'soft_bounds', 'inclusive_bounds', 'crop_to_bounds', 'dtype', 'step']
 
     def __init__(self, default : typing.Optional[typing.Union[float, int]] = 0.0, *, bounds : typing.Optional[typing.Tuple] = None, 
             crop_to_bounds : bool = False, inclusive_bounds : typing.Tuple = (True,True), step : typing.Any = None, 
-            doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-            per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
-            class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
+            doc : typing.Optional[str] = None, constant : bool = False, soft_bounds : typing.Optional[typing.Tuple] = None, 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default, 
-            class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+            observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+            metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+            deepcopy_default=deepcopy_default, **kwargs)
         self.bounds = bounds
+        self.soft_bounds = soft_bounds
         self.crop_to_bounds = crop_to_bounds
         self.inclusive_bounds = inclusive_bounds
         self.dtype = (float, int)
@@ -386,7 +386,7 @@ class Number(Property):
         Set to the given value, but cropped to be within the legal bounds.
         See crop_to_bounds for details on how cropping is done.
         """
-        self._assert(value, self.dtype, None, (False, False), self.allow_None)
+        value = self.validate_and_adapt(value)
         bounded_value = self._crop_to_bounds(value) 
         super().__set__(obj, bounded_value)
 
@@ -422,43 +422,37 @@ class Number(Property):
         return value
     
     def validate_and_adapt(self, value: typing.Any) -> typing.Union[int, float]:
-        self._assert(value, self.dtype, None if self.crop_to_bounds else self.bounds, 
-                    self.inclusive_bounds, self.allow_None)
-        if self.crop_to_bounds and self.bounds and value is not None:
-            return self._crop_to_bounds(value)
-        return value
-        
-    @classmethod
-    def _assert(obj, value, dtype : typing.Tuple, bounds : typing.Optional[typing.Tuple] = None, 
-               inclusive_bounds : typing.Tuple[bool, bool] = (True, True), allow_None : bool = False):
-        if allow_None and value is None:
+        if self.allow_None and value is None:
             return
-        if dtype is None:
-            if not obj.isnumber(value):
+        if self.dtype is None:
+            if not self.isnumber(value):
                 raise_TypeError("given value not of number type, but type {}.".format(type(value)), 
-                                obj)
-        elif not isinstance(value, dtype):
-            raise_TypeError("given value not of type {}, but type {}.".format(dtype, type(value)), obj)
-        if bounds:
-            vmin, vmax = bounds
-            incmin, incmax = inclusive_bounds   
+                                self)
+        elif not isinstance(value, self.dtype):
+            raise_TypeError("given value not of type {}, but type {}.".format(self.dtype, type(value)), self)
+        if self.bounds:
+            vmin, vmax = self.bounds
+            incmin, incmax = self.inclusive_bounds   
             if vmax is not None:
                 if incmax is True:
                     if not value <= vmax:
-                        raise_ValueError("given value must be at most {}, not {}.".format(vmax, value), obj)
+                        raise_ValueError("given value must be at most {}, not {}.".format(vmax, value), self)
                 else:
                     if not value < vmax:
-                        raise_ValueError("Property must be less than {}, not {}.".format(vmax, value), obj)
+                        raise_ValueError("Property must be less than {}, not {}.".format(vmax, value), self)
 
             if vmin is not None:
                 if incmin is True:
                     if not value >= vmin:
-                        raise_ValueError("Property must be at least {}, not {}.".format(vmin, value), obj)
+                        raise_ValueError("Property must be at least {}, not {}.".format(vmin, value), self)
                 else:
                     if not value > vmin:
-                        raise_ValueError("Property must be greater than {}, not {}.".format(vmin, value), obj)
+                        raise_ValueError("Property must be greater than {}, not {}.".format(vmin, value), self)
             return value 
-    
+        if self.crop_to_bounds and self.bounds and value is not None:
+            return self._crop_to_bounds(value)
+        return value
+        
     def _validate_step(self, value : typing.Any) -> None:
         if value is not None:
             if self.dtype: 
@@ -471,15 +465,6 @@ class Number(Property):
         if slot == 'step': 
             self._validate_step(value)
         return super()._post_slot_set(slot, old, value)
-
-    @classmethod
-    def isinstance(obj, value, dtype : typing.Tuple, bounds : typing.Optional[typing.Tuple] = None, 
-               inclusive_bounds : typing.Tuple[bool, bool] = (True, True), allow_None : bool = False):
-        try:
-            obj._assert(value, dtype, bounds, inclusive_bounds, allow_None)
-            return True
-        except (ValueError, TypeError):
-            return False 
     	
     @classmethod
     def isnumber(cls, value : typing.Any) -> bool:
@@ -494,25 +479,33 @@ class Number(Property):
 
 
 class Integer(Number):
+    """Numeric Property required to be an integer"""
 
-    """Numeric Property required to be an Integer"""
+    type = 'integer'
 
     def __init__(self, default : typing.Optional[int] = 0, *, bounds : typing.Optional[typing.Tuple] = None, 
             crop_to_bounds : bool = False, inclusive_bounds : typing.Tuple = (True,True), step : typing.Any = None, 
-            doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-            per_instance_descriptor : bool = False, deepcopy_default : bool = False, class_member : bool = False, 
-            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
+            doc : typing.Optional[str] = None, constant : bool = False, soft_bounds : typing.Optional[typing.Tuple] = None, 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
         super().__init__(default=default, bounds=bounds, crop_to_bounds=crop_to_bounds, inclusive_bounds=inclusive_bounds, 
-            doc=doc, constant=constant, readonly=readonly, allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, 
-            deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
-            precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote, step=step)
-        self.dtype = (int,)
+                soft_bounds=soft_bounds, step=step, doc=doc, constant=constant, readonly=readonly, 
+                allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+                db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+                observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+                metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+                deepcopy_default=deepcopy_default, **kwargs)
+        self.dtype = (int, )
 
     def _validate_step(self, step : int):
         if step is not None and not isinstance(step, int):
@@ -521,21 +514,28 @@ class Integer(Number):
 
 
 class Boolean(Property):
-    """Binary or tristate Boolean Property."""
+    """Binary or tristate boolean Property."""
 
     def __init__(self, default : typing.Optional[bool] = False, *, 
-            doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-            per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
-            class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
+            doc : typing.Optional[str] = None, constant : bool = False, 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default, 
-            class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+                allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+                db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+                observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+                metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+                deepcopy_default=deepcopy_default, **kwargs)
 
     def validate_and_adapt(self, value : typing.Any) -> bool:
         if not isinstance(value, bool):
@@ -550,66 +550,57 @@ class Iterable(Property):
     __slots__ = ['bounds', 'length', 'item_type', 'dtype']
 
     def __init__(self, default : typing.Any, *, bounds : typing.Optional[typing.Tuple[int, int]] = None, 
-            length : typing.Optional[int] = None, item_type : typing.Optional[typing.Tuple] = None, deepcopy_default : bool = False, 
-            allow_None : bool = False, doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-            per_instance_descriptor : bool = False,  class_member : bool = False, 
-            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
-        """
-        Initialize a tuple property with a fixed length (number of
-        elements).  The length is determined by the initial default
-        value, if any, and must be supplied explicitly otherwise.  The
-        length is not allowed to change after instantiation.
-        """
+            length : typing.Optional[int] = None, item_type : typing.Optional[typing.Tuple] = None,
+            doc : typing.Optional[str] = None, constant : bool = False, deepcopy_default : bool = False,
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default, 
-            class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+                allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+                db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+                observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+                metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+                deepcopy_default=deepcopy_default, **kwargs)
         self.bounds = bounds 
         self.length = length
         self.item_type = item_type
         self.dtype = (list, tuple)
 
+    """
+    Initialize a tuple property with a fixed length (number of
+    elements).  The length is determined by the initial default
+    value, if any, and must be supplied explicitly otherwise.  The
+    length is not allowed to change after instantiation.
+    """
     def validate_and_adapt(self, value: typing.Any) -> typing.Union[typing.List, typing.Tuple]:
-        self._assert(value, self.bounds, self.length, self.dtype, self.item_type, self.allow_None)
+        if value is None and self.allow_None:
+            return
+        if not isinstance(value, self.dtype):
+            raise_ValueError("given value not of iterable type {}, but {}.".format(self.dtype, type(value)), self)
+        if self.bounds is not None:
+            if not (len(value) >= self.bounds[0] and len(value) <= self.bounds[1]):
+                raise_ValueError("given iterable is not of the correct length ({} instead of between {} and {}).".format(
+                                len(value), 0 if not self.bounds[0] else self.bounds[0], self.bounds[1]), self) 
+        elif self.length is not None and len(value) != self.length:
+            raise_ValueError("given iterable is not of correct length ({} instead of {})".format(len(value), self.length), 
+                            self)
+        if self.item_type is not None: 
+            for val in value:
+                if not isinstance(val, self.item_type):
+                    raise_TypeError("not all elements of given iterable of item type {}, found object of type {}".format(
+                        self.item_type, type(val)), self)
         return value
         
-    @classmethod
-    def _assert(obj, value : typing.Any, bounds : typing.Optional[typing.Tuple[int, int]] = None, 
-            length : typing.Optional[int] = None, dtype :  typing.Union[type, typing.Tuple] = (list, tuple), 
-            item_type : typing.Any = None, allow_None : bool = False) -> None:
-        if value is None and allow_None:
-            return
-        if not isinstance(value, dtype):
-            raise_ValueError("given value not of iterable type {}, but {}.".format(dtype, type(value)), obj)
-        if bounds is not None:
-            if not (len(value) >= bounds[0] and len(value) <= bounds[1]):
-                raise_ValueError("given iterable is not of the correct length ({} instead of between {} and {}).".format(
-                                len(value), 0 if not bounds[0] else bounds[0], bounds[1]), obj) 
-        elif length is not None and len(value) != length:
-            raise_ValueError("given iterable is not of correct length ({} instead of {})".format(len(value), length), 
-                             obj)
-        if item_type is not None: 
-            for val in value:
-                if not isinstance(val, item_type):
-                    raise_TypeError("not all elements of given iterable of item type {}, found object of type {}".format(
-                        item_type, type(val)), obj)
-
-    @classmethod
-    def isinstance(obj, value : typing.Any, bounds : typing.Optional[typing.Tuple[int, int]], 
-                length : typing.Optional[int] = None, dtype : typing.Union[type, typing.Tuple] = (list, tuple), 
-                item_type : typing.Any = None, allow_None : bool = False) -> bool:
-        try: 
-            obj._assert(value, bounds, length, dtype, item_type, allow_None)
-            return True 
-        except (ValueError, TypeError):
-            return False
-
-
+  
 
 class Tuple(Iterable):
 
@@ -618,27 +609,33 @@ class Tuple(Iterable):
     def __init__(self, default : typing.Any, *, bounds : typing.Optional[typing.Tuple[int, int]] = None, 
             length: typing.Optional[int] = None, item_type : typing.Optional[typing.Tuple] = None, 
             accept_list : bool = False, deepcopy_default : bool = False, 
-            allow_None : bool = False, doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-            per_instance_descriptor : bool = False, class_member : bool = False, 
-            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
-        super().__init__(default=default, bounds=bounds, length=length, item_type=item_type, doc=doc, constant=constant, 
-            readonly=readonly, allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, 
-            deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
-            precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+            doc : typing.Optional[str] = None, constant : bool = False, 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
+        super().__init__(default=default, bounds=bounds, length=length, item_type=item_type, 
+                doc=doc, constant=constant, readonly=readonly, 
+                allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+                db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+                observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+                metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+                deepcopy_default=deepcopy_default, **kwargs)
         self.accept_list = accept_list
         self.dtype = (tuple,) # re-assigned
       
     def validate_and_adapt(self, value: typing.Any) -> typing.Tuple:
         if self.accept_list and isinstance(value, list):
             value = tuple(value)
-        self._assert(value, self.bounds, self.length, self.dtype, self.item_type, self.allow_None)
-        return value 
+        return super().validate_and_adapt(value)
     
     @classmethod
     def serialize(cls, value):
@@ -672,28 +669,34 @@ class List(Iterable):
     def __init__(self, default: typing.Any, *, bounds : typing.Optional[typing.Tuple[int, int]] = None, 
             length : typing.Optional[int] = None, item_type : typing.Optional[typing.Tuple] = None, 
             accept_tuple : bool = False, deepcopy_default : bool = False, 
-            allow_None : bool = False, doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-            per_instance_descriptor : bool = False, 
-            class_member : bool = False, fget : typing.Optional[typing.Callable] = None,
-            fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None,
-            precedence : typing.Optional[float] = None) -> None:
+            doc : typing.Optional[str] = None, constant : bool = False, 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
         super().__init__(default=default, bounds=bounds, length=length, item_type=item_type,
-            doc=doc, constant=constant, readonly=readonly, allow_None=allow_None, 
-            per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default, 
-            class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+                doc=doc, constant=constant, readonly=readonly, 
+                allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+                db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+                observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+                metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+                deepcopy_default=deepcopy_default, **kwargs)
         self.accept_tuple = accept_tuple
         self.dtype = list
+        
 
     def validate_and_adapt(self, value: typing.Any) -> typing.Tuple:
         if self.accept_tuple and isinstance(value, tuple):
             value = list(value)
-        self._assert(value, self.bounds, self.length, self.dtype, self.item_type, self.allow_None)
-        return value 
+        return super().validate_and_adapt(value)
 
 
 
@@ -732,18 +735,25 @@ class Composite(Property):
     __slots__ = ['attribs']
 
     def __init__(self, attribs : typing.List[typing.Union[str, Property]], *, 
-            doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-            per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
-            class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
-        super().__init__(None, doc=doc, constant=constant, readonly=readonly, allow_None=allow_None, 
-            per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default, 
-            class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+            doc : typing.Optional[str] = None, constant : bool = False, 
+            readonly : bool = False, label : typing.Optional[str] = None, URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
+        kwargs.pop('allow_None')
+        super().__init__(None, doc=doc, constant=constant, readonly=readonly, allow_None=True,
+                label=label, URL_path=URL_path, http_method=http_method, state=state, 
+                db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+                observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+                metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+                deepcopy_default=deepcopy_default, **kwargs)
         self.attribs = [] 
         if attribs is not None:
             for attrib in attribs:
@@ -752,7 +762,7 @@ class Composite(Property):
                 else:
                     self.attribs.append(attrib)            
         
-    def __get__(self, obj, objtype) -> typing.List[typing.Any]:
+    def __get__(self, obj : Parameterized, objtype : typing.Type[Parameterized]) -> typing.List[typing.Any]:
         """
         Return the values of all the attribs, as a list.
         """
@@ -817,19 +827,25 @@ class Selector(SelectorBase):
     # Selector is usually used to allow selection from a list of
     # existing objects, therefore instantiate is False by default.
     def __init__(self, *, objects : typing.List[typing.Any], default : typing.Any, empty_default : bool = False,  
-            doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,		
-            per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
-            class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
-            fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None, 
-            precedence : typing.Optional[float] = None) -> None:
+            doc : typing.Optional[str] = None, constant : bool = False, 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default, 
-            class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+            observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+            metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+            deepcopy_default=deepcopy_default, **kwargs)
         if objects is None:
             objects = []
             autodefault = None
@@ -879,18 +895,25 @@ class ClassSelector(SelectorBase):
     __slots__ = ['class_', 'isinstance']
 
     def __init__(self, *, class_ , default : typing.Any, isinstance : bool = True, deepcopy_default : bool = False,  
-            doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-            per_instance_descriptor : bool = False, class_member : bool = False, 
-            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
+            doc : typing.Optional[str] = None, constant : bool = False, 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, deepcopy_default=deepcopy_default, 
-            class_member=class_member, fget=fget, fset=fset, fdel=fdel, precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+            observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+            metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+            deepcopy_default=deepcopy_default, **kwargs)
         self.class_ = class_
         self.isinstance = isinstance
 
@@ -908,9 +931,14 @@ class ClassSelector(SelectorBase):
                 raise_ValueError("{} property {} value must be an instance of {}, not {}.".format(
                     self.__class__.__name__, self.name, self._get_class_name(), value), self)
         else:
-            if not issubclass(value, self.class_):
-               raise_ValueError("{} property {} must be a subclass of {}, not {}.".format(
-                    self.__class__.__name__, self.name, self._get_class_name(), value.__name__), self)
+            try:
+                if not issubclass(value, self.class_):
+                    raise_ValueError("{} property {} must be a subclass of {}, not {}.".format(
+                        self.__class__.__name__, self.name, self._get_class_name(), value.__name__), self)
+            except TypeError as ex:
+                if str(ex).startswith("issubclass() arg 1 must be a class"):
+                    raise_ValueError("Value must be a class, not an instance.", self) 
+                raise ex from None # raise other type errors anyway                 
         return value
 
     @property
@@ -947,19 +975,26 @@ class TupleSelector(Selector):
     __slots__ = ['accept_list']
 
     def __init__(self, *, objects : typing.List, default : typing.Any, accept_list : bool = True,
-            doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-            per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
-            class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
-        super().__init__(objects=objects, default=default, empty_default=True, doc=doc, 
-            constant=constant, readonly=readonly, allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, 
-            deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
-            precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+            doc : typing.Optional[str] = None, constant : bool = False, 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
+        super().__init__(objects=objects, default=default, empty_default=True,
+                        doc=doc, constant=constant, readonly=readonly, 
+                        allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+                        db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+                        observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+                        metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+                        deepcopy_default=deepcopy_default, **kwargs)
         self.accept_list = accept_list
 
     def validate_and_adapt(self, value : typing.Any):
@@ -1010,19 +1045,25 @@ class Path(Property):
     __slots__ = ['search_paths']
 
     def __init__(self, default : typing.Any = '', *, search_paths : typing.Optional[str] = None, 
-            doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-            per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
-            class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
-        super().__init__(default=default, doc=doc, 
-            constant=constant, readonly=readonly, allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, 
-            deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
-            precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+            doc : typing.Optional[str] = None, constant : bool = False, 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
+        super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, 
+            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+            observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+            metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+            deepcopy_default=deepcopy_default, **kwargs)
         if isinstance(search_paths, str):
             self.search_paths = [search_paths]
         elif isinstance(search_paths, list):
@@ -1118,19 +1159,26 @@ class FileSelector(Selector):
     __slots__ = ['path']
 
     def __init__(self, default : typing.Any, *, objects : typing.List, path : str = "", 
-            doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-            per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
-            class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
-        super().__init__(default=default, objects=objects, empty_default=True, doc=doc, 
-            constant=constant, readonly=readonly, allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, 
-            deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
-            precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+            doc : typing.Optional[str] = None, constant : bool = False, 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
+        super().__init__(default=default, objects=objects, empty_default=True,
+                    doc=doc, constant=constant, readonly=readonly, 
+                    allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+                    db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+                    observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+                    metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+                    deepcopy_default=deepcopy_default, **kwargs)
         self.path = path # update is automatically called
 
     def _post_slot_set(self, slot: str, old : typing.Any, value : typing.Any) -> None:
@@ -1157,19 +1205,26 @@ class MultiFileSelector(FileSelector):
     __slots__ = ['path']
 
     def __init__(self, default : typing.Any, *, path : str = "", 
-            doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-            label : typing.Optional[str] = None, per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
-            class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
-        super().__init__(default=default, objects=None, doc=doc, 
-            constant=constant, readonly=readonly, allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, 
-            deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, 
-            fdel=fdel, precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+            doc : typing.Optional[str] = None, constant : bool = False, 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
+        super().__init__(default=default, objects=None, doc=doc, constant=constant, readonly=readonly, 
+            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+            observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+            metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+            deepcopy_default=deepcopy_default, **kwargs)
+        self.path = path
        
     def update(self):
         self.objects = sorted(glob.glob(self.path))
@@ -1186,20 +1241,26 @@ class Date(Number):
 
     def __init__(self, default, *, bounds : typing.Union[typing.Tuple, None] = None, 
             crop_to_bounds : bool = False, inclusive_bounds : typing.Tuple = (True,True), step : typing.Any = None, 
-            doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,		
-            per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
-            class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
+            doc : typing.Optional[str] = None, constant : bool = False, 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
         super().__init__(default=default, bounds=bounds, crop_to_bounds=crop_to_bounds,
-            inclusive_bounds=inclusive_bounds, step=step, doc=doc, 
-            constant=constant, readonly=readonly, allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, 
-            deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
-            precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+            inclusive_bounds=inclusive_bounds, step=step, doc=doc, constant=constant, readonly=readonly, 
+            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+            observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+            metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+            deepcopy_default=deepcopy_default, **kwargs)
         self.dtype = dt_types
 
     def _validate_step(self, val):
@@ -1229,20 +1290,26 @@ class CalendarDate(Number):
 
     def __init__(self, default, *, bounds : typing.Union[typing.Tuple, None] = None, 
             crop_to_bounds : bool = False, inclusive_bounds : typing.Tuple = (True,True), step : typing.Any = None, 
-            doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, allow_None : bool = False,
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,	
-            per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
-            class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
+            doc : typing.Optional[str] = None, constant : bool = False, 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
         super().__init__(default=default, bounds=bounds, crop_to_bounds=crop_to_bounds,
-            inclusive_bounds=inclusive_bounds, step=step, doc=doc, 
-            constant=constant, readonly=readonly, allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, 
-            deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
-            precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+            inclusive_bounds=inclusive_bounds, step=step, doc=doc, constant=constant, readonly=readonly, 
+            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+            observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+            metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+            deepcopy_default=deepcopy_default, **kwargs)
         self.dtype = dt.date
 
     def _validate_step(self, step):
@@ -1308,20 +1375,26 @@ class CSS3Color(Property):
 
     __slots__ = ['allow_named']
 
-    def __init__(self, default, *, allow_named : bool = True,  doc : typing.Optional[str] = None, constant : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-            readonly : bool = False, allow_None : bool = False,
-            per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
-            class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
-        super().__init__(default=default, doc=doc, 
-            constant=constant, readonly=readonly, allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, 
-            deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel,  
-            precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+    def __init__(self, default, *, allow_named : bool = True,  
+            doc : typing.Optional[str] = None, constant : bool = False, 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
+        super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, 
+            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+            observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+            metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+            deepcopy_default=deepcopy_default, **kwargs)
         self.allow_named = allow_named
     
     def validate_and_adapt(self, value : typing.Any):
@@ -1336,7 +1409,8 @@ class CSS3Color(Property):
         if not is_hex:
             raise ValueError("Color '%s' only takes RGB hex codes "
                                  "or named colors, received '%s'." % (self.name, value))
-      
+        return value
+
 
 
 class Range(Tuple):
@@ -1346,27 +1420,33 @@ class Range(Tuple):
 
     __slots__ = ['bounds', 'inclusive_bounds', 'softbounds', 'step']
 
-    def __init__(self, default : typing.Optional[typing.Tuple] = None, *, bounds: typing.Optional[typing.Tuple[int, int]] = None, 
-            length : typing.Optional[int] = None, item_type : typing.Optional[typing.Tuple] = None, 
-            softbounds=None, inclusive_bounds=(True,True), step=None,  
+    def __init__(self, default : typing.Optional[typing.Tuple] = None, *, 
+            bounds: typing.Optional[typing.Tuple[int, int]] = None, length : typing.Optional[int] = None, 
+            item_type : typing.Optional[typing.Tuple] = None, softbounds=None, inclusive_bounds=(True,True), step=None,  
             doc : typing.Optional[str] = None, constant : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None,  
-            per_instance_descriptor : bool = False, deepcopy_default : bool = False, 
-            class_member : bool = False, fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
         self.inclusive_bounds = inclusive_bounds
         self.softbounds = softbounds
         self.step = step
-        super().__init__(default=default, bounds=bounds, item_type=item_type, length=length, doc=doc, 
-            constant=constant, readonly=readonly, allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, 
-            deepcopy_default=deepcopy_default, class_member=class_member, fget=fget, fset=fset, fdel=fdel, 
-            precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
-
+        super().__init__(default=default, bounds=bounds, item_type=item_type, length=length, 
+                    doc=doc, constant=constant, readonly=readonly, 
+                    allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+                    db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+                    observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+                    metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+                    deepcopy_default=deepcopy_default, **kwargs)
+        
     def validate_and_adapt(self, value : typing.Any) -> typing.Tuple:
         raise NotImplementedError("Range validation not implemented")
         super()._validate(val)
@@ -1498,22 +1578,28 @@ class TypedList(ClassSelector):
 
     def __init__(self, default : typing.Optional[typing.List[typing.Any]] = None, *, item_type : typing.Any = None, 
             deepcopy_default : bool = True, allow_None : bool = True,  bounds : tuple = (0,None), 
-            doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,			
-            per_instance_descriptor : bool = False, class_member : bool = False, 
-            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
+            doc : typing.Optional[str] = None, constant : bool = False, 
+            readonly : bool = False, label : typing.Optional[str] = None,URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
         if default is not None:
             default = TypeConstrainedList(default=default, item_type=item_type, bounds=bounds, constant=constant, 
-                               skip_validate=False) # type: ignore    
-        super().__init__(class_ = TypeConstrainedList, default=default, isinstance=True, deepcopy_default=deepcopy_default, 
-            doc=doc, constant=constant, readonly=readonly, allow_None=allow_None, 
-            per_instance_descriptor=per_instance_descriptor, class_member=class_member, fget=fget, fset=fset, 
-            fdel=fdel, precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+                               skip_validate=False)  
+        super().__init__(class_=TypeConstrainedList, default=default, isinstance=True, 
+            doc=doc, constant=constant, readonly=readonly, 
+            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+            observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+            metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+            deepcopy_default=deepcopy_default, **kwargs)
         self.item_type = item_type
         self.bounds    = bounds
 
@@ -1540,26 +1626,32 @@ class TypedDict(ClassSelector):
     __slots__ = ['key_type', 'item_type', 'bounds']
     
     def __init__(self, default : typing.Optional[typing.Dict] = None, *, key_type : typing.Any = None, 
-            item_type : typing.Any = None, deepcopy_default : bool = True, allow_None : bool = True,
-            bounds : tuple = (0, None), doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,
-            per_instance_descriptor : bool = False, 
-            class_member : bool = False, fget : typing.Optional[typing.Callable] = None, 
-            fset : typing.Optional[typing.Callable] = None, fdel : typing.Optional[typing.Callable] = None,
-            precedence : typing.Optional[float] = None) -> None:
+            item_type : typing.Any = None, deepcopy_default : bool = True, allow_None : bool = True, 
+            bounds : tuple = (0, None), doc : typing.Optional[str] = None, constant : bool = False, 
+            readonly : bool = False, label : typing.Optional[str] = None, URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
         if default is not None:
             default = TypeConstrainedDict(default, key_type=key_type, item_type=item_type, bounds=bounds,
-                        constant=constant, skip_validate=False) # type: ignore
+                        constant=constant, skip_validate=False) 
         self.key_type = key_type
         self.item_type = item_type
         self.bounds = bounds 
-        super().__init__(class_=TypeConstrainedDict, default=default, isinstance=True, deepcopy_default=deepcopy_default, 
-            doc=doc, constant=constant, readonly=readonly, allow_None=allow_None, fget=fget, fset=fset, fdel=fdel, 
-            per_instance_descriptor=per_instance_descriptor, class_member=class_member, precedence=precedence,
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+        super().__init__(class_=TypeConstrainedDict, default=default, isinstance=True, 
+            doc=doc, constant=constant, readonly=readonly, 
+            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+            observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+            metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+            deepcopy_default=deepcopy_default, **kwargs)
 
     def __set__(self, obj, value):
         if value is not None:
@@ -1581,29 +1673,34 @@ class TypedKeyMappingsDict(ClassSelector):
     __slots__ = ['type_mapping', 'allow_unspecified_keys', 'bounds']
     
     def __init__(self, default : typing.Optional[typing.Dict[typing.Any, typing.Any]] = None, *, 
-            type_mapping : typing.Dict, 
-            allow_unspecified_keys : bool = True, bounds : tuple = (0, None), 
-            deepcopy_default : bool = True, allow_None : bool = True,
-            doc : typing.Optional[str] = None, constant : bool = False, readonly : bool = False, 
-			URL_path : str = USE_OBJECT_NAME, http_method : typing.Tuple[str, str] = (GET, PUT), remote : bool = True,
-			state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
-			db_persist : bool = False, db_init : bool = False, db_commit : bool = False,	
-            per_instance_descriptor : bool = False, class_member : bool = False, 
-            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None,
-            fdel : typing.Optional[typing.Callable] = None, precedence : typing.Optional[float] = None) -> None:
+            type_mapping : typing.Dict, allow_unspecified_keys : bool = True, bounds : tuple = (0, None), 
+            deepcopy_default : bool = True, allow_None : bool = True, doc : typing.Optional[str] = None, 
+            constant : bool = False, readonly : bool = False, label : typing.Optional[str] = None, 
+            URL_path : str = USE_OBJECT_NAME, 
+            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
+                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
+            db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
+            observable : bool = False, class_member : bool = False, 
+            fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
+            fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
+            per_instance_descriptor : bool = False, remote : bool = True, 
+            precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
+        ) -> None:
         if default is not None:
             default = TypedKeyMappingsConstrainedDict(default=default, type_mapping=type_mapping, 
                         allow_unspecified_keys=allow_unspecified_keys, bounds=bounds, constant=constant, 
-                        skip_validate=False) # type: ignore 
+                        skip_validate=False) 
         self.type_mapping = type_mapping
         self.allow_unspecified_keys = allow_unspecified_keys
         self.bounds = bounds 
-        super().__init__(class_=TypedKeyMappingsConstrainedDict, default=default, 
-            isinstance=True, deepcopy_default=deepcopy_default, doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, per_instance_descriptor=per_instance_descriptor, class_member=class_member, 
-            fget=fget, fset=fset, fdel=fdel, precedence=precedence, 
-			URL_path=URL_path, http_method=http_method, state=state, db_persist=db_persist,
-			db_init=db_init, db_commit=db_commit, remote=remote)
+        super().__init__(class_=TypedKeyMappingsConstrainedDict, default=default, isinstance=True, 
+            doc=doc, constant=constant, readonly=readonly, 
+            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
+            observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
+            metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
+            deepcopy_default=deepcopy_default, **kwargs)
                        
     def __set__(self, obj, value):
         if value is not None:
