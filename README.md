@@ -1,4 +1,4 @@
-# hololinked - Pythonic Supervisory Control & Data Acquisition / Internet of Things
+# hololinked - Pythonic Object-Oriented Supervisory Control & Data Acquisition / Internet of Things
 
 ### Description
 
