@@ -28,7 +28,7 @@ one has to provide these three interactions with the hardware. In this package, 
 can instantiate properties, actions and events which 
 become visible to a client in this segragated manner. For example, consider an optical spectrometer, the following code is possible:
 
-> This is a fairly mid-level intro, if you are beginner, for another variant check [How-To](https://hololinked.readthedocs.io/en/latest/howto/index.html)
+> This is a fairly mid-level intro focussed on HTTP. If you are beginner or looking for ZMQ, for another variant check [How-To](https://hololinked.readthedocs.io/en/latest/howto/index.html)
 
 #### Import Statements
 
