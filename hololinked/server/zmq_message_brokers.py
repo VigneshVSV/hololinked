@@ -1551,7 +1551,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                                         execution_timeout, context, argument_schema)
             return self.recv_reply(msg_id, raise_client_side_exception=raise_client_side_exception, deserialize=deserialize_reply)
         finally:
-            self._client_queue.release()
+            self._client_queue.release() 
 
 
     def handshake(self, timeout : typing.Union[float, int] = 60000) -> None: 
