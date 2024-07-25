@@ -65,8 +65,8 @@ class OceanOpticsSpectrometer(Thing):
     serial_number = String(default=None, allow_None=True, URL_path='/serial-number', 
                         doc="serial number of the spectrometer to connect/or connected",
                         http_method=("GET", "PUT"))
-    # GET and PUT is default for reading and writing the property respectively. 
-    # Use other HTTP methods if necessary.  
+    # GET and PUT is default for reading and writing the property respectively.
+    # So you can leave it out, especially if you are going to use ZMQ and dont understand HTTP
 
     integration_time = Number(default=1000, bounds=(0.001, None), crop_to_bounds=True, 
                             URL_path='/integration-time', 
@@ -154,6 +154,12 @@ class OceanOpticsSpectrometer(Thing):
             self.serial_number = serial_number
         self.device = Spectrometer.from_serial_number(self.serial_number)
         self._wavelengths = self.device.wavelengths().tolist()
+
+    @action() # So you can leave it out, especially if you are going to use ZMQ and dont understand HTTP
+    def disconnect(self):
+        """disconnect from the spectrometer"""
+        self.device.close()
+ 
 ```
 
 Methods that are neither decorated with action decorator nor acting as getters-setters of properties remain as plain python methods and are **not** accessible on the network.
