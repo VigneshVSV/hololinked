@@ -155,7 +155,8 @@ class OceanOpticsSpectrometer(Thing):
         self.device = Spectrometer.from_serial_number(self.serial_number)
         self._wavelengths = self.device.wavelengths().tolist()
 
-    @action() # So you can leave it out, especially if you are going to use ZMQ and dont understand HTTP
+    # So you can leave it out, especially if you are going to use ZMQ and dont understand HTTP
+    @action()
     def disconnect(self):
         """disconnect from the spectrometer"""
         self.device.close()
