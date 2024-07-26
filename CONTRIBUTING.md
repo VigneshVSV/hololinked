@@ -47,7 +47,7 @@ Otherwise, I will then take care of the issue as soon as possible.
 Developers are always welcome to contribute to the code base. If you want to tackle any issues, un-existing features, let me know (at my email), I can create some open issues and features which I was never able to solve or did not have the time. You can also suggest what else can be contributed functionally or conceptually or also simply code-refactoring. The lack of issues or features in the [Issues](https://github.com/VigneshVSV/hololinked/issues) section of github does not mean the project is considered feature complete or I dont have ideas what to do next. On the contrary, there is tons of work to do. 
 
 There are also repositories which can use your skills:
-- An [admin client](https://github.com/VigneshVSV/hololinked-portal) in react
+- An [admin client](https://github.com/VigneshVSV/thing-control-panel) in react
 - [Documentation](https://github.com/VigneshVSV/hololinked-docs) in sphinx which needs significant improvement in How-To's, beginner level docs which may teach people concepts of data acquisition or IoT, Docstring or API documentation of this repository itself 
 - [Examples](https://github.com/VigneshVSV/hololinked-examples) in nodeJS, Dashboard/PyQt GUIs or server implementations using this package. Hardware implementations of unexisting examples are also welcome, I can open a directory where people can search for code based on hardware and just download your code. 
 

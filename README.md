@@ -7,7 +7,7 @@ For beginners - `hololinked` is a server side pythonic package suited for instru
 For those familiar with RPC & web development - This package is an implementation of a ZeroMQ-based Object Oriented RPC with customizable HTTP end-points. A dual transport in both ZMQ and HTTP is provided to maximize flexibility in data type, serialization and speed, although HTTP is preferred for networked applications. If one is looking for an object oriented approach towards creating components within a control or data acquisition system, or an IoT device, one may consider this package. 
  
 [![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest) [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked)](https://pypistats.org/packages/hololinked) [![codecov](https://codecov.io/gh/VigneshVSV/hololinked/graph/badge.svg?token=JF1928KTFE)](https://codecov.io/gh/VigneshVSV/hololinked) 
-[![Discord](https://img.shields.io/discord/1265289049783140464)](https://discord.gg//kEz87zqQXh) [![email](https://img.shields.io/badge/email-example)](mailto:vignesh.vaidyanathan@hololinked.dev)
+[![email](https://img.shields.io/badge/email-example)](mailto:vignesh.vaidyanathan@hololinked.dev)
 
 ### To Install
 
@@ -299,7 +299,7 @@ Here one can see the use of `instance_name` and why it turns up in the URL path.
 ##### NOTE - The package is under active development. Contributors welcome, please check CONTRIBUTING.md. 
 
 - [example repository](https://github.com/VigneshVSV/hololinked-examples) - detailed examples for both clients and servers
-- [helper GUI](https://github.com/VigneshVSV/hololinked-portal) - view & interact with your object's methods, properties and events. 
+- [helper GUI](https://github.com/VigneshVSV/thing-control-panel) - view & interact with your object's actions, properties and events. 
  
 See a list of currently supported possibilities while using this package [below](#currently-supported). 
 
