@@ -318,12 +318,12 @@ One may use the HTTP API according to one's beliefs (including letting the packa
 - auto-generate Thing Description for Web of Things applications. 
 - use serializer of your choice (except for HTTP) - MessagePack, JSON, pickle etc. & extend serialization to suit your requirement. HTTP Server will support only JSON serializer to maintain compatibility with node-wot. Default is JSON serializer based on msgspec.
 - asyncio compatible - async RPC server event-loop and async HTTP Server - write methods in async 
-- choose from multiple ZeroMQ transport methods. Some of the possibilities one can achieve by choosing ZMQ transport methods:
+- choose from multiple ZeroMQ transport methods which offers some possibilities like the following without changing the code:
   - run HTTP Server & python object in separate processes or the same process
   - serve multiple objects with the same HTTP server
   - run direct ZMQ-TCP server without HTTP details
   - expose only a dashboard or web page on the network without exposing the hardware itself
-
+ 
 Again, please check examples or the code for explanations. Documentation is being activety improved. 
 
 ### Currently being worked
