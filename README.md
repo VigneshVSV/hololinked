@@ -300,7 +300,7 @@ if __name__ == '__main__':
 
 Here one can see the use of `instance_name` and why it turns up in the URL path. See the detailed example of the above code [here](https://gitlab.com/hololinked-examples/oceanoptics-spectrometer/-/blob/simple/oceanoptics_spectrometer/device.py?ref_type=heads). 
 
-##### NOTE - The package is under active development. Contributors welcome, please check CONTRIBUTING.md. 
+##### NOTE - The package is under active development. Contributors welcome, please check CONTRIBUTING.md and the open issues. Some issues can also be independently dealt without much knowledge of this package.  
 
 - [example repository](https://github.com/VigneshVSV/hololinked-examples) - detailed examples for both clients and servers
 - [helper GUI](https://github.com/VigneshVSV/thing-control-panel) - view & interact with your object's actions, properties and events. 
