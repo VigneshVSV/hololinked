@@ -290,9 +290,9 @@ if __name__ == '__main__':
         log_level=logging.DEBUG
     )
     O.run_with_http_server(ssl_context=ssl_context)
-    # or O.run(zmq_protocols='IPC') - interprocess communication without HTTP
+    # or O.run(zmq_protocols='IPC') - interprocess communication and no HTTP
     # or O.run(zmq_protocols=['IPC', 'TCP'], tcp_socket_address='tcp://*:9999')
-    # - both interprocess communication & TCP 
+    # both interprocess communication & TCP, no HTTP 
 ```
 
 Here one can see the use of `instance_name` and why it turns up in the URL path. See the detailed example of the above code [here](https://gitlab.com/hololinked-examples/oceanoptics-spectrometer/-/blob/simple/oceanoptics_spectrometer/device.py?ref_type=heads). 
