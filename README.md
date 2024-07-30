@@ -83,7 +83,7 @@ class OceanOpticsSpectrometer(Thing):
 In non-expert terms, properties look like class attributes however their data containers are instantiated at object instance level by default.
 For example, the `integratime_time` property defined above as `Number`, whenever set/written, will be validated as a float or int, cropped to bounds and assigned as an attribute to each instance of the `OceanOpticsSpectrometer` class with an internally generated name. It is not necessary to know this internally generated name as the property value can be accessed again in any python logic, say, `print(self.integration_time)`. 
 
-To overload the get-set (or read-write) of properties, one may do the following:
+To apply properties directly onto the hardware, one may overload the get-set (or read-write) of properties in the following manner:
 
 ```python
 class OceanOpticsSpectrometer(Thing):
