@@ -25,10 +25,8 @@ Each device or thing can be controlled systematically when their design in softw
 - actions are methods which issue commands like connect/disconnect, execute a control routine, start/stop measurement, or run arbitray python logic
 - events can asynchronously communicate/push (arbitrary) data to a client (say, a GUI), like alarm messages, streaming measured quantities etc.
 
-It does not even matter whether you are controlling your hardware locally or remotely, what protocol you use, what is the nature of the client etc., 
-one has to provide these three interactions with the hardware. In this package, the base class which enables this classification is the `Thing` class. Any class that inherits the `Thing` class 
-can instantiate properties, actions and events which 
-become visible to a client in this segragated manner. For example, consider an optical spectrometer, the following code is possible:
+In this package, the base class which enables this classification is the `Thing` class. Any class that inherits the `Thing` class 
+can instantiate properties, actions and events which become visible to a client in this segragated manner. For example, consider an optical spectrometer, the following code is possible:
 
 > This is a fairly mid-level intro focussed on HTTP. If you are beginner or looking for ZMQ which can be used with no networking knowledge, check [How-To](https://hololinked.readthedocs.io/en/latest/howto/index.html)
 
