@@ -272,6 +272,8 @@ what the event represents and how to subscribe to it) with subprotocol SSE (HTTP
 ```
 > data schema ("data" field above which describes the event payload) are optional and discussed later
 
+Events follow a pub-sub model with '1 publisher to N subscribers' technique per `Event` object, both through ZMQ and HTTP SSE. 
+
 Although the code is the very familiar & age-old RPC server style, one can directly specify HTTP methods and URL path for each property, action and event. A configurable HTTP Server is already available (from `hololinked.server.HTTPServer`) which redirects HTTP requests to the object according to the specified HTTP API on the properties, actions and events. To plug in a HTTP server: 
 
 ```python
