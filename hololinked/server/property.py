@@ -256,8 +256,7 @@ class Property(Parameter):
 __property_info__ = [
                 'allow_None' , 'class_member', 'db_init', 'db_persist', 
                 'db_commit', 'deepcopy_default', 'per_instance_descriptor', 
-                'default', 'doc', 'constant', 
-                'metadata', 'name', 'readonly'
+                'state', 'precedence', 'constant', 'default'
                 # 'scada_info', 'property_type' # descriptor related info is also necessary
             ]
 
@@ -319,9 +318,7 @@ class ClassProperties(ClassParameters):
         for param in objects.values():
             state = param.__getstate__()
             info[param.name] = dict(
-                remote_info = state.get("_remote_info", None).to_dataclass(),
-                type = param.__class__.__name__,
-                owner = param.owner.__name__
+                python_type = param.__class__.__name__,
             )
             for field in __property_info__:
                 info[param.name][field] = state.get(field, None) 

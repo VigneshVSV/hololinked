@@ -8,17 +8,17 @@ import zmq
 import zmq.asyncio
 
 from ..param.parameterized import Parameterized, ParameterizedMetaclass, edit_constant as edit_constant_parameters
-from .constants import (JSON, LOGLEVEL, ZMQ_PROTOCOLS, HTTP_METHODS)
+from .constants import (JSON, LOGLEVEL, ZMQ_PROTOCOLS, HTTP_METHODS, JSONSerializable)
 from .database import ThingDB, ThingInformation
 from .serializers import _get_serializer_from_user_given_options, BaseSerializer, JSONSerializer
 from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
 from .exceptions import BreakInnerLoop
 from .action import action
-from .dataklasses import GUIResources, HTTPResource, ZMQResource, get_organised_resources
+from .dataklasses import HTTPResource, ZMQResource, build_our_temp_TD, get_organised_resources
 from .utils import get_default_logger, getattr_without_descriptor_read
 from .property import Property, ClassProperties
 from .properties import String, ClassSelector, Selector, TypedKeyMappingsConstrainedDict
-from .zmq_message_brokers import RPCServer, ServerTypes, AsyncPollingZMQServer, EventPublisher
+from .zmq_message_brokers import RPCServer, ServerTypes, EventPublisher
 from .state_machine import StateMachine
 from .events import Event
 
@@ -111,7 +111,6 @@ class Thing(Parameterized, metaclass=ThingMeta):
     state = String(default=None, allow_None=True, URL_path='/state', readonly=True, observable=True, 
                 fget=lambda self : self.state_machine.current_state if hasattr(self, 'state_machine') else None,  
                 doc="current state machine's state if state machine present, None indicates absence of state machine.") #type: typing.Optional[str]
-    
     httpserver_resources = Property(readonly=True, URL_path='/resources/http-server', 
                         doc="object's resources exposed to HTTP client (through ``hololinked.server.HTTPServer.HTTPServer``)", 
                         fget=lambda self: self._httpserver_resources ) # type: typing.Dict[str, HTTPResource]
@@ -121,7 +120,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
     gui_resources = Property(readonly=True, URL_path='/resources/portal-app', 
                         doc="""object's data read by hololinked-portal GUI client, similar to http_resources but differs 
                         in details.""",
-                        fget=lambda self: GUIResources().build(self)) # type: typing.Dict[str, typing.Any]
+                        fget=lambda self: build_our_temp_TD(self)) # type: typing.Dict[str, typing.Any]
     GUI = Property(default=None, allow_None=True, URL_path='/resources/web-gui', fget = lambda self : self._gui,
                         doc="GUI specified here will become visible at GUI tab of hololinked-portal dashboard tool")     
     object_info = Property(doc="contains information about this object like the class name, script location etc.",
@@ -370,6 +369,28 @@ class Thing(Parameterized, metaclass=ThingMeta):
                             "Check exception notes or server logs for more information.")
             ex.__notes__ = errors
             raise ex from None
+
+    @action(URL_path='/properties/db', http_method=HTTP_METHODS.GET)     
+    def _get_properties_in_db(self) -> typing.Dict[str, JSONSerializable]:
+        """
+        get all properties in the database
+        
+        Returns
+        -------
+        Dict[str, JSONSerializable]
+            dictionary of property names and their values
+        """
+        if not hasattr(self, 'db_engine'):
+            return {}
+        props = self.db_engine.get_all_properties()
+        final_list = {}
+        for name, prop in props.items():
+            try:
+                self.http_serializer.dumps(prop)
+                final_list[name] = prop
+            except Exception as ex:
+                self.logger.error(f"could not serialize property {name} to JSON due to error {str(ex)}, skipping this property")
+        return final_list
 
     @action(URL_path='/properties', http_method=HTTP_METHODS.POST)
     def _add_property(self, name : str, prop : JSON) -> None:

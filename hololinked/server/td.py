@@ -10,7 +10,7 @@ from .events import Event
 from .properties import *
 from .property import Property
 from .thing import Thing
-from .eventloop import EventLoop
+
 
 
 
@@ -263,7 +263,7 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
         elif self._custom_schema_generators.get(property, NotImplemented) is not NotImplemented:
             schema = self._custom_schema_generators[property]()
         else:
-            raise TypeError(f"WoT schema generator for this descriptor/property is not implemented. type {type(property)}")     
+            raise TypeError(f"WoT schema generator for this descriptor/property is not implemented. name {property.name} & type {type(property)}")     
         schema.build(property=property, owner=owner, authority=authority)
         return schema.asdict()
     
@@ -716,11 +716,10 @@ class ThingDescription(Schema):
     schemaDefinitions : typing.Optional[typing.List[DataSchema]]
     
     skip_properties = ['expose', 'httpserver_resources', 'zmq_resources', 'gui_resources',
-                    'events', 'debug_logs', 'warn_logs', 'info_logs', 'error_logs', 'critical_logs',  
-                    'thing_description', 'maxlen', 'execution_logs', 'GUI', 'object_info'  ]
+                    'events', 'thing_description', 'GUI', 'object_info' ]
 
-    skip_actions = ['_set_properties', '_get_properties', '_add_property', 'push_events', 'stop_events', 
-                    'get_postman_collection', 'get_thing_description']
+    skip_actions = ['_set_properties', '_get_properties', '_add_property', '_get_properties_in_db', 
+                    'push_events', 'stop_events', 'get_postman_collection', 'get_thing_description']
 
     # not the best code and logic, but works for now
 
