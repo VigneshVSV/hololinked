@@ -11,6 +11,7 @@ from .dataklasses import ServerSentEvent
 from .security_definitions import BaseSecurityDefinition
 
 
+
 class Event:
     """
     Asynchronously push arbitrary messages to clients. Apart from default events created by the package (like state
@@ -54,7 +55,11 @@ class Event:
         self._obj_name = name
         self.owner = owner
 
-    def __get__(self, obj : ParameterizedMetaclass, objtype : typing.Optional[type] = None) -> "EventDispatcher":
+    @typing.overload
+    def __get__(self, obj, objtype) -> "EventDispatcher":
+        ...
+
+    def __get__(self, obj : ParameterizedMetaclass, objtype : typing.Optional[type] = None):
         try:
             return obj.__dict__[self._internal_name]
         except KeyError:
@@ -74,6 +79,7 @@ class Event:
         else:
             raise TypeError(f"Supply EventDispatcher object to event {self._obj_name}, not type {type(value)}.")
 
+    
 
 class EventDispatcher:
     """
@@ -121,6 +127,8 @@ class EventDispatcher:
         """
         self.publisher.publish(self._unique_identifier, data, zmq_clients=kwargs.get('zmq_clients', True), 
                                     http_clients=kwargs.get('http_clients', True), serialize=serialize)
+
+
 
 
 class CriticalEvent(Event):
