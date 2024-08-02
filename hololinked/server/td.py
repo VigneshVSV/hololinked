@@ -1,5 +1,4 @@
-import inspect
-import typing 
+import typing, inspect
 from dataclasses import dataclass, field
 
 
@@ -10,6 +9,7 @@ from .events import Event
 from .properties import *
 from .property import Property
 from .thing import Thing
+from .state_machine import StateMachine
 
 
 
@@ -757,8 +757,8 @@ class ThingDescription(Schema):
             if (resource.isproperty and resource.obj_name not in self.properties and 
                 resource.obj_name not in self.skip_properties and hasattr(resource.obj, "_remote_info") and 
                 resource.obj._remote_info is not None): 
-                if (resource.obj_name == 'state' and hasattr(self.instance, 'state_machine') is None and 
-                            self.instance.state_machine is not None):
+                if (resource.obj_name == 'state' and (not hasattr(self.instance, 'state_machine') or 
+                            not isinstance(self.instance.state_machine, StateMachine))):
                     continue
                 self.properties[resource.obj_name] = PropertyAffordance.generate_schema(resource.obj, 
                                                                             self.instance, self.authority) 

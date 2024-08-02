@@ -2,13 +2,14 @@
 
 ### Description
 
-For beginners - `hololinked` is a server side pythonic package suited for instrumentation control and data acquisition over network, especially with HTTP. If you have a requirement to control and capture data from your hardware/instrumentation, show the data in a browser/dashboard, provide a GUI or run automated scripts, `hololinked` can help. Even for isolated applications or a small lab setup without networking concepts, one can still separate the concerns of the tools that interact with the hardware & the hardware itself.
+For beginners - `hololinked` is a server side pythonic tool suited for instrumentation control and data acquisition over network, especially with HTTP. If you have a requirement to control and capture data from your hardware/instrumentation, show the data in a browser/dashboard, provide a GUI or run automated scripts, `hololinked` can help. Even for isolated applications or a small lab setup without networking concepts, one can still separate the concerns of the tools that interact with the hardware & the hardware itself.
 <br/> <br/>
 For those familiar with RPC & web development - This package is an implementation of a ZeroMQ-based Object Oriented RPC with customizable HTTP end-points. A dual transport in both ZMQ and HTTP is provided to maximize flexibility in data type, serialization and speed, although HTTP is preferred for networked applications. If one is looking for an object oriented approach towards creating components within a control or data acquisition system, or an IoT device, one may consider this package. 
  
 [![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest) [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked)](https://pypistats.org/packages/hololinked) [![codecov](https://codecov.io/gh/VigneshVSV/hololinked/graph/badge.svg?token=JF1928KTFE)](https://codecov.io/gh/VigneshVSV/hololinked) 
 <br>
 [![email](https://img.shields.io/badge/email%20me-brown)](mailto:vignesh.vaidyanathan@hololinked.dev) [![find me on discord](https://img.shields.io/badge/find_me_on_discord-brown)](https://discord.com/users/1178428338746966066)
+
 ### To Install
 
 From pip - ``pip install hololinked``
@@ -20,7 +21,7 @@ Or, clone the repository (develop branch for latest codebase) and install `pip i
 `hololinked` is compatible with the [Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software. 
 Each device or thing can be controlled systematically when their design in software is segregated into properties, actions and events. In object oriented terms:
 - the hardware is (generally) represented by a class 
-- properties are validated get-set attributes of the class which may be used to model hardware settings, hold captured/computed data or generic network accessible quantities
+- properties are validated get-set attributes of the class which may be used to model settings, hold captured/computed data or generic network accessible quantities
 - actions are methods which issue commands like connect/disconnect, execute a control routine, start/stop measurement, or run arbitray python logic
 - events can asynchronously communicate/push (arbitrary) data to a client (say, a GUI), like alarm messages, streaming measured quantities etc.
 
@@ -130,8 +131,7 @@ Those familiar with Web of Things (WoT) terminology may note that these properti
 ```
 If you are not familiar with Web of Things or the term "property affordance", consider the above JSON as a description of 
 what the property represents and how to interact with it from somewhere else. Such a JSON is both human-readable, yet consumable 
-by a client provider to create a client object to interact with the property in the way the property demands. You, as the developer,
-only need to use the client.  
+by a client provider to create a client object to interact with the property. 
 
 The URL path segment `../spectrometer/..` in href field is taken from the `instance_name` which was specified in the `__init__`. 
 This is a mandatory key word argument to the parent class `Thing` to generate a unique name/id for the instance. One should use URI compatible strings.
@@ -271,7 +271,7 @@ what the event represents and how to subscribe to it) with subprotocol SSE (HTTP
 ```
 > data schema ("data" field above which describes the event payload) are optional and discussed later
 
-Events follow a pub-sub model with '1 publisher to N subscribers' technique per `Event` object, both through ZMQ and HTTP SSE. 
+Events follow a pub-sub model with '1 publisher to N subscribers' per `Event` object, both through ZMQ and HTTP SSE. 
 
 Although the code is the very familiar & age-old RPC server style, one can directly specify HTTP methods and URL path for each property, action and event. A configurable HTTP Server is already available (from `hololinked.server.HTTPServer`) which redirects HTTP requests to the object according to the specified HTTP API on the properties, actions and events. To plug in a HTTP server: 
 
