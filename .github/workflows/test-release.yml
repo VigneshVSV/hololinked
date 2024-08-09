@@ -21,8 +21,9 @@ jobs:
 
       - name: Install dependencies
         run: | 
+          pip install -r tests/requirements.txt
           pip install jsonschema
-          pip install -i https://test.pypi.org/simple/ hololinked 
+          pip install -i https://test.pypi.org/simple/ hololinked
           
       - name: Run unit tests to verify if the release to TestPyPI is working
         run: |
