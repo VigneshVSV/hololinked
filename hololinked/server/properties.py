@@ -23,7 +23,15 @@ PUT = HTTP_METHODS.PUT
 
 
 class String(Property):
-    """A string property with optional regular expression (regex) matching."""
+    """A string property with optional regular expression (regex) matching.
+    
+    Parameters
+    ----------
+    default: str
+        default value of the string, if not None or empty
+    regex: str
+        the regular expression to match during validation    
+    """
 
     type = 'string' # TD type
 

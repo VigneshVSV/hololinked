@@ -33,7 +33,7 @@ class ObjectProxy:
         when True, remote object is located and its resources are loaded. Otherwise, only the client is initialised.
     protocol: str
         ZMQ protocol used to connect to server. Unlike the server, only one can be specified.  
-    **kwargs:
+    **kwargs: 
         async_mixin: bool, default False
             whether to use both synchronous and asynchronous clients. 
         serializer: BaseSerializer
@@ -52,7 +52,7 @@ class ObjectProxy:
 
     _own_attrs = frozenset([
         '__annotations__',
-        '_zmq_client', '_async_zmq_client', '_allow_foreign_attributes',
+        'zmq_client', 'async_zmq_client', '_allow_foreign_attributes',
         'identity', 'instance_name', 'logger', 'execution_timeout', 'invokation_timeout', 
         '_execution_timeout', '_invokation_timeout', '_events', '_noblock_messages',
         '_schema_validator'
@@ -71,12 +71,12 @@ class ObjectProxy:
         # compose ZMQ client in Proxy client so that all sending and receiving is
         # done by the ZMQ client and not by the Proxy client directly. Proxy client only 
         # bothers mainly about __setattr__ and _getattr__
-        self._async_zmq_client = None    
-        self._zmq_client = SyncZMQClient(instance_name, self.identity, client_type=PROXY, protocol=protocol, 
+        self.async_zmq_client = None    
+        self.zmq_client = SyncZMQClient(instance_name, self.identity, client_type=PROXY, protocol=protocol, 
                                             zmq_serializer=kwargs.get('serializer', None), handshake=load_thing,
                                             logger=self.logger, **kwargs)
         if kwargs.get("async_mixin", False):
-            self._async_zmq_client = AsyncZMQClient(instance_name, self.identity + '|async', client_type=PROXY, protocol=protocol, 
+            self.async_zmq_client = AsyncZMQClient(instance_name, self.identity + '|async', client_type=PROXY, protocol=protocol, 
                                             zmq_serializer=kwargs.get('serializer', None), handshake=load_thing,
                                             logger=self.logger, **kwargs)
         if load_thing:
@@ -108,11 +108,11 @@ class ObjectProxy:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        del self
+        pass
 
     def __bool__(self) -> bool: 
         try: 
-            self._zmq_client.handshake(num_of_tries=10)
+            self.zmq_client.handshake(num_of_tries=10)
             return True
         except RuntimeError:
             return False
@@ -121,12 +121,12 @@ class ObjectProxy:
         if other is self:
             return True
         return (isinstance(other, ObjectProxy) and other.instance_name == self.instance_name and 
-                other._zmq_client.protocol == self._zmq_client.protocol)
+                other.zmq_client.protocol == self.zmq_client.protocol)
 
     def __ne__(self, other) -> bool:
         if other and isinstance(other, ObjectProxy):
             return (other.instance_name != self.instance_name or 
-                    other._zmq_client.protocol != self._zmq_client.protocol)
+                    other.zmq_client.protocol != self.zmq_client.protocol)
         return True
 
     def __hash__(self) -> int:
@@ -164,7 +164,7 @@ class ObjectProxy:
     )
 
 
-    def invoke(self, method : str, oneway : bool = False, noblock : bool = False, 
+    def invoke_action(self, method : str, oneway : bool = False, noblock : bool = False, 
                                 *args, **kwargs) -> typing.Any:
         """
         call a method specified by name on the server with positional/keyword arguments
@@ -207,7 +207,7 @@ class ObjectProxy:
             return method(*args, **kwargs)
 
 
-    async def async_invoke(self, method : str, *args, **kwargs) -> typing.Any:
+    async def async_invoke_action(self, method : str, *args, **kwargs) -> typing.Any:
         """
         async(io) call a method specified by name on the server with positional/keyword 
         arguments. noblock and oneway not supported for async calls. 
@@ -241,7 +241,7 @@ class ObjectProxy:
         return await method.async_call(*args, **kwargs)
 
 
-    def get_property(self, name : str, noblock : bool = False) -> typing.Any:
+    def read_property(self, name : str, noblock : bool = False) -> typing.Any:
         """
         get property specified by name on server. 
 
@@ -270,7 +270,7 @@ class ObjectProxy:
             return prop.get()
 
 
-    def set_property(self, name : str, value : typing.Any, oneway : bool = False, 
+    def write_property(self, name : str, value : typing.Any, oneway : bool = False, 
                         noblock : bool = False) -> None:
         """
         set property specified by name on server with specified value. 
@@ -307,7 +307,7 @@ class ObjectProxy:
             prop.set(value)
 
 
-    async def async_get_property(self, name : str) -> None:
+    async def async_read_property(self, name : str) -> None:
         """
         async(io) get property specified by name on server. 
 
@@ -329,7 +329,7 @@ class ObjectProxy:
         return await prop.async_get()
     
 
-    async def async_set_property(self, name : str, value : typing.Any) -> None:
+    async def async_write_property(self, name : str, value : typing.Any) -> None:
         """
         async(io) set property specified by name on server with specified value.  
         noblock and oneway not supported for async calls. 
@@ -354,7 +354,7 @@ class ObjectProxy:
         await prop.async_set(value)
 
 
-    def get_properties(self, names : typing.List[str], noblock : bool = False) -> typing.Any:
+    def read_multiple_properties(self, names : typing.List[str], noblock : bool = False) -> typing.Any:
         """
         get properties specified by list of names.
 
@@ -381,7 +381,7 @@ class ObjectProxy:
             return method(names=names)
         
     
-    def set_properties(self, oneway : bool = False, noblock : bool = False,
+    def write_multiple_properties(self, oneway : bool = False, noblock : bool = False,
                        **properties : typing.Dict[str, typing.Any]) -> None:
         """
         set properties whose name is specified by keys of a dictionary
@@ -418,7 +418,7 @@ class ObjectProxy:
             return method(**properties)
         
 
-    async def async_get_properties(self, names) -> None:
+    async def async_read_multiple_properties(self, names) -> None:
         """
         async(io) get properties specified by list of names. no block gets are not supported for asyncio.
 
@@ -438,7 +438,7 @@ class ObjectProxy:
         return await method.async_call(names=names)
 
 
-    async def async_set_properties(self, **properties) -> None:
+    async def async_write_multiple_properties(self, **properties) -> None:
         """
         async(io) set properties whose name is specified by keys of a dictionary
 
@@ -523,9 +523,9 @@ class ObjectProxy:
         obj = self._noblock_messages.get(message_id, None) 
         if not obj:
             raise ValueError('given message id not a one way call or invalid.')
-        reply = self._zmq_client._reply_cache.get(message_id, None)
+        reply = self.zmq_client._reply_cache.get(message_id, None)
         if not reply: 
-            reply = self._zmq_client.recv_reply(message_id=message_id, timeout=timeout,
+            reply = self.zmq_client.recv_reply(message_id=message_id, timeout=timeout,
                                     raise_client_side_exception=True)
         if not reply:
             raise ReplyNotArrivedError(f"could not fetch reply within timeout for message id '{message_id}'")
@@ -541,7 +541,7 @@ class ObjectProxy:
         """
         Get exposed resources from server (methods, properties, events) and remember them as attributes of the proxy.
         """
-        fetch = _RemoteMethod(self._zmq_client, CommonRPC.zmq_resource_read(instance_name=self.instance_name), 
+        fetch = _RemoteMethod(self.zmq_client, CommonRPC.zmq_resource_read(instance_name=self.instance_name), 
                                     invokation_timeout=self._invokation_timeout) # type: _RemoteMethod
         reply = fetch() # type: typing.Dict[str, typing.Dict[str, typing.Any]]
 
@@ -559,15 +559,15 @@ class ObjectProxy:
             elif not isinstance(data, (ZMQResource, ServerSentEvent)):
                 raise RuntimeError("Logic error - deserialized info about server not instance of hololinked.server.data_classes.ZMQResource")
             if data.what == ResourceTypes.ACTION:
-                _add_method(self, _RemoteMethod(self._zmq_client, data.instruction, self.invokation_timeout, 
-                                                self.execution_timeout, data.argument_schema, self._async_zmq_client, self._schema_validator), data)
+                _add_method(self, _RemoteMethod(self.zmq_client, data.instruction, self.invokation_timeout, 
+                                                self.execution_timeout, data.argument_schema, self.async_zmq_client, self._schema_validator), data)
             elif data.what == ResourceTypes.PROPERTY:
-                _add_property(self, _Property(self._zmq_client, data.instruction, self.invokation_timeout,
-                                                self.execution_timeout, self._async_zmq_client), data)
+                _add_property(self, _Property(self.zmq_client, data.instruction, self.invokation_timeout,
+                                                self.execution_timeout, self.async_zmq_client), data)
             elif data.what == ResourceTypes.EVENT:
                 assert isinstance(data, ServerSentEvent)
-                event = _Event(self._zmq_client, data.name, data.obj_name, data.unique_identifier, data.socket_address, 
-                            serializer=self._zmq_client.zmq_serializer, logger=self.logger)
+                event = _Event(self.zmq_client, data.name, data.obj_name, data.unique_identifier, data.socket_address, 
+                            serializer=self.zmq_client.zmq_serializer, logger=self.logger)
                 _add_event(self, event, data)
                 self.__dict__[data.name] = event 
 

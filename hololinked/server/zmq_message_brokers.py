@@ -1542,12 +1542,16 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
         message id : bytes
             a byte representation of message id
         """
+        acquire_timeout = -1 if invokation_timeout is None else invokation_timeout   
+        acquired = self._client_queue.acquire(timeout=acquire_timeout)
+        if not acquired:
+            raise TimeoutError("previous request still in progress")
         try:
-            self._client_queue.acquire()
-            msg_id = self.send_instruction(instruction, arguments, invokation_timeout, execution_timeout, context, argument_schema)
+            msg_id = self.send_instruction(instruction, arguments, invokation_timeout, 
+                                        execution_timeout, context, argument_schema)
             return self.recv_reply(msg_id, raise_client_side_exception=raise_client_side_exception, deserialize=deserialize_reply)
         finally:
-            self._client_queue.release()
+            self._client_queue.release() 
 
 
     def handshake(self, timeout : typing.Union[float, int] = 60000) -> None: 
@@ -1742,7 +1746,10 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
             a byte representation of message id
         """
         try:
-            await self._client_queue.acquire()
+            await asyncio.wait_for(self._client_queue.acquire(), timeout=invokation_timeout)
+        except TimeoutError:
+            raise TimeoutError("previous request still in progress") from None
+        try:
             msg_id = await self.async_send_instruction(instruction, arguments, invokation_timeout, execution_timeout, 
                                                     context, argument_schema)
             return await self.async_recv_reply(msg_id, raise_client_side_exception=raise_client_side_exception, 

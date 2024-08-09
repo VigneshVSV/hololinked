@@ -97,7 +97,7 @@ class TestProperty(TestCase):
 
     def test_2_RW_multiple_properties(self):
         # Test partial list of read write properties
-        self.thing_client.set_properties(
+        self.thing_client.write_multiple_properties(
                 number_prop=15,
                 string_prop='foobar'
             )
@@ -108,7 +108,7 @@ class TestProperty(TestCase):
 
         self.thing_client.selector_prop = 'b'
         self.thing_client.number_prop = -15
-        props = self.thing_client.get_properties(names=['selector_prop', 'int_prop',
+        props = self.thing_client.read_multiple_properties(names=['selector_prop', 'int_prop',
                                                     'number_prop', 'string_prop'])
         self.assertEqual(props['selector_prop'], 'b')
         self.assertEqual(props['int_prop'], 5)

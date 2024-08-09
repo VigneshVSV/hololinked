@@ -188,7 +188,7 @@ class EventLoop(RemoteObject):
         if not self.threaded:
             self.thing_executor_loop.call_soon(asyncio.create_task(lambda : self.run_single_target(instance)))
         else: 
-            _thing_executor = threading.Thread(target=self.run_thing_executor, args=([instance],))
+            _thing_executor = threading.Thread(target=self.run_things_executor, args=([instance],))
             _thing_executor.start()
 
     def run(self):
@@ -248,6 +248,7 @@ class EventLoop(RemoteObject):
         Please dont call this method when the async loop is already running. 
         """
         thing_executor_loop = self.get_async_loop()
+        self.thing_executor_loop = thing_executor_loop # atomic assignment for thread safety
         self.logger.info(f"starting thing executor loop in thread {threading.get_ident()} for {[obj.instance_name for obj in things]}")
         thing_executor_loop.run_until_complete(
             asyncio.gather(*[self.run_single_target(instance) for instance in things])

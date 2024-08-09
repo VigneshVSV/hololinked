@@ -191,7 +191,7 @@ def async_client(done_queue : multiprocessing.Queue = None):
         nonlocal success, client
         for i in range(2000):
             value = gen_random_data()
-            ret = await client.async_invoke('test_echo', value)
+            ret = await client.async_invoke_action('test_echo', value)
             # print("async", 1, i, value, ret)
             if value != ret:
                 print("error", "async", 1, i, value, ret)
@@ -211,7 +211,7 @@ def async_client_multiple(done_queue : multiprocessing.Queue = None):
         nonlocal success, client
         for i in range(1000):
             value = gen_random_data()
-            ret = await client.async_invoke('test_echo', value)
+            ret = await client.async_invoke_action('test_echo', value)
             # print("multi-coro", id, i, value, ret)
             if value != ret:
                 print("error", "multi-coro", id, i, value, ret)
