@@ -52,7 +52,7 @@ class ObjectProxy:
 
     _own_attrs = frozenset([
         '__annotations__',
-        '_zmq_client', '_async_zmq_client', '_allow_foreign_attributes',
+        'zmq_client', 'async_zmq_client', '_allow_foreign_attributes',
         'identity', 'instance_name', 'logger', 'execution_timeout', 'invokation_timeout', 
         '_execution_timeout', '_invokation_timeout', '_events', '_noblock_messages',
         '_schema_validator'
