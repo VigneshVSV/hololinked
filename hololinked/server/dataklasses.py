@@ -394,99 +394,28 @@ class ServerSentEvent(SerializableDataclass):
     socket_address : str = field(default=UNSPECIFIED)
     what : str = field(default=ResourceTypes.EVENT)
 
-    
 
-@dataclass
-class GUIResources(SerializableDataclass):
+def build_our_temp_TD(instance):
     """
-    Encapsulation of all information required to populate hololinked-portal GUI for a thing.
-   
-    Attributes
-    ----------
-    instance_name : str
-        instance name of the ``Thing``
-    inheritance : List[str]
-        inheritance tree of the ``Thing``
-    classdoc : str
-        class docstring
-    properties : nested JSON (dictionary)
-        defined properties and their metadata
-    actions : nested JSON (dictionary)
-        defined actions
-    events : nested JSON (dictionary)
-        defined events
-    documentation : Dict[str, str]
-        documentation files, name as key and path as value
-    GUI : nested JSON (dictionary)
-        generated from ``hololinked.webdashboard.ReactApp``, a GUI can be shown under 'default GUI' tab in the portal
+    A temporary extension of TD used to build GUI of thing control panel.
+    Will be later replaced by a more sophisticated TD builder which is compliant to the actual spec & its theory.
     """
-    instance_name : str
-    inheritance : typing.List[str]
-    classdoc : typing.Optional[typing.List[str]]
-    properties : typing.Dict[str, typing.Any] = field(default_factory=dict)
-    actions : typing.Dict[str, typing.Any] = field(default_factory=dict)
-    events : typing.Dict[str, typing.Any] = field(default_factory=dict)
-    documentation : typing.Optional[typing.Dict[str, typing.Any]] = field(default=None) 
-    GUI : typing.Optional[typing.Dict] = field(default=None)
+    from .thing import Thing
 
-    def __init__(self):
-        """
-        initialize first, then call build action.  
-        """
-        super(SerializableDataclass, self).__init__()
-
-    def build(self, instance):
-        from .thing import Thing
-        from .events import Event
-
-        assert isinstance(instance, Thing), f"got invalid type {type(instance)}"
-
-        self.instance_name = instance.instance_name
-        self.inheritance = [class_.__name__ for class_ in instance.__class__.mro()]
-        self.classdoc = instance.__class__.__doc__.splitlines() if instance.__class__.__doc__ is not None else None
-        self.GUI = instance.GUI
-
-        self.events = {
-            event._unique_identifier.decode() : dict(
-                name = event._remote_info.name,
-                instruction = event._unique_identifier.decode(),
-                owner = event._owner_inst.__class__.__name__,
-                owner_instance_name =  event._owner_inst.instance_name,
-                address = instance.event_publisher.socket_address
-            ) for event in instance.event_publisher.events
-
-        }
-        self.actions = dict()
-        self.properties = dict()
+    assert isinstance(instance, Thing), f"got invalid type {type(instance)}"
     
-        for instruction, remote_info in instance.instance_resources.items(): 
-            if remote_info.isaction:
-                try:
-                    self.actions[instruction] = instance.zmq_resources[instruction].json() 
-                    self.actions[instruction]["remote_info"] = instance.httpserver_resources[instruction].json() 
-                    self.actions[instruction]["remote_info"]["http_method"] = instance.httpserver_resources[instruction].instructions.supported_methods()
-                    # to check - apparently the recursive json() calling does not reach inner depths of a dict, 
-                    # therefore we call json ourselves
-                    self.actions[instruction]["owner"] = instance.zmq_resources[instruction].qualname.split('.')[0]
-                    self.actions[instruction]["owner_instance_name"] = remote_info.bound_obj.instance_name
-                    self.actions[instruction]["type"] = 'classmethod' if isinstance(remote_info.obj, classmethod) else ''
-                    self.actions[instruction]["signature"] = get_signature(remote_info.obj)[0]
-                except KeyError:
-                    pass
-            elif remote_info.isproperty:
-                path_without_RW = instruction.rsplit('/', 1)[0]
-                if path_without_RW not in self.properties:
-                    self.properties[path_without_RW] = instance.__class__.properties.webgui_info(remote_info.obj)[remote_info.obj.name]
-                    self.properties[path_without_RW]["remote_info"] = self.properties[path_without_RW]["remote_info"].json()
-                    self.properties[path_without_RW]["instruction"] = path_without_RW
-                    self.properties[path_without_RW]["remote_info"]["http_method"] = instance.httpserver_resources[path_without_RW].instructions.supported_methods()
-                    """
-                    The instruction part has to be cleaned up to be called as fullpath. Setting the full path back into 
-                    remote_info is not correct because the unbound method is used by multiple instances. 
-                    """
-                    self.properties[path_without_RW]["owner_instance_name"] = remote_info.bound_obj.instance_name
-        return self
-    
+    our_TD = instance.get_thing_description()
+    our_TD["inheritance"] = [class_.__name__ for class_ in instance.__class__.mro()]
+
+    for instruction, remote_info in instance.instance_resources.items(): 
+        if remote_info.isaction and remote_info.obj_name in our_TD["actions"]:
+            if isinstance(remote_info.obj, classmethod):
+                our_TD["actions"][remote_info.obj_name]["type"] = 'classmethod'
+            our_TD["actions"][remote_info.obj_name]["signature"] = get_signature(remote_info.obj)[0]
+        elif remote_info.isproperty and remote_info.obj_name in our_TD["properties"]:
+            our_TD["properties"][remote_info.obj_name].update(instance.__class__.properties.webgui_info(remote_info.obj)[remote_info.obj_name])
+    return our_TD
+
 
 
 def get_organised_resources(instance):

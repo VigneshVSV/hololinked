@@ -1,12 +1,12 @@
-# hololinked - Pythonic Supervisory Control & Data Acquisition / Internet of Things
+# hololinked - Pythonic Object-Oriented Supervisory Control & Data Acquisition / Internet of Things
 
 ### Description
 
-For beginners - `hololinked` is a server side pythonic package suited for instrumentation control and data acquisition over network, especially with HTTP. If you have a requirement to control and capture data from your hardware/instrumentation, show the data in a browser/dashboard, provide a GUI or run automated scripts, `hololinked` can help. Even for isolated applications or a small lab setup without networking concepts, one can still separate the concerns of the tools that interact with the hardware & the hardware itself.
-<br/> <br/>
-For those familiar with RPC & web development - This package is an implementation of a ZeroMQ-based Object Oriented RPC with customizable HTTP end-points. A dual transport in both ZMQ and HTTP is provided to maximize flexibility in data type, serialization and speed, although HTTP is preferred for networked applications. If one is looking for an object oriented approach towards creating components within a control or data acquisition system, or an IoT device, one may consider this package. 
+`hololinked` is a server side pythonic tool suited for instrumentation control and data acquisition over network, especially with HTTP. If you have a requirement to control and capture data from your hardware/instrumentation, show the data in a browser/dashboard, provide a GUI or run automated scripts, `hololinked` can help. Even for isolated applications or a small lab setup without networking concepts, one can still separate the concerns of the tools that interact with the hardware & the hardware itself.
  
-[![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest) [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked)](https://pypistats.org/packages/hololinked) [![codecov](https://codecov.io/gh/VigneshVSV/hololinked/graph/badge.svg?token=JF1928KTFE)](https://codecov.io/gh/VigneshVSV/hololinked)
+[![Documentation Status](https://readthedocs.org/projects/hololinked/badge/?version=latest)](https://hololinked.readthedocs.io/en/latest/?badge=latest) [![PyPI](https://img.shields.io/pypi/v/hololinked?label=pypi%20package)](https://pypi.org/project/hololinked/) [![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked)](https://pypistats.org/packages/hololinked) [![codecov](https://codecov.io/gh/VigneshVSV/hololinked/graph/badge.svg?token=JF1928KTFE)](https://codecov.io/gh/VigneshVSV/hololinked) 
+<br>
+[![email](https://img.shields.io/badge/email%20me-brown)](mailto:vignesh.vaidyanathan@hololinked.dev) [![find me on discord](https://img.shields.io/badge/find_me_on_discord-brown)](https://discord.com/users/1178428338746966066)
 
 ### To Install
 
@@ -19,16 +19,14 @@ Or, clone the repository (develop branch for latest codebase) and install `pip i
 `hololinked` is compatible with the [Web of Things](https://www.w3.org/WoT/) recommended pattern for developing hardware/instrumentation control software. 
 Each device or thing can be controlled systematically when their design in software is segregated into properties, actions and events. In object oriented terms:
 - the hardware is (generally) represented by a class 
-- properties are validated get-set attributes of the class which may be used to model hardware settings, hold captured/computed data or generic network accessible quantities
+- properties are validated get-set attributes of the class which may be used to model settings, hold captured/computed data or generic network accessible quantities
 - actions are methods which issue commands like connect/disconnect, execute a control routine, start/stop measurement, or run arbitray python logic
 - events can asynchronously communicate/push (arbitrary) data to a client (say, a GUI), like alarm messages, streaming measured quantities etc.
 
-It does not even matter whether you are controlling your hardware locally or remotely, what protocol you use, what is the nature of the client etc., 
-one has to provide these three interactions with the hardware. In this package, the base class which enables this classification is the `Thing` class. Any class that inherits the `Thing` class 
-can instantiate properties, actions and events which 
-become visible to a client in this segragated manner. For example, consider an optical spectrometer, the following code is possible:
+In this package, the base class which enables this classification is the `Thing` class. Any class that inherits the `Thing` class 
+can instantiate properties, actions and events which become visible to a client in this segragated manner. For example, consider an optical spectrometer, the following code is possible:
 
-> This is a fairly mid-level intro, if you are beginner, for another variant check [How-To](https://hololinked.readthedocs.io/en/latest/howto/index.html)
+> This is a fairly mid-level intro focussed on HTTP. If you are beginner or looking for ZMQ which can be used with no networking knowledge, check [How-To](https://hololinked.readthedocs.io/en/latest/howto/index.html)
 
 #### Import Statements
 
@@ -64,8 +62,8 @@ class OceanOpticsSpectrometer(Thing):
     serial_number = String(default=None, allow_None=True, URL_path='/serial-number', 
                         doc="serial number of the spectrometer to connect/or connected",
                         http_method=("GET", "PUT"))
-    # GET and PUT is default for reading and writing the property respectively. 
-    # Use other HTTP methods if necessary.  
+    # GET and PUT is default for reading and writing the property respectively.
+    # So you can leave it out, especially if you are going to use ZMQ and dont understand HTTP
 
     integration_time = Number(default=1000, bounds=(0.001, None), crop_to_bounds=True, 
                             URL_path='/integration-time', 
@@ -81,10 +79,9 @@ class OceanOpticsSpectrometer(Thing):
 ```
 
 In non-expert terms, properties look like class attributes however their data containers are instantiated at object instance level by default.
-For example, the `integratime_time` property defined above as `Number`, whenever set/written, will be validated as a float or int, cropped to bounds and assigned as an attribute to each instance of the `OceanOpticsSpectrometer` class with an internally generated name. It is not necessary to know this internally generated name as the property value can be accessed again in any python logic, say, `print(self.integration_time)`. 
+For example, the `integration_time` property defined above as `Number`, whenever set/written, will be validated as a float or int, cropped to bounds and assigned as an attribute to each instance of the `OceanOpticsSpectrometer` class with an internally generated name. It is not necessary to know this internally generated name as the property value can be accessed again in any python logic, say, `print(self.integration_time)`. 
 
 To overload the get-set (or read-write) of properties, one may do the following:
-
 ```python
 class OceanOpticsSpectrometer(Thing):
 
@@ -132,8 +129,7 @@ Those familiar with Web of Things (WoT) terminology may note that these properti
 ```
 If you are not familiar with Web of Things or the term "property affordance", consider the above JSON as a description of 
 what the property represents and how to interact with it from somewhere else. Such a JSON is both human-readable, yet consumable 
-by a client provider to create a client object to interact with the property in the way the property demands. You, as the developer,
-only need to use the client.  
+by a client provider to create a client object to interact with the property. 
 
 The URL path segment `../spectrometer/..` in href field is taken from the `instance_name` which was specified in the `__init__`. 
 This is a mandatory key word argument to the parent class `Thing` to generate a unique name/id for the instance. One should use URI compatible strings.
@@ -153,6 +149,13 @@ class OceanOpticsSpectrometer(Thing):
             self.serial_number = serial_number
         self.device = Spectrometer.from_serial_number(self.serial_number)
         self._wavelengths = self.device.wavelengths().tolist()
+
+    # So you can leave it out, especially if you are going to use ZMQ and dont understand HTTP
+    @action()
+    def disconnect(self):
+        """disconnect from the spectrometer"""
+        self.device.close()
+ 
 ```
 
 Methods that are neither decorated with action decorator nor acting as getters-setters of properties remain as plain python methods and are **not** accessible on the network.
@@ -266,6 +269,8 @@ what the event represents and how to subscribe to it) with subprotocol SSE (HTTP
 ```
 > data schema ("data" field above which describes the event payload) are optional and discussed later
 
+Events follow a pub-sub model with '1 publisher to N subscribers' per `Event` object, both through ZMQ and HTTP SSE. 
+
 Although the code is the very familiar & age-old RPC server style, one can directly specify HTTP methods and URL path for each property, action and event. A configurable HTTP Server is already available (from `hololinked.server.HTTPServer`) which redirects HTTP requests to the object according to the specified HTTP API on the properties, actions and events. To plug in a HTTP server: 
 
 ```python
@@ -284,14 +289,17 @@ if __name__ == '__main__':
         log_level=logging.DEBUG
     )
     O.run_with_http_server(ssl_context=ssl_context)
+    # or O.run(zmq_protocols='IPC') - interprocess communication and no HTTP
+    # or O.run(zmq_protocols=['IPC', 'TCP'], tcp_socket_address='tcp://*:9999')
+    # both interprocess communication & TCP, no HTTP 
 ```
 
 Here one can see the use of `instance_name` and why it turns up in the URL path. See the detailed example of the above code [here](https://gitlab.com/hololinked-examples/oceanoptics-spectrometer/-/blob/simple/oceanoptics_spectrometer/device.py?ref_type=heads). 
 
-##### NOTE - The package is under active development. Contributors welcome, please check CONTRIBUTING.md. 
+##### NOTE - The package is under active development. Contributors welcome, please check CONTRIBUTING.md and the open issues. Some issues can also be independently dealt without much knowledge of this package.  
 
 - [example repository](https://github.com/VigneshVSV/hololinked-examples) - detailed examples for both clients and servers
-- [helper GUI](https://github.com/VigneshVSV/hololinked-portal) - view & interact with your object's methods, properties and events. 
+- [helper GUI](https://github.com/VigneshVSV/thing-control-panel) - view & interact with your object's actions, properties and events. 
  
 See a list of currently supported possibilities while using this package [below](#currently-supported). 
 
@@ -306,12 +314,12 @@ One may use the HTTP API according to one's beliefs (including letting the packa
 - auto-generate Thing Description for Web of Things applications. 
 - use serializer of your choice (except for HTTP) - MessagePack, JSON, pickle etc. & extend serialization to suit your requirement. HTTP Server will support only JSON serializer to maintain compatibility with node-wot. Default is JSON serializer based on msgspec.
 - asyncio compatible - async RPC server event-loop and async HTTP Server - write methods in async 
-- choose from multiple ZeroMQ transport methods. Some of the possibilities one can achieve by choosing ZMQ transport methods:
+- choose from multiple ZeroMQ transport methods which offers some possibilities like the following without changing the code:
   - run HTTP Server & python object in separate processes or the same process
   - serve multiple objects with the same HTTP server
   - run direct ZMQ-TCP server without HTTP details
   - expose only a dashboard or web page on the network without exposing the hardware itself
-
+ 
 Again, please check examples or the code for explanations. Documentation is being activety improved. 
 
 ### Currently being worked
@@ -319,11 +327,12 @@ Again, please check examples or the code for explanations. Documentation is bein
 - improving accuracy of Thing Descriptions 
 - cookie credentials for authentication - as a workaround until credentials are supported, use `allowed_clients` argument on HTTP server which restricts access based on remote IP supplied with the HTTP headers.
 
+### Internals
+
+This package is an implementation of a ZeroMQ-based Object Oriented RPC with customizable HTTP end-points. A dual transport in both ZMQ and HTTP is provided to maximize flexibility in data type, serialization and speed, although HTTP is preferred for networked applications. If one is looking for an object oriented approach towards creating components within a control or data acquisition system, or an IoT device, one may consider this package. 
+
 ### Some Day In Future
 
 - mongo DB support for DB operations
 - HTTP 2.0 
 
-### Contact
-
-Contributors welcome for all my projects related to hololinked including web apps. Please write to my contact email available at my [website](https://hololinked.dev). 

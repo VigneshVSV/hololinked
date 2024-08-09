@@ -8,7 +8,7 @@ from collections import deque
 
 from .constants import HTTP_METHODS
 from .events import Event
-from .property import Property
+from .properties import List
 from .properties import Integer, Number
 from .thing import Thing as RemoteObject
 from .action import action as remote_method
@@ -193,22 +193,22 @@ class RemoteAccessHandler(logging.Handler, RemoteObject):
             self.diff_logs.clear()
         self._owner.logger.info(f"ending log events.")
            
-    debug_logs = Property(readonly=True, URL_path='/logs/debug', fget=lambda self: self._debug_logs,
+    debug_logs = List(default=[], readonly=True, URL_path='/logs/debug', fget=lambda self: self._debug_logs,
                             doc="logs at logging.DEBUG level")
     
-    warn_logs = Property(readonly=True, URL_path='/logs/warn', fget=lambda self: self._warn_logs,
+    warn_logs = List(default=[], readonly=True, URL_path='/logs/warn', fget=lambda self: self._warn_logs,
                             doc="logs at logging.WARN level")
     
-    info_logs = Property(readonly=True, URL_path='/logs/info', fget=lambda self: self._info_logs,
+    info_logs = List(default=[], readonly=True, URL_path='/logs/info', fget=lambda self: self._info_logs,
                             doc="logs at logging.INFO level")
        
-    error_logs = Property(readonly=True, URL_path='/logs/error', fget=lambda self: self._error_logs,
+    error_logs = List(default=[], readonly=True, URL_path='/logs/error', fget=lambda self: self._error_logs,
                             doc="logs at logging.ERROR level")
  
-    critical_logs = Property(readonly=True, URL_path='/logs/critical', fget=lambda self: self._critical_logs,
+    critical_logs = List(default=[], readonly=True, URL_path='/logs/critical', fget=lambda self: self._critical_logs,
                             doc="logs at logging.CRITICAL level")
   
-    execution_logs = Property(readonly=True, URL_path='/logs/execution', fget=lambda self: self._execution_logs,
+    execution_logs = List(default=[], readonly=True, URL_path='/logs/execution', fget=lambda self: self._execution_logs,
                             doc="logs at all levels accumulated in order of collection/execution")
     
 

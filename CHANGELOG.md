@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - cookie auth & its specification in TD
 
+## [v0.2.2] - 2024-08-09
+
+- thing control panel works better with the server side and support observable properties
+- `ObjectProxy` client API has been improved to resemble WoT operations better, for examplem `get_property` is now 
+called `read_property`, `set_properties` is now called `write_multiple_properties`. 
+- `ObjectProxy` client reliability for poorly written server side actions improved
+
 ## [v0.2.1] - 2024-07-21
 
 ### Added
