@@ -210,7 +210,7 @@ class TestProperty(TestCase):
         self.assertEqual(thing.db_commit_number_prop, TestThing.db_commit_number_prop.default)
 
         # check db init prop with a different value in database apart from default
-        thing.db_engine.write_property('db_init_int_prop', 101)
+        thing.db_engine.set_property('db_init_int_prop', 101)
         del thing
         thing = TestThing(instance_name='test-db-operations', use_default_db=True, log_level=logging.WARN)
         self.assertEqual(thing.db_init_int_prop, 101)
