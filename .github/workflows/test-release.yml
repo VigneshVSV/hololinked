@@ -22,7 +22,7 @@ jobs:
       - name: Install dependencies
         run: | 
           pip install jsonschema
-          pip install -i https://test.pypi.org/simple/ --upgrade hololinked 
+          pip install -i --upgrade --upgrade-strategy eager https://test.pypi.org/simple/ hololinked 
           
       - name: Run unit tests to verify if the release to TestPyPI is working
         run: |
