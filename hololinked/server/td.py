@@ -196,7 +196,7 @@ class DataSchema(Schema):
                 self.oneOf.append(dict(type=self.type))
                 del self.type
             if not any(types["type"] == None for types in self.oneOf):
-                self.oneOf.append(dict(type=None))
+                self.oneOf.append(dict(type="null"))
 
 
 
