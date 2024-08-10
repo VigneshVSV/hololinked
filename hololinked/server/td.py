@@ -53,7 +53,9 @@ class Schema:
             if index > 0:
                 line = ' ' + line # add space to left in case of new line            
             final_doc.append(line)
-        return ''.join(final_doc)
+        final_doc = ''.join(final_doc)
+        final_doc = final_doc.lstrip().rstrip()
+        return final_doc
     
 
 
@@ -187,14 +189,14 @@ class DataSchema(Schema):
             self.description = Schema.format_doc(property.doc)
         if property.metadata and property.metadata.get("unit", None) is not None:
             self.unit = property.metadata["unit"]
-        # if property.allow_None:
-        #     if not hasattr(self, 'oneOf'):
-        #         self.oneOf = []
-        #     if hasattr(self, 'type'):
-        #         self.oneOf.append(dict(type=self.type))
-        #         del self.type
-        #     if not any(types["type"] == None for types in self.oneOf):
-        #         self.oneOf.append(dict(type=None))
+        if property.allow_None:
+            if not hasattr(self, 'oneOf'):
+                self.oneOf = []
+            if hasattr(self, 'type'):
+                self.oneOf.append(dict(type=self.type))
+                del self.type
+            if not any(types["type"] == None for types in self.oneOf):
+                self.oneOf.append(dict(type=None))
 
 
 
@@ -724,12 +726,12 @@ class ThingDescription(Schema):
     # not the best code and logic, but works for now
 
     def __init__(self, instance : Thing, authority : typing.Optional[str] = None, 
-                    allow_loose_schema : typing.Optional[bool] = False) -> None:
+                    allow_loose_schema : typing.Optional[bool] = False, ignore_errors : bool = False) -> None:
         super().__init__()
         self.instance = instance
         self.authority = authority
         self.allow_loose_schema = allow_loose_schema
-
+        self.ignore_errors = ignore_errors
 
     def produce(self) -> typing.Dict[str, typing.Any]: 
         self.context = "https://www.w3.org/2022/wot/td/v1.1"
@@ -754,18 +756,25 @@ class ThingDescription(Schema):
     def add_interaction_affordances(self):
         # properties and actions
         for resource in self.instance.instance_resources.values():
-            if (resource.isproperty and resource.obj_name not in self.properties and 
-                resource.obj_name not in self.skip_properties and hasattr(resource.obj, "_remote_info") and 
-                resource.obj._remote_info is not None): 
-                if (resource.obj_name == 'state' and (not hasattr(self.instance, 'state_machine') or 
-                            not isinstance(self.instance.state_machine, StateMachine))):
-                    continue
-                self.properties[resource.obj_name] = PropertyAffordance.generate_schema(resource.obj, 
+            try:
+                if (resource.isproperty and resource.obj_name not in self.properties and 
+                    resource.obj_name not in self.skip_properties and hasattr(resource.obj, "_remote_info") and 
+                    resource.obj._remote_info is not None): 
+                    if (resource.obj_name == 'state' and (not hasattr(self.instance, 'state_machine') or 
+                                not isinstance(self.instance.state_machine, StateMachine))):
+                        continue
+                    self.properties[resource.obj_name] = PropertyAffordance.generate_schema(resource.obj, 
                                                                             self.instance, self.authority) 
-            elif (resource.isaction and resource.obj_name not in self.actions and 
-                  resource.obj_name not in self.skip_actions and hasattr(resource.obj, '_remote_info')):
-                self.actions[resource.obj_name] = ActionAffordance.generate_schema(resource.obj, 
-                                                                            self.instance, self.authority)
+                
+                elif (resource.isaction and resource.obj_name not in self.actions and 
+                    resource.obj_name not in self.skip_actions and hasattr(resource.obj, '_remote_info')):
+                   
+                    self.actions[resource.obj_name] = ActionAffordance.generate_schema(resource.obj, 
+                                                                                self.instance, self.authority)
+            except Exception as ex:
+                if not self.ignore_errors:
+                    raise ex from None
+                self.instance.logger.error(f"Error while generating schema for {resource.obj_name} - {ex}")
         # Events
         for name, resource in inspect._getmembers(self.instance, lambda o : isinstance(o, Event),
                                                 getattr_without_descriptor_read):
@@ -773,7 +782,12 @@ class ThingDescription(Schema):
                 continue
             if '/change-event' in resource.URL_path:
                 continue
-            self.events[name] = EventAffordance.generate_schema(resource, self.instance, self.authority)
+            try:
+                self.events[name] = EventAffordance.generate_schema(resource, self.instance, self.authority)
+            except Exception as ex:
+                if not self.ignore_errors:
+                    raise ex from None
+                self.instance.logger.error(f"Error while generating schema for {resource.obj_name} - {ex}")
         # for name, resource in inspect._getmembers(self.instance, lambda o : isinstance(o, Thing), getattr_without_descriptor_read):
         #     if resource is self.instance or isinstance(resource, EventLoop):
         #         continue
