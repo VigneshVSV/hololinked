@@ -263,7 +263,7 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
             schema = OneOfSchema()
         elif self._custom_schema_generators.get(property, NotImplemented) is not NotImplemented:
             schema = self._custom_schema_generators[property]()
-        elif isinstance(property, Property) and hasattr(property, 'model') and property.model is not None:
+        elif isinstance(property, Property) and property.model is not None:
             from .td_pydantic_extensions import GenerateJsonSchemaWithoutDefaultTitles, type_to_dataschema
             schema = PropertyAffordance()
             schema.build(property=property, owner=owner, authority=authority)
@@ -731,7 +731,8 @@ class ThingDescription(Schema):
                     'events', 'thing_description', 'GUI', 'object_info' ]
 
     skip_actions = ['_set_properties', '_get_properties', '_add_property', '_get_properties_in_db', 
-                    'push_events', 'stop_events', 'get_postman_collection', 'get_thing_description']
+                    'push_events', 'stop_events', 'get_postman_collection', 'get_thing_description',
+                    'get_our_temp_thing_description']
 
     # not the best code and logic, but works for now
 

@@ -353,7 +353,9 @@ class EventLoop(RemoteObject):
             if action == "write": 
                 if resource.state is None or (hasattr(instance, 'state_machine') and  
                                         instance.state_machine.current_state in resource.state):
-                    return prop.__set__(owner_inst, arguments["value"])
+                    if isinstance(arguments, dict) and len(arguments) == 1 and 'value' in arguments:
+                        return prop.__set__(owner_inst, arguments['value'])
+                    return prop.__set__(owner_inst, arguments)
                 else: 
                     raise StateMachineError("Thing {} is in `{}` state, however attribute can be written only in `{}` state".format(
                         instance_name, instance.state_machine.current_state, resource.state))
