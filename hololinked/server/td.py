@@ -10,7 +10,7 @@ from .properties import *
 from .property import Property
 from .thing import Thing
 from .state_machine import StateMachine
-
+from .td_pydantic_extensions import GenerateJsonSchemaWithoutDefaultTitles, type_to_dataschema
 
 
 
@@ -264,6 +264,16 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
             schema = OneOfSchema()
         elif self._custom_schema_generators.get(property, NotImplemented) is not NotImplemented:
             schema = self._custom_schema_generators[property]()
+        elif isinstance(property, Property) and hasattr(property, 'model') and property.model is not None:
+            schema = PropertyAffordance()
+            schema.build(property=property, owner=owner, authority=authority)
+            data_schema = type_to_dataschema(property.model).model_dump(mode='json', exclude_none=True)
+            final_schema = schema.asdict()
+            if schema.oneOf: # allow_None = True
+                final_schema['oneOf'].append(data_schema)
+            else:
+                final_schema.update(data_schema)
+            return final_schema
         else:
             raise TypeError(f"WoT schema generator for this descriptor/property is not implemented. name {property.name} & type {type(property)}")     
         schema.build(property=property, owner=owner, authority=authority)
