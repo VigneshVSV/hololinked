@@ -10,7 +10,6 @@ from .properties import *
 from .property import Property
 from .thing import Thing
 from .state_machine import StateMachine
-from .td_pydantic_extensions import GenerateJsonSchemaWithoutDefaultTitles, type_to_dataschema
 
 
 
@@ -265,6 +264,7 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
         elif self._custom_schema_generators.get(property, NotImplemented) is not NotImplemented:
             schema = self._custom_schema_generators[property]()
         elif isinstance(property, Property) and hasattr(property, 'model') and property.model is not None:
+            from .td_pydantic_extensions import GenerateJsonSchemaWithoutDefaultTitles, type_to_dataschema
             schema = PropertyAffordance()
             schema.build(property=property, owner=owner, authority=authority)
             data_schema = type_to_dataschema(property.model).model_dump(mode='json', exclude_none=True)
