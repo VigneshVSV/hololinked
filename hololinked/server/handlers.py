@@ -140,7 +140,7 @@ class RPCHandler(BaseHandler):
         """
         sets default headers for RPC (property read-write and action execution). The general headers are listed as follows:
 
-        .. code-block:: http 
+        .. code-block:: yaml 
 
             Content-Type: application/json
             Access-Control-Allow-Credentials: true
@@ -217,7 +217,7 @@ class JPEGImageHandler(RPCHandler):
         """
         sets default headers for image handling. The general headers are listed as follows:
 
-        .. code-block:: http 
+        .. code-block:: yaml 
 
             Content-Type: image/jpeg
             Access-Control-Allow-Credentials: true
@@ -233,7 +233,7 @@ class PNGImageHandler(RPCHandler):
         """
         sets default headers for image handling. The general headers are listed as follows:
 
-        .. code-block:: http 
+        .. code-block:: yaml 
 
             Content-Type: image/png
             Access-Control-Allow-Credentials: true
@@ -255,7 +255,7 @@ class EventHandler(BaseHandler):
         """
         sets default headers for event handling. The general headers are listed as follows:
 
-        .. code-block:: http 
+        .. code-block:: yaml 
 
             Content-Type: text/event-stream
             Cache-Control: no-cache
