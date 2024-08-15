@@ -136,8 +136,8 @@ class HTTPServer(Parameterized):
         self._type = HTTPServerTypes.THING_SERVER
         self._lost_things = dict() # see update_router_with_thing
         self._zmq_protocol = ZMQ_PROTOCOLS.IPC
-        self._zmq_socket_context = None 
-        self._zmq_event_context = None
+        self._zmq_inproc_socket_context = None 
+        self._zmq_inproc_event_context = None
  
     @property
     def all_ok(self) -> bool:
@@ -156,7 +156,7 @@ class HTTPServer(Parameterized):
         self.zmq_client_pool = MessageMappedZMQClientPool(self.things, identity=self._IP, 
                                                     deserialize_server_messages=False, handshake=False,
                                                     http_serializer=self.serializer, 
-                                                    context=self._zmq_socket_context,
+                                                    context=self._zmq_inproc_socket_context,
                                                     protocol=self._zmq_protocol,
                                                     logger=self.logger
                                                 )

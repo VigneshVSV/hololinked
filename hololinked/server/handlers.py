@@ -265,7 +265,7 @@ class EventHandler(BaseHandler):
         called by GET method and handles the event.
         """
         try:                        
-            event_consumer_cls = EventConsumer if hasattr(self.owner, '_zmq_event_context') else AsyncEventConsumer
+            event_consumer_cls = EventConsumer if self.owner._zmq_inproc_event_context else AsyncEventConsumer
             # synchronous context with INPROC pub or asynchronous context with IPC or TCP pub, we handle both in async 
             # fashion as HTTP server should be running purely sync(or normal) python method.
             event_consumer = event_consumer_cls(self.resource.unique_identifier, self.resource.socket_address, 
@@ -301,7 +301,7 @@ class EventHandler(BaseHandler):
                 self.write(data_header % self.serializer.dumps(
                     {"exception" : format_exception_as_json(ex)}))
         try:
-            if isinstance(self.owner._zmq_event_context, zmq.asyncio.Context):
+            if isinstance(self.owner._zmq_inproc_event_context, zmq.asyncio.Context):
                 event_consumer.exit()
         except Exception as ex:
             self.logger.error(f"error while closing event consumer - {str(ex)}" )
