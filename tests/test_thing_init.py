@@ -163,12 +163,13 @@ class TestThing(TestCase):
         # basic test only to make sure nothing is fundamentally wrong
         thing = self.thing_cls(instance_name="test_servers_init", log_level=logging.WARN)
         self.assertIsInstance(thing.get_thing_description(), dict)
+        self.assertIsInstance(thing.get_our_temp_thing_description(), dict)
         self.assertIsInstance(thing.httpserver_resources, dict)
         self.assertIsInstance(thing.zmq_resources, dict)
 
         start_thing_forked(self.thing_cls, instance_name='test-gui-resource-generation', log_level=logging.WARN)
         thing_client = ObjectProxy('test-gui-resource-generation')
-        self.assertIsInstance(thing_client.gui_resources, dict)
+        self.assertIsInstance(thing_client.get_our_temp_thing_description(), dict)
         thing_client.exit()
 
 

@@ -463,7 +463,7 @@ class ObjectProxy:
 
 
     def subscribe_event(self, name : str, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable],
-                        thread_callbacks : bool = False) -> None:
+                        deserialize : bool = True, thread_callbacks : bool = False) -> None:
         """
         Subscribe to event specified by name. Events are listened in separate threads and supplied callbacks are
         are also called in those threads. 
@@ -486,6 +486,7 @@ class ObjectProxy:
         event = getattr(self, name, None) # type: _Event
         if not isinstance(event, _Event):
             raise AttributeError(f"No event named {name}")
+        event._deserialize = deserialize
         if event._subscribed:
             event.add_callbacks(callbacks)
         else: 
@@ -756,7 +757,8 @@ class _Property:
 class _Event:
     
     __slots__ = ['_zmq_client', '_name', '_obj_name', '_unique_identifier', '_socket_address', '_callbacks',
-                    '_serializer', '_subscribed', '_thread', '_thread_callbacks', '_event_consumer', '_logger']
+                    '_serializer', '_subscribed', '_thread', '_thread_callbacks', '_event_consumer', '_logger',
+                    '_deserialize']
     # event subscription
     # Dont add class doc otherwise __doc__ in slots will conflict with class variable
 
@@ -770,6 +772,7 @@ class _Event:
         self._serializer = serializer
         self._logger = logger 
         self._subscribed = False
+        self._deserialize = True
 
     def add_callbacks(self, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable]) -> None:
         if not self._callbacks:
@@ -793,7 +796,7 @@ class _Event:
     def listen(self):
         while self._subscribed:
             try:
-                data = self._event_consumer.receive()
+                data = self._event_consumer.receive(deserialize=self._deserialize)
                 if data == 'INTERRUPT':
                     break
                 for cb in self._callbacks: 
@@ -802,6 +805,7 @@ class _Event:
                     else: 
                         threading.Thread(target=cb, args=(data,)).start()
             except Exception as ex:
+                print(ex)
                 warnings.warn(f"Uncaught exception from {self._name} event - {str(ex)}", 
                                 category=RuntimeWarning)
         try:

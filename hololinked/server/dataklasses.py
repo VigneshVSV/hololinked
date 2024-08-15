@@ -11,7 +11,7 @@ from types import FunctionType, MethodType
 
 from ..param.parameters import String, Boolean, Tuple, TupleSelector, ClassSelector, Parameter
 from ..param.parameterized import ParameterizedMetaclass, ParameterizedFunction
-from .constants import JSON, USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, REGEX, ResourceTypes, http_methods 
+from .constants import JSON, USE_OBJECT_NAME, UNSPECIFIED, HTTP_METHODS, REGEX, JSONSerializable, ResourceTypes, http_methods 
 from .utils import get_signature, getattr_without_descriptor_read, pep8_to_URL_path
 from .config import global_config
 from .schema_validators import BaseSchemaValidator
@@ -290,6 +290,7 @@ class HTTPResource(SerializableDataclass):
         pass the request as a argument to the callable. For HTTP server ``tornado.web.HTTPServerRequest`` will be passed. 
     """
     what : str 
+    class_name : str
     instance_name : str 
     obj_name : str
     fullpath : str
@@ -298,10 +299,11 @@ class HTTPResource(SerializableDataclass):
     request_as_argument : bool = field(default=False)
     
                                   
-    def __init__(self, *, what : str, instance_name : str, obj_name : str, fullpath : str, 
+    def __init__(self, *, what : str, class_name : str, instance_name : str, obj_name : str, fullpath : str, 
                 request_as_argument : bool = False, argument_schema : typing.Optional[JSON] = None, 
                 **instructions) -> None:
         self.what = what 
+        self.class_name = class_name
         self.instance_name = instance_name
         self.obj_name = obj_name
         self.fullpath = fullpath
@@ -389,13 +391,15 @@ class ServerSentEvent(SerializableDataclass):
         is it a property, method/action or event?
     """
     name : str = field(default=UNSPECIFIED)
+    class_name : str = field(default=UNSPECIFIED)
     obj_name : str = field(default=UNSPECIFIED)
     unique_identifier : str = field(default=UNSPECIFIED)
     socket_address : str = field(default=UNSPECIFIED)
     what : str = field(default=ResourceTypes.EVENT)
 
 
-def build_our_temp_TD(instance):
+def build_our_temp_TD(instance, authority : typing.Optional[str] = None , 
+                    ignore_errors : bool = False) -> typing.Dict[str, JSONSerializable]:
     """
     A temporary extension of TD used to build GUI of thing control panel.
     Will be later replaced by a more sophisticated TD builder which is compliant to the actual spec & its theory.
@@ -404,7 +408,7 @@ def build_our_temp_TD(instance):
 
     assert isinstance(instance, Thing), f"got invalid type {type(instance)}"
     
-    our_TD = instance.get_thing_description()
+    our_TD = instance.get_thing_description(authority=authority, ignore_errors=ignore_errors)
     our_TD["inheritance"] = [class_.__name__ for class_ in instance.__class__.mro()]
 
     for instruction, remote_info in instance.instance_resources.items(): 
@@ -470,6 +474,7 @@ def get_organised_resources(instance):
                 
             httpserver_resources[fullpath] = HTTPResource(
                                                 what=ResourceTypes.PROPERTY, 
+                                                class_name=instance.__class__.__name__,
                                                 instance_name=instance._owner.instance_name if instance._owner is not None else instance.instance_name,
                                                 obj_name=remote_info.obj_name,
                                                 fullpath=fullpath,
@@ -515,6 +520,7 @@ def get_organised_resources(instance):
             # needs to be cleaned up for multiple HTTP methods
             httpserver_resources[instruction] = HTTPResource(
                                         what=ResourceTypes.ACTION,
+                                        class_name=instance.__class__.__name__,
                                         instance_name=instance._owner.instance_name if instance._owner is not None else instance.instance_name,
                                         obj_name=remote_info.obj_name,
                                         fullpath=fullpath,
@@ -545,6 +551,7 @@ def get_organised_resources(instance):
         fullpath = f"{instance._full_URL_path_prefix}{resource.URL_path}"
         # resource._remote_info.unique_identifier = fullpath
         dispatcher = EventDispatcher(fullpath)
+        dispatcher._remote_info.class_name = instance.__class__.__name__
         setattr(instance, name, dispatcher) # resource._remote_info.unique_identifier))
         httpserver_resources[fullpath] = dispatcher._remote_info
         zmq_resources[fullpath] = dispatcher._remote_info
@@ -558,6 +565,7 @@ def get_organised_resources(instance):
             # for example, a shared logger 
             continue
         resource._owner = instance      
+        resource._prepare_resources() # trigger again after the owner has been set to make it work correctly
         httpserver_resources.update(resource.httpserver_resources)
         # zmq_resources.update(resource.zmq_resources)
         instance_resources.update(resource.instance_resources)
