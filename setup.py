@@ -10,7 +10,7 @@ setuptools.setup(
     version="0.2.3",
     author="Vignesh Vaidyanathan",
     author_email="vignesh.vaidyanathan@hololinked.dev",
-    description="A ZMQ-based Object Oriented RPC tool-kit with HTTP support for instrument control/data acquisition or controlling generic python objects.",
+    description="A ZMQ-based Object Oriented RPC tool-kit for instrument control/data acquisition or controlling generic python objects.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://hololinked.readthedocs.io/en/latest/index.html",
