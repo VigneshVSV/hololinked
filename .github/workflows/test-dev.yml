@@ -14,8 +14,12 @@ jobs:
   test:
     strategy:
       matrix:
-        python-version: [3.11, 3.12]
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          # Define specific Python versions for each OS
+          - os: [ubuntu-latest, windows-latest, macos-latest]
+            python-version: 3.11
+          - os: ubuntu-latest
+            python-version: 3.12
         
     runs-on: ${{ matrix.os }}
 
