@@ -38,7 +38,7 @@ setuptools.setup(
         "Topic :: System :: Hardware",
         "Development Status :: 4 - Beta"
     ],    
-    python_requires='>=3.7',
+    python_requires='>=3.11',
     install_requires=[
         "argon2-cffi>=23.0.0",
         "ifaddr>=0.2.0",
