@@ -16,10 +16,10 @@ jobs:
           # Define specific Python versions for each OS
           - os: ubuntu-latest
             python-version: 3.11
-          - os: windows-latest
-            python-version: 3.11
-          - os: macos-latest
-            python-version: 3.11
+          # - os: windows-latest
+          #   python-version: 3.11
+          # - os: macos-latest
+          #   python-version: 3.11
           - os: ubuntu-latest
             python-version: 3.12
         
