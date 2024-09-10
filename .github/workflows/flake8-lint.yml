@@ -21,7 +21,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11' # Replace '3.x' with the desired Python version (e.g., '3.9')
+          python-version: 3.11 
 
       # Install flake8 and any additional dependencies
       - name: Install dependencies
@@ -32,4 +32,4 @@ jobs:
       # Run flake8 on the specified directories/files
       - name: Run flake8
         run: |
-          flake8 . --exclude=*.pyc --max-line-length=120  --count 
+          flake8 . --exclude=*.pyc --max-line-length=120  --count hololinked/server hololinked/client hololinked/rpc tests/
