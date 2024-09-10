@@ -32,4 +32,4 @@ jobs:
       # Run flake8 on the specified directories/files
       - name: Run flake8
         run: |
-          flake8 . --exclude=*.pyc --max-line-length=120  --count hololinked/server hololinked/client hololinked/rpc tests/
+          flake8 . --exclude=*.pyc,hololinked/param --max-line-length=120  --count 
