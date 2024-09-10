@@ -9,15 +9,30 @@ on:
     
 jobs:
   test:
-    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        include:
+          # Define specific Python versions for each OS
+          - os: ubuntu-latest
+            python-version: 3.11
+          - os: windows-latest
+            python-version: 3.11
+          - os: macos-latest
+            python-version: 3.11
+          - os: ubuntu-latest
+            python-version: 3.12
+        
+    runs-on: ${{ matrix.os }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v3
         with:
-          python-version: 3.11
+          python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
         run: | 

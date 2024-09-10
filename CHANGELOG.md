@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - image event handlers (develop branch) for streaming live video as JPEG and PNG ✓
 - pydantic support for property models (develop branch) ✓
 
+## [v0.2.4] - 2024-09-09
+
+- added multiple versions of python for testing
+- unlike claimed in previous versions, this package runs only on python 3.11 or higher
+
 ## [v0.2.3] - 2024-08-11
 
 - HTTP SSE minor bug-fix/optimization - no difference to the user 
