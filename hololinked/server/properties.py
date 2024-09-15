@@ -614,7 +614,7 @@ class Tuple(Iterable):
 
     __slots__ = ['accept_list']
 
-    def __init__(self, default : typing.Any, *, bounds : typing.Optional[typing.Tuple[int, int]] = None, 
+    def __init__(self, default : typing.Any = None, *, bounds : typing.Optional[typing.Tuple[int, int]] = None, 
             length: typing.Optional[int] = None, item_type : typing.Optional[typing.Tuple] = None, 
             accept_list : bool = False, deepcopy_default : bool = False, 
             doc : typing.Optional[str] = None, constant : bool = False, 
@@ -674,7 +674,7 @@ class List(Iterable):
 
     __slots__ = ['accept_tuple']
 
-    def __init__(self, default: typing.Any, *, bounds : typing.Optional[typing.Tuple[int, int]] = None, 
+    def __init__(self, default: typing.Any = None, *, bounds : typing.Optional[typing.Tuple[int, int]] = None, 
             length : typing.Optional[int] = None, item_type : typing.Optional[typing.Tuple] = None, 
             accept_tuple : bool = False, deepcopy_default : bool = False, 
             doc : typing.Optional[str] = None, constant : bool = False, 
@@ -834,7 +834,7 @@ class Selector(SelectorBase):
 
     # Selector is usually used to allow selection from a list of
     # existing objects, therefore instantiate is False by default.
-    def __init__(self, *, objects : typing.List[typing.Any], default : typing.Any, empty_default : bool = False,  
+    def __init__(self, *, objects : typing.List[typing.Any], default : typing.Any = None, empty_default : bool = False,  
             doc : typing.Optional[str] = None, constant : bool = False, 
             readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
             URL_path : str = USE_OBJECT_NAME, 

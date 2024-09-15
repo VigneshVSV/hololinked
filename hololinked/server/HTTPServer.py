@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import dataclass
 import zmq
 import zmq.asyncio
 import logging
@@ -14,7 +15,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPRequest
 from ..param import Parameterized
 from ..param.parameters import (Integer, IPAddress, ClassSelector, Selector, TypedList, String)
 from .constants import ZMQ_PROTOCOLS, CommonRPC, HTTPServerTypes, ResourceTypes, ServerMessage
-from .utils import get_IP_from_interface
+from .utils import get_IP_from_interface, issubklass
 from .dataklasses import HTTPResource, ServerSentEvent
 from .utils import get_default_logger
 from .serializers import JSONSerializer
@@ -22,10 +23,25 @@ from .database import ThingInformation
 from .zmq_message_brokers import  AsyncZMQClient, MessageMappedZMQClientPool
 from .handlers import RPCHandler, BaseHandler, EventHandler, ThingsHandler, StopHandler
 from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
+from .events import Event
 from .eventloop import EventLoop
 from .config import global_config
 
 
+
+
+@dataclass 
+class InteractionAffordance:
+    URL_path : str
+    obj : Event # typing.Union[Property, Action, Event]
+    http_methods : typing.Tuple[str, typing.Optional[str], typing.Optional[str]]
+    handler : BaseHandler
+    kwargs : dict 
+
+    def __eq__(self, other : "InteractionAffordance") -> bool:
+        return self.obj == other.obj 
+    
+    
 
 class HTTPServer(Parameterized):
     """
@@ -63,7 +79,7 @@ class HTTPServer(Parameterized):
                                 Unlike pure CORS, the server resource is not even executed if the client is not 
                                 an allowed client. if None any client is served.""")
     host = String(default=None, allow_None=True, 
-                doc="Host Server to subscribe to coordinate starting sequence of remote objects & web GUI" ) # type: str
+                doc="Host Server to subscribe to coordinate starting sequence of things & web GUI" ) # type: str
     # network_interface = String(default='Ethernet',  
     #                         doc="Currently there is no logic to detect the IP addresss (as externally visible) correctly, \
     #                         therefore please send the network interface name to retrieve the IP. If a DNS server is present, \
@@ -138,6 +154,7 @@ class HTTPServer(Parameterized):
         self._zmq_protocol = ZMQ_PROTOCOLS.IPC
         self._zmq_inproc_socket_context = None 
         self._zmq_inproc_event_context = None
+        self._local_rules = dict() # type: typing.Dict[str, typing.List[InteractionAffordance]]
  
     @property
     def all_ok(self) -> bool:
@@ -146,6 +163,9 @@ class HTTPServer(Parameterized):
             self.logger = get_default_logger('{}|{}'.format(self.__class__.__name__, 
                                             f"{self.address}:{self.port}"), 
                                             self.log_level)
+            
+        if self._zmq_protocol == ZMQ_PROTOCOLS.INPROC and (self._zmq_inproc_socket_context is None or self._zmq_inproc_event_context is None):
+            raise ValueError("Inproc socket context is not provided. Logic Error.")
             
         self.app = Application(handlers=[
             (r'/remote-objects', ThingsHandler, dict(request_handler=self.request_handler, 
@@ -250,7 +270,7 @@ class HTTPServer(Parameterized):
             # Just to avoid duplication of this call as we proceed at single client level and not message mapped level
             return 
         self._lost_things[client.instance_name] = client
-        self.logger.info(f"attempting to update router with remote object {client.instance_name}.")
+        self.logger.info(f"attempting to update router with thing {client.instance_name}.")
         while True:
             try:
                 await client.handshake_complete()
@@ -272,7 +292,13 @@ class HTTPServer(Parameterized):
                                                             )))
                     elif http_resource["what"] == ResourceTypes.EVENT:
                         resource = ServerSentEvent(**http_resource)
-                        handlers.append((instruction, self.event_handler, dict(
+                        if resource.class_name in self._local_rules and any(ia.obj._obj_name == resource.obj_name for ia in self._local_rules[resource.class_name]):
+                            for ia in self._local_rules[resource.class_name]:
+                                if ia.obj._obj_name == resource.obj_name:
+                                    handlers.append((f'/{client.instance_name}{ia.URL_path}', ia.handler, dict(resource=resource, validator=None, 
+                                                                                owner=self, **ia.kwargs)))
+                        else:
+                            handlers.append((instruction, self.event_handler, dict(
                                                                 resource=resource,
                                                                 validator=None,
                                                                 owner=self 
@@ -306,10 +332,11 @@ class HTTPServer(Parameterized):
                         to make RPCHandler work
                     """
                 self.app.wildcard_router.add_rules(handlers)
-                self.logger.info(f"updated router with remote object {client.instance_name}.")
+                self.logger.info(f"updated router with thing {client.instance_name}.")
                 break
             except Exception as ex:
-                self.logger.error(f"error while trying to update router with remote object - {str(ex)}. " +
+                print("error", ex)
+                self.logger.error(f"error while trying to update router with thing - {str(ex)}. " +
                                   "Trying again in 5 seconds")
                 await asyncio.sleep(5)
        
@@ -328,10 +355,39 @@ class HTTPServer(Parameterized):
                         raise_client_side_exception=True
                     )
         except Exception as ex:
-            self.logger.error(f"error while trying to update remote object with HTTP server details - {str(ex)}. " +
+            self.logger.error(f"error while trying to update thing with HTTP server details - {str(ex)}. " +
                                 "Trying again in 5 seconds")
         self.zmq_client_pool.poller.register(client.socket, zmq.POLLIN)
         self._lost_things.pop(client.instance_name)
+
+
+    def add_event(self, URL_path : str, event : Event, handler : typing.Optional[BaseHandler] = None, 
+                **kwargs) -> None:
+        """
+        Add an event to be served by HTTP server
+
+        Parameters
+        ----------
+        URL_path : str
+            URL path to access the event
+        event : Event
+            Event to be served
+        handler : BaseHandler, optional
+            custom handler for the event
+        kwargs : dict
+            additional keyword arguments to be passed to the handler's __init__
+        """
+        if not isinstance(event, Event):
+            raise TypeError("event should be of type Event")
+        if not issubklass(handler, BaseHandler):
+            raise TypeError("handler should be subclass of BaseHandler")
+        if event.owner.__name__ not in self._local_rules:
+            self._local_rules[event.owner.__name__] = []
+        obj = InteractionAffordance(URL_path=URL_path, obj=event,  
+                        http_methods=('GET',), handler=handler or self.event_handler,  
+                        kwargs=kwargs)
+        if obj not in self._local_rules[event.owner.__name__]:
+            self._local_rules[event.owner.__name__].append(obj)
                
     
 __all__ = [

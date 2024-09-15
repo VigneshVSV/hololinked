@@ -10,12 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ✓ means ready to try
 
 - cookie auth & its specification in TD (cookie auth branch)
-- image event handlers (develop branch) for streaming live video as JPEG and PNG ✓
-- pydantic support for property models (develop branch) ✓
+- adding custom handlers for each property, action and event to override default behaviour
+- pydantic support for property models 
+
+## [v0.2.6] - 2024-09-09
+
+- bug fix events when multiple serializers are used
+- events support custom HTTP handlers (not polished yet, use as last resort), not yet compatible with TD
+- image event handlers for streaming live video as JPEG and PNG, not yet compatible with TD
 
 ## [v0.2.5] - 2024-09-09
 
-- released to anaconda 
+- released to anaconda, it can take a while to turn up. A badge will be added in README when successful.  
 
 ## [v0.2.4] - 2024-09-09
 

@@ -290,6 +290,7 @@ class HTTPResource(SerializableDataclass):
         pass the request as a argument to the callable. For HTTP server ``tornado.web.HTTPServerRequest`` will be passed. 
     """
     what : str 
+    class_name : str # just metadata
     instance_name : str 
     obj_name : str
     fullpath : str
@@ -298,10 +299,11 @@ class HTTPResource(SerializableDataclass):
     request_as_argument : bool = field(default=False)
     
                                   
-    def __init__(self, *, what : str, instance_name : str, obj_name : str, fullpath : str, 
+    def __init__(self, *, what : str, class_name : str, instance_name : str, obj_name : str, fullpath : str, 
                 request_as_argument : bool = False, argument_schema : typing.Optional[JSON] = None, 
                 **instructions) -> None:
         self.what = what 
+        self.class_name = class_name
         self.instance_name = instance_name
         self.obj_name = obj_name
         self.fullpath = fullpath
@@ -340,6 +342,7 @@ class ZMQResource(SerializableDataclass):
         argument schema of the method/action for validation before passing over the instruction to the RPC server. 
     """
     what : str 
+    class_name : str # just metadata
     instance_name : str 
     instruction : str
     obj_name : str
@@ -350,10 +353,11 @@ class ZMQResource(SerializableDataclass):
     return_value_schema : typing.Optional[JSON]
     request_as_argument : bool = field(default=False)
 
-    def __init__(self, *, what : str, instance_name : str, instruction : str, obj_name : str,
+    def __init__(self, *, what : str, class_name : str, instance_name : str, instruction : str, obj_name : str,
                 qualname : str, doc : str, top_owner : bool, argument_schema : typing.Optional[JSON] = None,
                 return_value_schema : typing.Optional[JSON] = None, request_as_argument : bool = False) -> None:
         self.what = what 
+        self.class_name = class_name
         self.instance_name = instance_name
         self.instruction = instruction
         self.obj_name = obj_name 
@@ -390,7 +394,9 @@ class ServerSentEvent(SerializableDataclass):
     """
     name : str = field(default=UNSPECIFIED)
     obj_name : str = field(default=UNSPECIFIED)
+    class_name : str = field(default=UNSPECIFIED) # just metadata  
     unique_identifier : str = field(default=UNSPECIFIED)
+    serialization_specific : bool = field(default=False)
     socket_address : str = field(default=UNSPECIFIED)
     what : str = field(default=ResourceTypes.EVENT)
 
@@ -404,7 +410,7 @@ def build_our_temp_TD(instance):
 
     assert isinstance(instance, Thing), f"got invalid type {type(instance)}"
     
-    our_TD = instance.get_thing_description()
+    our_TD = instance.get_thing_description(ignore_errors=True)
     our_TD["inheritance"] = [class_.__name__ for class_ in instance.__class__.mro()]
 
     for instruction, remote_info in instance.instance_resources.items(): 
@@ -470,6 +476,7 @@ def get_organised_resources(instance):
                 
             httpserver_resources[fullpath] = HTTPResource(
                                                 what=ResourceTypes.PROPERTY, 
+                                                class_name=instance.__class__.__name__,
                                                 instance_name=instance._owner.instance_name if instance._owner is not None else instance.instance_name,
                                                 obj_name=remote_info.obj_name,
                                                 fullpath=fullpath,
@@ -477,6 +484,7 @@ def get_organised_resources(instance):
                                             )
             zmq_resources[fullpath] = ZMQResource(
                             what=ResourceTypes.PROPERTY, 
+                            class_name=instance.__class__.__name__,
                             instance_name=instance._owner.instance_name if instance._owner is not None else instance.instance_name, 
                             instruction=fullpath, 
                             doc=prop.__doc__, 
@@ -494,6 +502,8 @@ def get_organised_resources(instance):
                 assert isinstance(prop._observable_event_descriptor, Event), f"observable event not yet set for {prop.name}. logic error."
                 evt_fullpath = f"{instance._full_URL_path_prefix}{prop._observable_event_descriptor.URL_path}"
                 dispatcher = EventDispatcher(evt_fullpath)
+                dispatcher._remote_info.class_name = instance.__class__.__name__
+                dispatcher._remote_info.serialization_specific = instance.zmq_serializer != instance.http_serializer
                 setattr(instance, prop._observable_event_descriptor._obj_name, dispatcher)
                 # prop._observable_event_descriptor._remote_info.unique_identifier = evt_fullpath
                 httpserver_resources[evt_fullpath] = dispatcher._remote_info
@@ -515,6 +525,7 @@ def get_organised_resources(instance):
             # needs to be cleaned up for multiple HTTP methods
             httpserver_resources[instruction] = HTTPResource(
                                         what=ResourceTypes.ACTION,
+                                        class_name=instance.__class__.__name__,
                                         instance_name=instance._owner.instance_name if instance._owner is not None else instance.instance_name,
                                         obj_name=remote_info.obj_name,
                                         fullpath=fullpath,
@@ -524,6 +535,7 @@ def get_organised_resources(instance):
                                     )
             zmq_resources[instruction] = ZMQResource(
                                             what=ResourceTypes.ACTION,
+                                            class_name=instance.__class__.__name__,
                                             instance_name=instance._owner.instance_name if instance._owner is not None else instance.instance_name,
                                             instruction=instruction,                                                                                                                                                                                        
                                             obj_name=getattr(resource, '__name__'),
@@ -545,6 +557,8 @@ def get_organised_resources(instance):
         fullpath = f"{instance._full_URL_path_prefix}{resource.URL_path}"
         # resource._remote_info.unique_identifier = fullpath
         dispatcher = EventDispatcher(fullpath)
+        dispatcher._remote_info.class_name = instance.__class__.__name__
+        dispatcher._remote_info.serialization_specific = instance.zmq_serializer != instance.http_serializer
         setattr(instance, name, dispatcher) # resource._remote_info.unique_identifier))
         httpserver_resources[fullpath] = dispatcher._remote_info
         zmq_resources[fullpath] = dispatcher._remote_info
