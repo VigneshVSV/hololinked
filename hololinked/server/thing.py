@@ -472,7 +472,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
     
 
     @action(URL_path='/resources/wot-td', http_method=HTTP_METHODS.GET)
-    def get_thing_description(self, authority : typing.Optional[str] = None): 
+    def get_thing_description(self, authority : typing.Optional[str] = None, ignore_errors : bool = False): 
                             # allow_loose_schema : typing.Optional[bool] = False): 
         """
         generate thing description schema of Web of Things https://www.w3.org/TR/wot-thing-description11/.
@@ -487,8 +487,11 @@ class Thing(Parameterized, metaclass=ThingMeta):
             'http://my-pc:9090' or 'https://IT-given-domain-name'. If absent, a value will be automatically
             given using ``socket.gethostname()`` and the port at which the last HTTPServer (``hololinked.server.HTTPServer``) 
             attached to this object was running.
-
-        Returns:
+        ignore_errors: bool, optional, Default False
+            if True, offending interaction affordances will be removed from the schema. This is useful to build partial but working
+            schema always.             
+        Returns
+        -------
         hololinked.wot.td.ThingDescription
             represented as an object in python, gets automatically serialized to JSON when pushed out of the socket. 
         """
@@ -498,7 +501,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         #     In other words, schema validation will always pass.  
         from .td import ThingDescription
         return ThingDescription(instance=self, authority=authority or self._object_info.http_server,
-                                    allow_loose_schema=False).produce() #allow_loose_schema)   
+                                    allow_loose_schema=False, ignore_errors=ignore_errors).produce() #allow_loose_schema)   
 
 
     @action(URL_path='/exit', http_method=HTTP_METHODS.POST)                                                                                                                                          

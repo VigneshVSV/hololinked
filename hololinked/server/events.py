@@ -61,6 +61,8 @@ class Event:
 
     def __get__(self, obj : ParameterizedMetaclass, objtype : typing.Optional[type] = None):
         try:
+            if not obj:
+                return self
             return obj.__dict__[self._internal_name]
         except KeyError:
             raise AttributeError("Event object not yet initialized, please dont access now." +

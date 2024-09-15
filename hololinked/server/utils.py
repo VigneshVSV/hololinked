@@ -63,7 +63,8 @@ def pep8_to_URL_path(word : str) -> str:
         >>> pep8_to_dashed_URL("device_type")
         'device-type'
     """
-    return re.sub(r'_+', '-', word.lstrip('_').rstrip('_'))
+    val = re.sub(r'_+', '-', word.lstrip('_').rstrip('_'))
+    return val.replace(' ', '-')
 
 
 def get_default_logger(name : str, log_level : int = logging.INFO, log_file = None,
@@ -231,7 +232,8 @@ __all__ = [
     run_coro_sync.__name__,
     run_callable_somehow.__name__,
     get_signature.__name__,
-    isclassmethod.__name__
+    isclassmethod.__name__,
+    issubklass.__name__
 ]
 
 
