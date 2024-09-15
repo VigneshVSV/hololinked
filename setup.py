@@ -7,10 +7,10 @@ long_description = (Path(__file__).parent/"README.md").read_text()
 
 setuptools.setup(
     name="hololinked",
-    version="0.2.3",
-    author="Vigneh Vaidyanathan",
+    version="0.2.5",
+    author="Vignesh Vaidyanathan",
     author_email="vignesh.vaidyanathan@hololinked.dev",
-    description="A ZMQ-based Object Oriented RPC tool-kit with HTTP support for instrument control/data acquisition or controlling generic python objects.",
+    description="A ZMQ-based Object Oriented RPC tool-kit for instrument control/data acquisition or controlling generic python objects.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://hololinked.readthedocs.io/en/latest/index.html",
@@ -38,7 +38,7 @@ setuptools.setup(
         "Topic :: System :: Hardware",
         "Development Status :: 4 - Beta"
     ],    
-    python_requires='>=3.7',
+    python_requires='>=3.11',
     install_requires=[
         "argon2-cffi>=23.0.0",
         "ifaddr>=0.2.0",
