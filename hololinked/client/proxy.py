@@ -567,7 +567,7 @@ class ObjectProxy:
             elif data.what == ResourceTypes.EVENT:
                 assert isinstance(data, ServerSentEvent)
                 event = _Event(self.zmq_client, data.name, data.obj_name, data.unique_identifier, data.socket_address, 
-                            serializer=self.zmq_client.zmq_serializer, logger=self.logger)
+                            serialization_specific=data.serialization_specific, serializer=self.zmq_client.zmq_serializer, logger=self.logger)
                 _add_event(self, event, data)
                 self.__dict__[data.name] = event 
 
@@ -755,17 +755,19 @@ class _Property:
 
 class _Event:
     
-    __slots__ = ['_zmq_client', '_name', '_obj_name', '_unique_identifier', '_socket_address', '_callbacks',
+    __slots__ = ['_zmq_client', '_name', '_obj_name', '_unique_identifier', '_socket_address', '_callbacks', '_serialization_specific',
                     '_serializer', '_subscribed', '_thread', '_thread_callbacks', '_event_consumer', '_logger']
     # event subscription
     # Dont add class doc otherwise __doc__ in slots will conflict with class variable
 
     def __init__(self, client : SyncZMQClient, name : str, obj_name : str, unique_identifier : str, socket : str, 
-                    serializer : BaseSerializer = None, logger : logging.Logger = None) -> None:
+                    serialization_specific : bool = False, serializer : BaseSerializer = None, logger : logging.Logger = None) -> None:
+        self._zmq_client = client
         self._name = name
         self._obj_name = obj_name
         self._unique_identifier = unique_identifier
         self._socket_address = socket
+        self._serialization_specific = serialization_specific
         self._callbacks = None 
         self._serializer = serializer
         self._logger = logger 
@@ -781,9 +783,11 @@ class _Event:
 
     def subscribe(self, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable], 
                     thread_callbacks : bool = False):
-        self._event_consumer = EventConsumer(self._unique_identifier, self._socket_address, 
-                                f"{self._name}|RPCEvent|{uuid.uuid4()}", b'PROXY',
-                                zmq_serializer=self._serializer, logger=self._logger)
+        self._event_consumer = EventConsumer(
+                                    'zmq-' + self._unique_identifier if self._serialization_specific else self._unique_identifier, 
+                                    self._socket_address, f"{self._name}|RPCEvent|{uuid.uuid4()}", b'PROXY',
+                                    zmq_serializer=self._serializer, logger=self._logger
+                                )
         self.add_callbacks(callbacks) 
         self._subscribed = True
         self._thread_callbacks = thread_callbacks

@@ -81,7 +81,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
     Subclass from here to expose python objects on the network (with HTTP/TCP) or to other processes (ZeroMQ)
     """
 
-    __server_type__ = ServerTypes.THING
+    __server_type__ = ServerTypes.THING # not a server, this needs to be removed.
    
     # local properties
     instance_name = String(default=None, regex=r'[A-Za-z]+[A-Za-z_0-9\-\/]*', constant=True, remote=False,
@@ -107,7 +107,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
                         remote=False, isinstance=False,
                         doc="""Validator for JSON schema. If not supplied, a default JSON schema validator is created.""") # type: BaseSchemaValidator
     
-    # remote paramerters
+    # remote properties
     state = String(default=None, allow_None=True, URL_path='/state', readonly=True, observable=True, 
                 fget=lambda self : self.state_machine.current_state if hasattr(self, 'state_machine') else None,  
                 doc="current state machine's state if state machine present, None indicates absence of state machine.") #type: typing.Optional[str]
@@ -518,7 +518,11 @@ class Thing(Parameterized, metaclass=ThingMeta):
             raise BreakInnerLoop # stops the inner loop of the object
         else:
             warnings.warn("call exit on the top object, composed objects cannot exit the loop.", RuntimeWarning)
- 
+    
+    @action()
+    def ping(self) -> None:
+        """ping the Thing to see if it is alive"""
+        pass 
 
     def run(self, 
             zmq_protocols : typing.Union[typing.Sequence[ZMQ_PROTOCOLS], 
@@ -586,8 +590,8 @@ class Thing(Parameterized, metaclass=ThingMeta):
             httpserver = kwargs.pop('http_server')
             assert isinstance(httpserver, HTTPServer)
             httpserver._zmq_protocol = ZMQ_PROTOCOLS.INPROC
-            httpserver._zmq_socket_context = context
-            httpserver._zmq_event_context = self.event_publisher.context
+            httpserver._zmq_inproc_socket_context = context
+            httpserver._zmq_inproc_event_context = self.event_publisher.context
             assert httpserver.all_ok
             httpserver.tornado_instance.listen(port=httpserver.port, address=httpserver.address)
         self.event_loop.run()

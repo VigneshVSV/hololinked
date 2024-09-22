@@ -110,7 +110,7 @@ class Property(Parameter):
 
     """
 
-    __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', '_remote_info', 
+    __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', 'model', '_remote_info', 
                 '_observable', '_observable_event_descriptor', 'fcomparator', '_old_value_internal_name']
     
     # RPC only init - no HTTP methods for those who dont like
@@ -161,7 +161,7 @@ class Property(Parameter):
                                                             (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
                 state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
                 db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
-                observable : bool = False, class_member : bool = False, 
+                observable : bool = False, class_member : bool = False, model = None, 
                 fget : typing.Optional[typing.Callable] = None, fset : typing.Optional[typing.Callable] = None, 
                 fdel : typing.Optional[typing.Callable] = None, fcomparator : typing.Optional[typing.Callable] = None,  
                 deepcopy_default : bool = False, per_instance_descriptor : bool = False, remote : bool = True, 
@@ -185,6 +185,9 @@ class Property(Parameter):
                 state=state,
                 isproperty=True
             )
+        self.model = None
+        if model:
+            self.model = wrap_plain_types_in_rootmodel(model)
 
 
     def __set_name__(self, owner: typing.Any, attrib_name: str) -> None:
@@ -325,7 +328,29 @@ class ClassProperties(ClassParameters):
         return info 
 
     
+try: 
+    from pydantic import BaseModel, RootModel, create_model
+    def wrap_plain_types_in_rootmodel(model : type) -> type["BaseModel"]:
+        """
+        Ensure a type is a subclass of BaseModel.
+
+        If a `BaseModel` subclass is passed to this function, we will pass it
+        through unchanged. Otherwise, we wrap the type in a RootModel.
+        In the future, we may explicitly check that the argument is a type
+        and not a model instance.
+        """
+        try:  # This needs to be a `try` as basic types are not classes
+            assert issubclass(model, BaseModel)
+            return model
+        except (TypeError, AssertionError):
+            return create_model(f"{model!r}", root=(model, ...), __base__=RootModel)
+        except NameError:
+            raise ImportError("pydantic is not installed, please install it to use this feature") from None
+except ImportError:
+    def wrap_plain_types_in_rootmodel(model : type) -> type:
+        raise ImportError("pydantic is not installed, please install it to use this feature") from None
   
+
 __all__ = [
     Property.__name__
 ]

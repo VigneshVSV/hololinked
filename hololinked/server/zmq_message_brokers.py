@@ -2215,10 +2215,15 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
                     return
                 if zmq_clients:
                     # TODO - event id should not any longer be unique
-                    self.socket.send_multipart([unique_identifier, self.zmq_serializer.dumps(data)])
+                    self.socket.send_multipart([b'zmq-' + unique_identifier, self.zmq_serializer.dumps(data)])
                 if http_clients:
                     self.socket.send_multipart([unique_identifier, self.http_serializer.dumps(data)])
-            else:
+            elif not isinstance(self.zmq_serializer , JSONSerializer):
+                if zmq_clients:
+                    self.socket.send_multipart([b'zmq-' + unique_identifier, data])
+                if http_clients:
+                    self.socket.send_multipart([unique_identifier, data])
+            else: 
                 self.socket.send_multipart([unique_identifier, data])
         else:
             raise AttributeError("event name {} not yet registered with socket {}".format(unique_identifier, self.socket_address))
