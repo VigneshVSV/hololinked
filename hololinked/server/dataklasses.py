@@ -572,6 +572,7 @@ def get_organised_resources(instance):
             # for example, a shared logger 
             continue
         resource._owner = instance      
+        resource._prepare_resources()
         httpserver_resources.update(resource.httpserver_resources)
         # zmq_resources.update(resource.zmq_resources)
         instance_resources.update(resource.instance_resources)
