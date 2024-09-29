@@ -302,7 +302,9 @@ class Thing(Parameterized, metaclass=ThingMeta):
     @object_info.setter
     def _set_object_info(self, value):
         self._object_info = ThingInformation(**value)  
-
+        for name, thing in inspect._getmembers(self, lambda o: isinstance(o, Thing), getattr_without_descriptor_read):
+            thing._object_info.http_server = self._object_info.http_server
+           
     
     @property
     def properties(self) -> ClassProperties:
