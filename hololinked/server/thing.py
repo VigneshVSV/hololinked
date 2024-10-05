@@ -211,7 +211,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
 
 
     def __post_init__(self):
-        # self._prepare_resources()
+        self._prepare_resources() # bug fix, has to be called at two places, one here and one before run
         self.load_properties_from_DB()
         self.logger.info(f"initialialised Thing class {self.__class__.__name__} with instance name {self.instance_name}")
 
