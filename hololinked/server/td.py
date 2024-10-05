@@ -1,6 +1,8 @@
 import typing, inspect
 from dataclasses import dataclass, field
 
+from hololinked.server.eventloop import EventLoop
+
 
 from .constants import JSON, JSONSerializable
 from .utils import getattr_without_descriptor_read
@@ -530,7 +532,7 @@ class Link(Schema):
     href : str
     anchor : typing.Optional[str]  
     type : typing.Optional[str] = field(default='application/json')
-    rel : typing.Optional[str] = field(default='next')
+    # rel : typing.Optional[str] = field(default='next')
 
     def __init__(self):
         super().__init__()
@@ -799,14 +801,14 @@ class ThingDescription(Schema):
                 if not self.ignore_errors:
                     raise ex from None
                 self.instance.logger.error(f"Error while generating schema for {resource.obj_name} - {ex}")
-        # for name, resource in inspect._getmembers(self.instance, lambda o : isinstance(o, Thing), getattr_without_descriptor_read):
-        #     if resource is self.instance or isinstance(resource, EventLoop):
-        #         continue
-        #     if self.links is None:
-        #         self.links = []
-        #     link = Link()
-        #     link.build(resource, self.instance, self.authority)
-        #     self.links.append(link.asdict())
+        for name, resource in inspect._getmembers(self.instance, lambda o : isinstance(o, Thing), getattr_without_descriptor_read):
+            if resource is self.instance or isinstance(resource, EventLoop):
+                continue
+            if self.links is None or self.links == NotImplemented:
+                self.links = []
+            link = Link()
+            link.build(resource, self.instance, self.authority)
+            self.links.append(link.asdict())
     
 
     def add_top_level_forms(self):

@@ -29,7 +29,7 @@ class StateMachine:
     on_exit = TypedDict(default=None, allow_None=True, key_type=str,
                         doc="""callbacks to execute when certain state is exited; 
                         specfied as map with state as keys and callbacks as list""") # typing.Dict[str, typing.List[typing.Callable]]
-    machine = TypedDict(default=None, allow_None=True, key_type=str, item_type=(list, tuple),
+    machine = TypedDict(default=None, allow_None=True, item_type=(list, tuple), key_type=str, # i.e. its like JSON
                         doc="the machine specification with state as key and objects as list") # typing.Dict[str, typing.List[typing.Callable, Property]]
     valid = Boolean(default=False, readonly=True, fget=lambda self: self._valid, 
                         doc="internally computed, True if states, initial_states and the machine is valid")

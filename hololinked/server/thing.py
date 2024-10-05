@@ -211,7 +211,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
 
 
     def __post_init__(self):
-        self._prepare_resources()
+        # self._prepare_resources()
         self.load_properties_from_DB()
         self.logger.info(f"initialialised Thing class {self.__class__.__name__} with instance name {self.instance_name}")
 
@@ -302,7 +302,9 @@ class Thing(Parameterized, metaclass=ThingMeta):
     @object_info.setter
     def _set_object_info(self, value):
         self._object_info = ThingInformation(**value)  
-
+        for name, thing in inspect._getmembers(self, lambda o: isinstance(o, Thing), getattr_without_descriptor_read):
+            thing._object_info.http_server = self._object_info.http_server
+           
     
     @property
     def properties(self) -> ClassProperties:
@@ -557,6 +559,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         #     expose the associated Eventloop which executes the object. This is generally useful for remotely 
         #     adding more objects to the same event loop.
         # dont specify http server as a kwarg, as the other method run_with_http_server has to be used
+        self._prepare_resources()
         context = kwargs.get('context', None)
         if context is not None and not isinstance(context, zmq.asyncio.Context):
             raise TypeError("context must be an instance of zmq.asyncio.Context")
