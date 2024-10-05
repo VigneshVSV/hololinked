@@ -2,14 +2,7 @@ name: Unit Tests For Development
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
-
-    
+        
 jobs:
   test:
     strategy:
