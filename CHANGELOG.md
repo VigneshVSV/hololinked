@@ -16,8 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [v0.2.6] - 2024-09-09
 
 - bug fix events when multiple serializers are used
-- events support custom HTTP handlers (not polished yet, use as last resort), not yet compatible with TD
-- image event handlers for streaming live video as JPEG and PNG, not yet compatible with TD
+- events support custom HTTP handlers (not polished yet, use as last resort, not auto-added to TD)
+- image event handlers for streaming live video as JPEG and PNG (not polished yet, not auto-added to TD)
 
 ## [v0.2.5] - 2024-09-09
 
