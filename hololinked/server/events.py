@@ -73,6 +73,9 @@ class Event:
             value._remote_info.name = self.friendly_name
             value._remote_info.obj_name = self._obj_name
             value._owner_inst = obj
+            current_obj = obj.__dict__.get(self._internal_name, None) # type: typing.Optional[EventDispatcher]
+            if current_obj and current_obj._publisher:
+                current_obj._publisher.unregister(current_obj)
             obj.__dict__[self._internal_name] = value 
         else:
             raise TypeError(f"Supply EventDispatcher object to event {self._obj_name}, not type {type(value)}.")
