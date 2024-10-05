@@ -338,8 +338,3 @@ Again, please check examples or the code for explanations. Documentation is bein
 
 This package is an implementation of a ZeroMQ-based Object Oriented RPC with customizable HTTP end-points. A dual transport in both ZMQ and HTTP is provided to maximize flexibility in data type, serialization and speed, although HTTP is preferred for networked applications. If one is looking for an object oriented approach towards creating components within a control or data acquisition system, or an IoT device, one may consider this package. 
 
-### Sponsorships
-
-If you are interesting in donating, please consider doing through thanks.dev as dependencies looking for sponsorships are also sponsored automatically. Its also possible to sponsor for services like bug fixes (informally - i.e. no legal claims), please look at open collective or github sponsors profile. 
-
-
