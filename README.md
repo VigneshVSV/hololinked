@@ -8,7 +8,9 @@
 [![codecov](https://codecov.io/gh/VigneshVSV/hololinked/graph/badge.svg?token=JF1928KTFE)](https://codecov.io/gh/VigneshVSV/hololinked) 
 <br>
 [![email](https://img.shields.io/badge/email%20me-brown)](mailto:vignesh.vaidyanathan@hololinked.dev) [![ways to contact me](https://img.shields.io/badge/ways_to_contact_me-brown)](https://hololinked.dev/contact)
-
+<br>
+[![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked?label=pypi%20downloads)](https://pypistats.org/packages/hololinked)
+[![Conda Downloads](https://img.shields.io/conda/d/conda-forge/hololinked)](https://anaconda.org/conda-forge/hololinked)
 
 <!-- [![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked)](https://pypistats.org/packages/hololinked)  -->
 ### To Install
@@ -274,7 +276,7 @@ what the event represents and how to subscribe to it) with subprotocol SSE (HTTP
 
 Events follow a pub-sub model with '1 publisher to N subscribers' per `Event` object, both through ZMQ and HTTP SSE. 
 
-Although the code is the very familiar & age-old RPC server style, one can directly specify HTTP methods and URL path for each property, action and event. A configurable HTTP Server is already available (from `hololinked.server.HTTPServer`) which redirects HTTP requests to the object according to the specified HTTP API on the properties, actions and events. To plug in a HTTP server: 
+To start the Thing, a configurable HTTP Server is already available (from `hololinked.server.HTTPServer`) which redirects HTTP requests to the object:
 
 ```python
 import ssl, os, logging
@@ -318,22 +320,26 @@ One may use the HTTP API according to one's beliefs (including letting the packa
 - use serializer of your choice (except for HTTP) - MessagePack, JSON, pickle etc. & extend serialization to suit your requirement. HTTP Server will support only JSON serializer to maintain comptibility with Javascript (MessagePack may be added later). Default is JSON serializer based on msgspec.
 - asyncio compatible - async RPC server event-loop and async HTTP Server - write methods in async 
 - choose from multiple ZeroMQ transport methods which offers some possibilities like the following without changing the code:
-  - run HTTP Server & python object in separate processes or the same process
-  - serve multiple objects with the same HTTP server
-  - run direct ZMQ-TCP server without HTTP details
   - expose only a dashboard or web page on the network without exposing the hardware itself
+  - serve multiple objects with the same HTTP server
+  - run HTTP Server & python object in separate processes or the same process
+  - run direct ZMQ-TCP server without HTTP details
  
 Again, please check examples or the code for explanations. Documentation is being activety improved. 
 
 ### Currently being worked
 
-- improving accuracy of Thing Descriptions 
-- separation of HTTP protocol specification like URL path and HTTP verbs from the API of properties, actions and events and move their customization completely to the HTTP server
 - unit tests coverage
+- improving accuracy of Thing Descriptions 
+- separation of HTTP protocol specification like URL path and HTTP verbs from the API of properties, actions and events and move their customization completely to the HTTP server 
 - cookie credentials for authentication - as a workaround until credentials are supported, use `allowed_clients` argument on HTTP server which restricts access based on remote IP supplied with the HTTP headers. This wont still help you in public networks or modified/non-standard HTTP clients.
 
 ### Internals
 
 This package is an implementation of a ZeroMQ-based Object Oriented RPC with customizable HTTP end-points. A dual transport in both ZMQ and HTTP is provided to maximize flexibility in data type, serialization and speed, although HTTP is preferred for networked applications. If one is looking for an object oriented approach towards creating components within a control or data acquisition system, or an IoT device, one may consider this package. 
+
+### Sponsorships
+
+If you are interesting in donating, please consider doing through thanks.dev as dependencies looking for sponsorships are also sponsored automatically. Its also possible to sponsor for services like bug fixes (informally - i.e. no legal claims), please look at open collective or github sponsors profile. 
 
 

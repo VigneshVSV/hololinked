@@ -9,9 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ✓ means ready to try
 
+New:
 - cookie auth & its specification in TD (cookie auth branch)
 - adding custom handlers for each property, action and event to override default behaviour
 - pydantic support for property models 
+
+Bug Fixes:
+- retrieve unserialized data from events with `ObjectProxy` (like JPEG images) by setting `deserialize=False` in `subscribe_event()` ✓ 
+- composed sub`Thing`s exposed with correct URL path ✓ 
 
 ## [v0.2.6] - 2024-09-09
 

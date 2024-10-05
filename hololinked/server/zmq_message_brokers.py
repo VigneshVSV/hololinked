@@ -2,6 +2,7 @@ import builtins
 import os
 import threading
 import time
+import warnings
 import zmq
 import zmq.asyncio
 import asyncio
@@ -2188,7 +2189,21 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
             raise AttributeError(f"event {event._name} already found in list of events, please use another name.")
         self.event_ids.add(event._unique_identifier)
         self.events.add(event) 
-        
+    
+    def unregister(self, event : "EventDispatcher") -> None:
+        """
+        unregister event with a specific (unique) name
+
+        Parameters
+        ----------
+        event: ``Event``
+            ``Event`` object that needs to be unregistered. 
+        """
+        if event in self.events:
+            self.events.remove(event)
+            self.event_ids.remove(event._unique_identifier)
+        else:
+            warnings.warn(f"event {event._name} not found in list of events, please use another name.", UserWarning)
                
     def publish(self, unique_identifier : bytes, data : typing.Any, *, zmq_clients : bool = True, 
                         http_clients : bool = True, serialize : bool = True) -> None: 
