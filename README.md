@@ -8,8 +8,11 @@
 [![codecov](https://codecov.io/gh/VigneshVSV/hololinked/graph/badge.svg?token=JF1928KTFE)](https://codecov.io/gh/VigneshVSV/hololinked) 
 <br>
 [![email](https://img.shields.io/badge/email%20me-brown)](mailto:vignesh.vaidyanathan@hololinked.dev) [![ways to contact me](https://img.shields.io/badge/ways_to_contact_me-brown)](https://hololinked.dev/contact)
+<br>
 stats:
-[![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked)](https://pypistats.org/packages/hololinked) [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/downloads.svg)](https://anaconda.org/conda-forge/hololinked)
+PyPI - [![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked)](https://pypistats.org/packages/hololinked) <br>
+Anaconda - [![Anaconda](https://anaconda.org/conda-forge/hololinked/badges/downloads.svg)](https://anaconda.org/conda-forge/hololinked) [![Anaconda](
+https://anaconda.org/conda-forge/hololinked/badges/latest_release_date.svg)](https://anaconda.org/conda-forge/hololinked/files)
 
 <!-- [![PyPI - Downloads](https://img.shields.io/pypi/dm/hololinked)](https://pypistats.org/packages/hololinked)  -->
 ### To Install
