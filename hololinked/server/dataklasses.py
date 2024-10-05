@@ -550,9 +550,7 @@ def get_organised_resources(instance):
     # Events
     for name, resource in inspect._getmembers(instance, lambda o : isinstance(o, Event), getattr_without_descriptor_read):
         assert isinstance(resource, Event), ("thing event query from inspect.ismethod is not an Event",
-                                    "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")
-        if getattr(instance, name, None):
-           continue 
+                                    "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")    
         # above assertion is only a typing convenience
         fullpath = f"{instance._full_URL_path_prefix}{resource.URL_path}"
         # resource._remote_info.unique_identifier = fullpath

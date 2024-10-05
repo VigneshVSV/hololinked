@@ -55,6 +55,7 @@ class ThingMeta(ParameterizedMetaclass):
     
     def __call__(mcls, *args, **kwargs):
         instance = super().__call__(*args, **kwargs)
+
         instance.__post_init__()
         return instance
     
@@ -127,16 +128,6 @@ class Thing(Parameterized, metaclass=ThingMeta):
                         URL_path='/object-info') # type: ThingInformation
     
 
-    def __new__(cls, *args, **kwargs):
-        obj = super().__new__(cls)
-        # defines some internal fixed attributes. attributes created by us that require no validation but 
-        # cannot be modified are called _internal_fixed_attributes
-        obj._internal_fixed_attributes = ['_internal_fixed_attributes', 'instance_resources',
-                                        '_httpserver_resources', '_zmq_resources', '_owner', 'rpc_server', 'message_broker',
-                                        '_event_publisher']        
-        return obj
-
-
     def __init__(self, *, instance_name : str, logger : typing.Optional[logging.Logger] = None, 
                 serializer : typing.Optional[JSONSerializer] = None, **kwargs) -> None:
         """
@@ -183,10 +174,10 @@ class Thing(Parameterized, metaclass=ThingMeta):
         self._owner : typing.Optional[Thing] = None 
         self._internal_fixed_attributes : typing.List[str]
         self._full_URL_path_prefix : str
+        self._gui = None # filler for a future feature
+        self._event_publisher = None # type : typing.Optional[EventPublisher]
         self.rpc_server  = None # type: typing.Optional[RPCServer]
         self.message_broker = None # type : typing.Optional[AsyncPollingZMQServer]
-        self._event_publisher = None # type : typing.Optional[EventPublisher]
-        self._gui = None # filler for a future feature
         # serializer
         if not isinstance(serializer, JSONSerializer) and serializer != 'json' and serializer is not None:
             raise TypeError("serializer key word argument must be JSONSerializer. If one wishes to use separate serializers " +
@@ -211,22 +202,9 @@ class Thing(Parameterized, metaclass=ThingMeta):
 
 
     def __post_init__(self):
-        self._prepare_resources() # bug fix, has to be called at two places, one here and one before run
+        self._prepare_resources()
         self.load_properties_from_DB()
         self.logger.info(f"initialialised Thing class {self.__class__.__name__} with instance name {self.instance_name}")
-
-
-    def __setattr__(self, __name: str, __value: typing.Any) -> None:
-        if  __name == '_internal_fixed_attributes' or __name in self._internal_fixed_attributes: 
-            # order of 'or' operation for above 'if' matters
-            if not hasattr(self, __name) or getattr(self, __name, None) is None:
-                # allow setting of fixed attributes once
-                super().__setattr__(__name, __value)
-            else:
-                raise AttributeError(f"Attempted to set {__name} more than once. " +
-                                     "Cannot assign a value to this variable after creation.")
-        else:
-            super().__setattr__(__name, __value)
 
 
     def _prepare_resources(self):
@@ -423,8 +401,9 @@ class Thing(Parameterized, metaclass=ThingMeta):
     @event_publisher.setter
     def event_publisher(self, value : EventPublisher) -> None:
         if self._event_publisher is not None:
-            raise AttributeError("Can set event publisher only once")
-        
+            if value is not self._event_publisher:
+                raise AttributeError("Can set event publisher only once")
+            
         def recusively_set_event_publisher(obj : Thing, publisher : EventPublisher) -> None:
             for name, evt in inspect._getmembers(obj, lambda o: isinstance(o, Event), getattr_without_descriptor_read):
                 assert isinstance(evt, Event), "object is not an event"
@@ -656,6 +635,5 @@ class Thing(Parameterized, metaclass=ThingMeta):
         http_server.tornado_instance.stop()
 
        
-
 
 
