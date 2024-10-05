@@ -463,7 +463,7 @@ class ObjectProxy:
 
 
     def subscribe_event(self, name : str, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable],
-                        thread_callbacks : bool = False) -> None:
+                        thread_callbacks : bool = False, deserialize = False) -> None:
         """
         Subscribe to event specified by name. Events are listened in separate threads and supplied callbacks are
         are also called in those threads. 
@@ -489,7 +489,7 @@ class ObjectProxy:
         if event._subscribed:
             event.add_callbacks(callbacks)
         else: 
-            event.subscribe(callbacks, thread_callbacks)
+            event.subscribe(callbacks, thread_callbacks, deserialize)
        
 
     def unsubscribe_event(self, name : str):
@@ -756,7 +756,7 @@ class _Property:
 class _Event:
     
     __slots__ = ['_zmq_client', '_name', '_obj_name', '_unique_identifier', '_socket_address', '_callbacks', '_serialization_specific',
-                    '_serializer', '_subscribed', '_thread', '_thread_callbacks', '_event_consumer', '_logger']
+                    '_serializer', '_subscribed', '_thread', '_thread_callbacks', '_event_consumer', '_logger', '_deserialize']
     # event subscription
     # Dont add class doc otherwise __doc__ in slots will conflict with class variable
 
@@ -772,6 +772,7 @@ class _Event:
         self._serializer = serializer
         self._logger = logger 
         self._subscribed = False
+        self._deserialize = False
 
     def add_callbacks(self, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable]) -> None:
         if not self._callbacks:
@@ -782,7 +783,7 @@ class _Event:
             self._callbacks.append(callbacks)
 
     def subscribe(self, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable], 
-                    thread_callbacks : bool = False):
+                    thread_callbacks : bool = False, deserialize : bool = False):
         self._event_consumer = EventConsumer(
                                     'zmq-' + self._unique_identifier if self._serialization_specific else self._unique_identifier, 
                                     self._socket_address, f"{self._name}|RPCEvent|{uuid.uuid4()}", b'PROXY',
@@ -790,6 +791,7 @@ class _Event:
                                 )
         self.add_callbacks(callbacks) 
         self._subscribed = True
+        self._deserialize = deserialize
         self._thread_callbacks = thread_callbacks
         self._thread = threading.Thread(target=self.listen)
         self._thread.start()
@@ -797,7 +799,7 @@ class _Event:
     def listen(self):
         while self._subscribed:
             try:
-                data = self._event_consumer.receive()
+                data = self._event_consumer.receive(deserialize=self._deserialize)
                 if data == 'INTERRUPT':
                     break
                 for cb in self._callbacks: 
