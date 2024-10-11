@@ -310,7 +310,18 @@ See a list of currently supported possibilities while using this package [below]
 
 > You may use a script deployment/automation tool to remote stop and start servers, in an attempt to remotely control your hardware scripts. 
 
-One may use the HTTP API according to one's beliefs (including letting the package auto-generate it), but it is mainly intended for web development and cross platform clients like the [node-wot](https://github.com/eclipse-thingweb/node-wot) HTTP(s) client. If your plan is to develop a truly networked system, it is recommended to learn more and use [Thing Descriptions](https://www.w3.org/TR/wot-thing-description11) to describe your hardware. A Thing Description will be automatically generated if absent as shown in JSON examples above or can be supplied manually. 
+### Looking for sponsorships
+
+Kindly read my message [in my README](https://github.com/VigneshVSV#sponsor)
+
+### A little more about Usage
+
+One may use the HTTP API according to one's beliefs (including letting the package auto-generate it), but it is mainly intended for web development and cross platform clients 
+like the [node-wot](https://github.com/eclipse-thingweb/node-wot) HTTP(s) client. If your plan is to develop a truly networked system, it is recommended to learn more and 
+se [Thing Descriptions](https://www.w3.org/TR/wot-thing-description11) to describe your hardware. A Thing Description will be automatically generated if absent as shown in 
+JSON examples above or can be supplied manually. 
+
+(client docs will be updated here next)
 
 ### Currently Supported
 
