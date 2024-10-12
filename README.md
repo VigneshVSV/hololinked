@@ -333,9 +333,8 @@ JSON examples above or can be supplied manually.
 - asyncio compatible - async RPC server event-loop and async HTTP Server - write methods in async 
 - choose from multiple ZeroMQ transport methods which offers some possibilities like the following without changing the code:
   - expose only a dashboard or web page on the network without exposing the hardware itself
-  - serve multiple objects with the same HTTP server
-  - run HTTP Server & python object in separate processes or the same process
   - run direct ZMQ-TCP server without HTTP details
+  - serve multiple objects with the same HTTP server, run HTTP Server & python object in separate processes or the same process
  
 Again, please check examples or the code for explanations. Documentation is being activety improved. 
 
