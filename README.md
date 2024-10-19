@@ -341,8 +341,8 @@ Again, please check examples or the code for explanations. Documentation is bein
 ### Currently being worked
 
 - unit tests coverage
-- improving accuracy of Thing Descriptions 
 - separation of HTTP protocol specification like URL path and HTTP verbs from the API of properties, actions and events and move their customization completely to the HTTP server 
+- improving accuracy of Thing Descriptions 
 - cookie credentials for authentication - as a workaround until credentials are supported, use `allowed_clients` argument on HTTP server which restricts access based on remote IP supplied with the HTTP headers. This wont still help you in public networks or modified/non-standard HTTP clients.
 
 
