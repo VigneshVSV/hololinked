@@ -83,6 +83,7 @@ class OceanOpticsSpectrometer(Thing):
         super().__init__(instance_name=instance_name, serial_number=serial_number, **kwargs)
 
 ```
+> There is an ongoing work to remove HTTP API from the property API and completely move them to the HTTP server
 
 In non-expert terms, properties look like class attributes however their data containers are instantiated at object instance level by default.
 For example, the `integration_time` property defined above as `Number`, whenever set/written, will be validated as a float or int, cropped to bounds and assigned as an attribute to each instance of the `OceanOpticsSpectrometer` class with an internally generated name. It is not necessary to know this internally generated name as the property value can be accessed again in any python logic, say, `print(self.integration_time)`. 
@@ -299,6 +300,7 @@ if __name__ == '__main__':
     # or O.run(zmq_protocols=['IPC', 'TCP'], tcp_socket_address='tcp://*:9999')
     # both interprocess communication & TCP, no HTTP 
 ```
+> There is an ongoing work to remove HTTP API from the API of all of properties, actions and events and completely move them to the HTTP server for a more accurate syntax. The functionality will not change though.
 
 Here one can see the use of `instance_name` and why it turns up in the URL path. See the detailed example of the above code [here](https://gitlab.com/hololinked-examples/oceanoptics-spectrometer/-/blob/simple/oceanoptics_spectrometer/device.py?ref_type=heads). 
 
@@ -318,9 +320,11 @@ Kindly read my message [in my README](https://github.com/VigneshVSV#sponsor)
 ### A little more about Usage
 
 One may use the HTTP API according to one's beliefs (including letting the package auto-generate it), but it is mainly intended for web development and cross platform clients 
-like the [node-wot](https://github.com/eclipse-thingweb/node-wot) HTTP(s) client. If your plan is to develop a truly networked system, it is recommended to learn more and 
-se [Thing Descriptions](https://www.w3.org/TR/wot-thing-description11) to describe your hardware. A Thing Description will be automatically generated if absent as shown in 
-JSON examples above or can be supplied manually. 
+like the interoperable [node-wot](https://github.com/eclipse-thingweb/node-wot) HTTP(s) client. If your plan is to develop a truly networked system, it is recommended to learn more and 
+se [Thing Descriptions](https://www.w3.org/TR/wot-thing-description11) to describe your hardware. A Thing Description will be automatically generated if absent as shown in JSON examples above or can be supplied manually. The default end point to 
+fetch thing descriptions are: <br> `http(s)://<host name>/<instance name of the thing>/resources/wot-td`
+If there are errors in generation of Thing Description
+(mostly due to JSON non-complaint types), one could use: <br> `http(s)://<host name>/<instance name of the thing>/resources/wot-td?ignore_errors=true`
 
 (client docs will be updated here next)
 
@@ -342,6 +346,7 @@ Again, please check examples or the code for explanations. Documentation is bein
 
 - unit tests coverage
 - separation of HTTP protocol specification like URL path and HTTP verbs from the API of properties, actions and events and move their customization completely to the HTTP server 
+- serve multiple things with the same server (unfortunately due to a small oversight it is currently somewhat difficult for end user to serve multiple things with the same server, although its possible. This will be fixed.)
 - improving accuracy of Thing Descriptions 
 - cookie credentials for authentication - as a workaround until credentials are supported, use `allowed_clients` argument on HTTP server which restricts access based on remote IP supplied with the HTTP headers. This wont still help you in public networks or modified/non-standard HTTP clients.
 
