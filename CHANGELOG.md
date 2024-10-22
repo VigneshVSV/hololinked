@@ -15,8 +15,13 @@ New:
 - pydantic support for property models 
 
 Bug Fixes:
-- retrieve unserialized data from events with `ObjectProxy` (like JPEG images) by setting `deserialize=False` in `subscribe_event()` ✓ 
 - composed sub`Thing`s exposed with correct URL path ✓ 
+
+## [v0.2.7] - 2024-10-22
+
+- HTTP SSE would previously remain unclosed when client abruptly disconnected (like closing a browser tab), but now it would close correctly
+- retrieve unserialized data from events with `ObjectProxy` (like JPEG images) by setting `deserialize=False` in `subscribe_event()` 
+- 
 
 ## [v0.2.6] - 2024-09-09
 
