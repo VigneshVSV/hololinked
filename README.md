@@ -16,9 +16,10 @@ For those that understand, this package is a ZMQ/HTTP-RPC.
 
 ### To Install
 
-From pip - ``pip install hololinked``
+From pip - ``pip install hololinked`` 
+From conda -  `conda install -c conda-forge hololinked`
 
-Or, clone the repository (develop branch for latest codebase) and install `pip install .` / `pip install -e .`. The conda env ``hololinked.yml`` can also help to setup all dependencies. 
+Or, clone the repository (main branch for latest codebase) and install `pip install .` / `pip install -e .`. The conda env ``hololinked.yml`` can also help to setup all dependencies. 
 
 ### Usage/Quickstart
 
