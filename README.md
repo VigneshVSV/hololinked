@@ -316,7 +316,7 @@ See a list of currently supported possibilities while using this package [below]
 
 ### Looking for sponsorships
 
-Kindly read my message [in my README](https://github.com/VigneshVSV#sponsor)
+Kindly read my message [in my GitHub profile](https://github.com/sponsors/VigneshVSV).
 
 ### A little more about Usage
 
