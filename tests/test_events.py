@@ -27,7 +27,7 @@ class TestThing(Thing):
     def _push_worker(self):
         for i in range(100):
             self.test_event.push('test data')
-            time.sleep(0.01)
+            time.sleep(0.01) # 10ms
 
 
 

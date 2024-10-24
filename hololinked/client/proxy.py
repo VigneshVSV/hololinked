@@ -463,7 +463,7 @@ class ObjectProxy:
 
 
     def subscribe_event(self, name : str, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable],
-                        thread_callbacks : bool = False) -> None:
+                        thread_callbacks : bool = False, deserialize : bool = True) -> None:
         """
         Subscribe to event specified by name. Events are listened in separate threads and supplied callbacks are
         are also called in those threads. 
@@ -489,7 +489,7 @@ class ObjectProxy:
         if event._subscribed:
             event.add_callbacks(callbacks)
         else: 
-            event.subscribe(callbacks, thread_callbacks)
+            event.subscribe(callbacks, thread_callbacks, deserialize)
        
 
     def unsubscribe_event(self, name : str):
@@ -567,7 +567,7 @@ class ObjectProxy:
             elif data.what == ResourceTypes.EVENT:
                 assert isinstance(data, ServerSentEvent)
                 event = _Event(self.zmq_client, data.name, data.obj_name, data.unique_identifier, data.socket_address, 
-                            serializer=self.zmq_client.zmq_serializer, logger=self.logger)
+                            serialization_specific=data.serialization_specific, serializer=self.zmq_client.zmq_serializer, logger=self.logger)
                 _add_event(self, event, data)
                 self.__dict__[data.name] = event 
 
@@ -755,21 +755,24 @@ class _Property:
 
 class _Event:
     
-    __slots__ = ['_zmq_client', '_name', '_obj_name', '_unique_identifier', '_socket_address', '_callbacks',
-                    '_serializer', '_subscribed', '_thread', '_thread_callbacks', '_event_consumer', '_logger']
+    __slots__ = ['_zmq_client', '_name', '_obj_name', '_unique_identifier', '_socket_address', '_callbacks', '_serialization_specific',
+                    '_serializer', '_subscribed', '_thread', '_thread_callbacks', '_event_consumer', '_logger', '_deserialize']
     # event subscription
     # Dont add class doc otherwise __doc__ in slots will conflict with class variable
 
     def __init__(self, client : SyncZMQClient, name : str, obj_name : str, unique_identifier : str, socket : str, 
-                    serializer : BaseSerializer = None, logger : logging.Logger = None) -> None:
+                    serialization_specific : bool = False, serializer : BaseSerializer = None, logger : logging.Logger = None) -> None:
+        self._zmq_client = client
         self._name = name
         self._obj_name = obj_name
         self._unique_identifier = unique_identifier
         self._socket_address = socket
+        self._serialization_specific = serialization_specific
         self._callbacks = None 
         self._serializer = serializer
         self._logger = logger 
         self._subscribed = False
+        self._deserialize = True
 
     def add_callbacks(self, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable]) -> None:
         if not self._callbacks:
@@ -780,12 +783,15 @@ class _Event:
             self._callbacks.append(callbacks)
 
     def subscribe(self, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable], 
-                    thread_callbacks : bool = False):
-        self._event_consumer = EventConsumer(self._unique_identifier, self._socket_address, 
-                                f"{self._name}|RPCEvent|{uuid.uuid4()}", b'PROXY',
-                                zmq_serializer=self._serializer, logger=self._logger)
+                    thread_callbacks : bool = False, deserialize : bool = True):
+        self._event_consumer = EventConsumer(
+                                    'zmq-' + self._unique_identifier if self._serialization_specific else self._unique_identifier, 
+                                    self._socket_address, f"{self._name}|RPCEvent|{uuid.uuid4()}", b'PROXY',
+                                    zmq_serializer=self._serializer, logger=self._logger
+                                )
         self.add_callbacks(callbacks) 
         self._subscribed = True
+        self._deserialize = deserialize
         self._thread_callbacks = thread_callbacks
         self._thread = threading.Thread(target=self.listen)
         self._thread.start()
@@ -793,7 +799,7 @@ class _Event:
     def listen(self):
         while self._subscribed:
             try:
-                data = self._event_consumer.receive()
+                data = self._event_consumer.receive(deserialize=self._deserialize)
                 if data == 'INTERRUPT':
                     break
                 for cb in self._callbacks: 

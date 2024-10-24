@@ -22,9 +22,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-import json
 import pickle
-from msgspec import json, msgpack 
+from msgspec import json as msgspecjson, msgpack 
 import json as pythonjson
 import inspect
 import array
@@ -35,6 +34,11 @@ import typing
 import warnings
 from enum import Enum
 from collections import deque
+
+try:
+    import numpy 
+except ImportError:
+    pass 
 
 from ..param.parameters import TypeConstrainedList, TypeConstrainedDict, TypedKeyMappingsConstrainedDict
 from .constants import JSONSerializable, Serializers
@@ -82,15 +86,15 @@ class JSONSerializer(BaseSerializer):
 
     def __init__(self) -> None:
         super().__init__()
-        self.type = json
+        self.type = msgspecjson
 
     def loads(self, data : typing.Union[bytearray, memoryview, bytes]) -> JSONSerializable:
         "method called by ZMQ message brokers to deserialize data"
-        return json.decode(self.convert_to_bytes(data))
+        return msgspecjson.decode(self.convert_to_bytes(data))
     
     def dumps(self, data) -> bytes:
         "method called by ZMQ message brokers to serialize data"
-        return json.encode(data, enc_hook=self.default)
+        return msgspecjson.encode(data, enc_hook=self.default)
       
     @classmethod
     def default(cls, obj) -> JSONSerializable:
@@ -118,6 +122,8 @@ class JSONSerializer(BaseSerializer):
                 return obj.tostring()
             if obj.typecode == 'u':
                 return obj.tounicode()
+            return obj.tolist()
+        if 'numpy' in globals() and isinstance(obj, numpy.ndarray):
             return obj.tolist()
         replacer = cls._type_replacements.get(type(obj), None)
         if replacer:

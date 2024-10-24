@@ -55,6 +55,7 @@ class ThingMeta(ParameterizedMetaclass):
     
     def __call__(mcls, *args, **kwargs):
         instance = super().__call__(*args, **kwargs)
+
         instance.__post_init__()
         return instance
     
@@ -81,7 +82,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
     Subclass from here to expose python objects on the network (with HTTP/TCP) or to other processes (ZeroMQ)
     """
 
-    __server_type__ = ServerTypes.THING
+    __server_type__ = ServerTypes.THING # not a server, this needs to be removed.
    
     # local properties
     instance_name = String(default=None, regex=r'[A-Za-z]+[A-Za-z_0-9\-\/]*', constant=True, remote=False,
@@ -107,7 +108,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
                         remote=False, isinstance=False,
                         doc="""Validator for JSON schema. If not supplied, a default JSON schema validator is created.""") # type: BaseSchemaValidator
     
-    # remote paramerters
+    # remote properties
     state = String(default=None, allow_None=True, URL_path='/state', readonly=True, observable=True, 
                 fget=lambda self : self.state_machine.current_state if hasattr(self, 'state_machine') else None,  
                 doc="current state machine's state if state machine present, None indicates absence of state machine.") #type: typing.Optional[str]
@@ -126,16 +127,6 @@ class Thing(Parameterized, metaclass=ThingMeta):
     object_info = Property(doc="contains information about this object like the class name, script location etc.",
                         URL_path='/object-info') # type: ThingInformation
     
-
-    def __new__(cls, *args, **kwargs):
-        obj = super().__new__(cls)
-        # defines some internal fixed attributes. attributes created by us that require no validation but 
-        # cannot be modified are called _internal_fixed_attributes
-        obj._internal_fixed_attributes = ['_internal_fixed_attributes', 'instance_resources',
-                                        '_httpserver_resources', '_zmq_resources', '_owner', 'rpc_server', 'message_broker',
-                                        '_event_publisher']        
-        return obj
-
 
     def __init__(self, *, instance_name : str, logger : typing.Optional[logging.Logger] = None, 
                 serializer : typing.Optional[JSONSerializer] = None, **kwargs) -> None:
@@ -183,10 +174,10 @@ class Thing(Parameterized, metaclass=ThingMeta):
         self._owner : typing.Optional[Thing] = None 
         self._internal_fixed_attributes : typing.List[str]
         self._full_URL_path_prefix : str
+        self._gui = None # filler for a future feature
+        self._event_publisher = None # type : typing.Optional[EventPublisher]
         self.rpc_server  = None # type: typing.Optional[RPCServer]
         self.message_broker = None # type : typing.Optional[AsyncPollingZMQServer]
-        self._event_publisher = None # type : typing.Optional[EventPublisher]
-        self._gui = None # filler for a future feature
         # serializer
         if not isinstance(serializer, JSONSerializer) and serializer != 'json' and serializer is not None:
             raise TypeError("serializer key word argument must be JSONSerializer. If one wishes to use separate serializers " +
@@ -214,19 +205,6 @@ class Thing(Parameterized, metaclass=ThingMeta):
         self._prepare_resources()
         self.load_properties_from_DB()
         self.logger.info(f"initialialised Thing class {self.__class__.__name__} with instance name {self.instance_name}")
-
-
-    def __setattr__(self, __name: str, __value: typing.Any) -> None:
-        if  __name == '_internal_fixed_attributes' or __name in self._internal_fixed_attributes: 
-            # order of 'or' operation for above 'if' matters
-            if not hasattr(self, __name) or getattr(self, __name, None) is None:
-                # allow setting of fixed attributes once
-                super().__setattr__(__name, __value)
-            else:
-                raise AttributeError(f"Attempted to set {__name} more than once. " +
-                                     "Cannot assign a value to this variable after creation.")
-        else:
-            super().__setattr__(__name, __value)
 
 
     def _prepare_resources(self):
@@ -302,7 +280,9 @@ class Thing(Parameterized, metaclass=ThingMeta):
     @object_info.setter
     def _set_object_info(self, value):
         self._object_info = ThingInformation(**value)  
-
+        for name, thing in inspect._getmembers(self, lambda o: isinstance(o, Thing), getattr_without_descriptor_read):
+            thing._object_info.http_server = self._object_info.http_server
+           
     
     @property
     def properties(self) -> ClassProperties:
@@ -421,8 +401,9 @@ class Thing(Parameterized, metaclass=ThingMeta):
     @event_publisher.setter
     def event_publisher(self, value : EventPublisher) -> None:
         if self._event_publisher is not None:
-            raise AttributeError("Can set event publisher only once")
-        
+            if value is not self._event_publisher:
+                raise AttributeError("Can set event publisher only once")
+            
         def recusively_set_event_publisher(obj : Thing, publisher : EventPublisher) -> None:
             for name, evt in inspect._getmembers(obj, lambda o: isinstance(o, Event), getattr_without_descriptor_read):
                 assert isinstance(evt, Event), "object is not an event"
@@ -472,7 +453,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
     
 
     @action(URL_path='/resources/wot-td', http_method=HTTP_METHODS.GET)
-    def get_thing_description(self, authority : typing.Optional[str] = None): 
+    def get_thing_description(self, authority : typing.Optional[str] = None, ignore_errors : bool = False): 
                             # allow_loose_schema : typing.Optional[bool] = False): 
         """
         generate thing description schema of Web of Things https://www.w3.org/TR/wot-thing-description11/.
@@ -487,8 +468,11 @@ class Thing(Parameterized, metaclass=ThingMeta):
             'http://my-pc:9090' or 'https://IT-given-domain-name'. If absent, a value will be automatically
             given using ``socket.gethostname()`` and the port at which the last HTTPServer (``hololinked.server.HTTPServer``) 
             attached to this object was running.
-
-        Returns:
+        ignore_errors: bool, optional, Default False
+            if True, offending interaction affordances will be removed from the schema. This is useful to build partial but working
+            schema always.             
+        Returns
+        -------
         hololinked.wot.td.ThingDescription
             represented as an object in python, gets automatically serialized to JSON when pushed out of the socket. 
         """
@@ -498,7 +482,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         #     In other words, schema validation will always pass.  
         from .td import ThingDescription
         return ThingDescription(instance=self, authority=authority or self._object_info.http_server,
-                                    allow_loose_schema=False).produce() #allow_loose_schema)   
+                                    allow_loose_schema=False, ignore_errors=ignore_errors).produce() #allow_loose_schema)   
 
 
     @action(URL_path='/exit', http_method=HTTP_METHODS.POST)                                                                                                                                          
@@ -515,7 +499,11 @@ class Thing(Parameterized, metaclass=ThingMeta):
             raise BreakInnerLoop # stops the inner loop of the object
         else:
             warnings.warn("call exit on the top object, composed objects cannot exit the loop.", RuntimeWarning)
- 
+    
+    @action()
+    def ping(self) -> None:
+        """ping the Thing to see if it is alive"""
+        pass 
 
     def run(self, 
             zmq_protocols : typing.Union[typing.Sequence[ZMQ_PROTOCOLS], 
@@ -550,6 +538,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         #     expose the associated Eventloop which executes the object. This is generally useful for remotely 
         #     adding more objects to the same event loop.
         # dont specify http server as a kwarg, as the other method run_with_http_server has to be used
+        self._prepare_resources()
         context = kwargs.get('context', None)
         if context is not None and not isinstance(context, zmq.asyncio.Context):
             raise TypeError("context must be an instance of zmq.asyncio.Context")
@@ -583,8 +572,8 @@ class Thing(Parameterized, metaclass=ThingMeta):
             httpserver = kwargs.pop('http_server')
             assert isinstance(httpserver, HTTPServer)
             httpserver._zmq_protocol = ZMQ_PROTOCOLS.INPROC
-            httpserver._zmq_socket_context = context
-            httpserver._zmq_event_context = self.event_publisher.context
+            httpserver._zmq_inproc_socket_context = context
+            httpserver._zmq_inproc_event_context = self.event_publisher.context
             assert httpserver.all_ok
             httpserver.tornado_instance.listen(port=httpserver.port, address=httpserver.address)
         self.event_loop.run()
@@ -646,6 +635,5 @@ class Thing(Parameterized, metaclass=ThingMeta):
         http_server.tornado_instance.stop()
 
        
-
 
 

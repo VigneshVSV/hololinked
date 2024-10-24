@@ -162,6 +162,7 @@ class TestThing(TestCase):
     def test_8_resource_generation(self):
         # basic test only to make sure nothing is fundamentally wrong
         thing = self.thing_cls(instance_name="test_servers_init", log_level=logging.WARN)
+        # thing._prepare_resources()
         self.assertIsInstance(thing.get_thing_description(), dict)
         self.assertIsInstance(thing.httpserver_resources, dict)
         self.assertIsInstance(thing.zmq_resources, dict)

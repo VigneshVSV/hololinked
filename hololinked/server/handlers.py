@@ -215,6 +215,9 @@ class EventHandler(BaseHandler):
     """
     handles events emitted by ``Thing`` and tunnels them as HTTP SSE. 
     """
+    def initialize(self, resource, validator: BaseSchemaValidator, owner=None) -> None:
+        super().initialize(resource, validator, owner)
+        self.data_header = b'data: %s\n\n'
 
     def set_headers(self) -> None:
         """
@@ -271,9 +274,8 @@ class EventHandler(BaseHandler):
             event_consumer = event_consumer_cls(self.resource.unique_identifier, self.resource.socket_address, 
                                             identity=f"{self.resource.unique_identifier}|HTTPEvent|{uuid.uuid4()}",
                                             logger=self.logger, http_serializer=self.serializer, 
-                                            context=self.owner._zmq_event_context if self.resource.socket_address.startswith('inproc') else None)
+                                            context=self.owner._zmq_inproc_event_context if self.resource.socket_address.startswith('inproc') else None)
             event_loop = asyncio.get_event_loop()
-            data_header = b'data: %s\n\n'
             self.set_status(200)
         except Exception as ex:
             self.logger.error(f"error while subscribing to event - {str(ex)}")
@@ -289,16 +291,17 @@ class EventHandler(BaseHandler):
                     data = await event_loop.run_in_executor(None, self.receive_blocking_event, event_consumer)
                 if data:
                     # already JSON serialized 
-                    self.write(data_header % data)
-                    await self.flush()
+                    self.write(self.data_header % data)
+                    await self.flush() # log after flushing just to be sure
                     self.logger.debug(f"new data sent - {self.resource.name}")
                 else:
-                    self.logger.debug(f"found no new data")
+                    self.logger.debug(f"found no new data - {self.resource.name}")
+                    await self.flush() # heartbeat - raises StreamClosedError if client disconnects
             except StreamClosedError:
                 break 
             except Exception as ex:
                 self.logger.error(f"error while pushing event - {str(ex)}")
-                self.write(data_header % self.serializer.dumps(
+                self.write(self.data_header % self.serializer.dumps(
                     {"exception" : format_exception_as_json(ex)}))
         try:
             if isinstance(self.owner._zmq_inproc_event_context, zmq.asyncio.Context):
@@ -307,42 +310,22 @@ class EventHandler(BaseHandler):
             self.logger.error(f"error while closing event consumer - {str(ex)}" )
 
 
-class ImageEventHandler(EventHandler):
+class JPEGImageEventHandler(EventHandler):
     """
     handles events with images with image data header
     """
+    def initialize(self, resource, validator: BaseSchemaValidator, owner = None) -> None:
+        super().initialize(resource, validator, owner)
+        self.data_header = b'data:image/jpeg;base64,%s\n\n'
 
-    async def handle_datastream(self) -> None:
-        try:
-            event_consumer = AsyncEventConsumer(self.resource.unique_identifier, self.resource.socket_address, 
-                            f"{self.resource.unique_identifier}|HTTPEvent|{uuid.uuid4()}", 
-                            http_serializer=self.serializer, logger=self.logger,
-                            context=self.owner._zmq_event_context if self.resource.socket_address.startswith('inproc') else None)         
-            self.set_header("Content-Type", "application/x-mpegURL")
-            self.write("#EXTM3U\n")
-            delimiter = "#EXTINF:{},\n"
-            data_header = b'data:image/jpeg;base64,%s\n'
-            while True:
-                try:
-                    data = await event_consumer.receive(timeout=10000, deserialize=False)
-                    if data:
-                        # already serialized 
-                        self.write(delimiter)
-                        self.write(data_header % data)
-                        await self.flush()
-                        self.logger.debug(f"new image sent - {self.resource.name}")
-                    else:
-                        self.logger.debug(f"found no new data")
-                except StreamClosedError:
-                    break 
-                except Exception as ex:
-                    self.logger.error(f"error while pushing event - {str(ex)}")
-                    self.write(data_header % self.serializer.dumps(
-                        {"exception" : format_exception_as_json(ex)}))
-            event_consumer.exit()
-        except Exception as ex:
-            self.write(data_header % self.serializer.dumps(
-                        {"exception" : format_exception_as_json(ex)}))
+
+class PNGImageEventHandler(EventHandler):
+    """
+    handles events with images with image data header
+    """
+    def initialize(self, resource, validator: BaseSchemaValidator, owner = None) -> None:
+        super().initialize(resource, validator, owner)
+        self.data_header = b'data:image/png;base64,%s\n\n'
     
 
 

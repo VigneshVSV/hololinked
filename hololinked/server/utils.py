@@ -63,7 +63,8 @@ def pep8_to_URL_path(word : str) -> str:
         >>> pep8_to_dashed_URL("device_type")
         'device-type'
     """
-    return re.sub(r'_+', '-', word.lstrip('_').rstrip('_'))
+    val = re.sub(r'_+', '-', word.lstrip('_').rstrip('_'))
+    return val.replace(' ', '-')
 
 
 def get_default_logger(name : str, log_level : int = logging.INFO, log_file = None,
@@ -108,6 +109,7 @@ def run_coro_sync(coro : typing.Coroutine):
         eventloop = asyncio.get_event_loop()
     except RuntimeError:
         eventloop = asyncio.new_event_loop()
+        asyncio.set_event_loop(eventloop)
     if eventloop.is_running():
         raise RuntimeError(f"asyncio event loop is already running, cannot setup coroutine {coro.__name__} to run sync, please await it.")
         # not the same as RuntimeError catch above.  
@@ -125,6 +127,7 @@ def run_callable_somehow(method : typing.Union[typing.Callable, typing.Coroutine
         eventloop = asyncio.get_event_loop()
     except RuntimeError:
         eventloop = asyncio.new_event_loop()
+        asyncio.set_event_loop(eventloop)
     if asyncio.iscoroutinefunction(method):
         coro = method()
     else:
@@ -231,7 +234,8 @@ __all__ = [
     run_coro_sync.__name__,
     run_callable_somehow.__name__,
     get_signature.__name__,
-    isclassmethod.__name__
+    isclassmethod.__name__,
+    issubklass.__name__
 ]
 
 

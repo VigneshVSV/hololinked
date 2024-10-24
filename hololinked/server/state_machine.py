@@ -3,12 +3,13 @@ import inspect
 from types import FunctionType, MethodType
 from enum import EnumMeta, Enum, StrEnum
 
-from ..param.parameterized import Parameterized
+from ..param.parameterized import Parameterized, edit_constant
 from .utils import getattr_without_descriptor_read
+from .exceptions import StateMachineError
 from .dataklasses import RemoteResourceInfoValidator
 from .property import Property
 from .properties import ClassSelector, TypedDict, Boolean
-from .events import Event
+
 
 
 
@@ -28,7 +29,7 @@ class StateMachine:
     on_exit = TypedDict(default=None, allow_None=True, key_type=str,
                         doc="""callbacks to execute when certain state is exited; 
                         specfied as map with state as keys and callbacks as list""") # typing.Dict[str, typing.List[typing.Callable]]
-    machine = TypedDict(default=None, allow_None=True, key_type=str, item_type=(list, tuple),
+    machine = TypedDict(default=None, allow_None=True, item_type=(list, tuple), key_type=str, # i.e. its like JSON
                         doc="the machine specification with state as key and objects as list") # typing.Dict[str, typing.List[typing.Callable, Property]]
     valid = Boolean(default=False, readonly=True, fget=lambda self: self._valid, 
                         doc="internally computed, True if states, initial_states and the machine is valid")
@@ -85,8 +86,10 @@ class StateMachine:
         owner_methods = [obj[0] for obj in inspect._getmembers(owner, inspect.ismethod, getattr_without_descriptor_read)]
         
         if isinstance(self.states, list):
+            self.__class__.states.constant = False 
             self.states = tuple(self.states) # freeze the list of states
-      
+            self.__class__.states.constant = True   
+            
         # first validate machine
         for state, objects in self.machine.items():
             if state in self:
@@ -107,7 +110,7 @@ class StateMachine:
                         raise AttributeError(f"Object {resource} was not made remotely accessible," + 
                                     " use state machine with properties and actions only.")
             else:
-                raise AttributeError("Given state {} not in states Enum {}".format(state, self.states.__members__))
+                raise StateMachineError("Given state {} not in states Enum {}".format(state, self.states.__members__))
             
         # then the callbacks 
         for state, objects in self.on_enter.items():
