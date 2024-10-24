@@ -16,7 +16,7 @@ For those that understand, this package is a ZMQ/HTTP-RPC.
 
 ### To Install
 
-From pip - ``pip install hololinked`` 
+From pip - ``pip install hololinked`` <br>
 From conda -  `conda install -c conda-forge hololinked`
 
 Or, clone the repository (main branch for latest codebase) and install `pip install .` / `pip install -e .`. The conda env ``hololinked.yml`` can also help to setup all dependencies. 
@@ -28,7 +28,7 @@ Each device or thing can be controlled systematically when their design in softw
 - the hardware is (generally) represented by a class 
 - properties are validated get-set attributes of the class which may be used to model settings, hold captured/computed data or generic network accessible quantities
 - actions are methods which issue commands like connect/disconnect, execute a control routine, start/stop measurement, or run arbitray python logic
-- events can asynchronously communicate/push (arbitrary) data to a client (say, a GUI), like alarm messages, streaming measured quantities etc.
+- events can asynchronously communicate/push arbitrary data to a client, like alarm messages, streaming measured quantities etc.
 
 In this package, the base class which enables this classification is the `Thing` class. Any class that inherits the `Thing` class 
 can instantiate properties, actions and events which become visible to a client in this segragated manner. For example, consider an optical spectrometer, the following code is possible:
