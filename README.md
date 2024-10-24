@@ -323,7 +323,7 @@ Kindly read my message [in my README](https://github.com/VigneshVSV#sponsor)
 One may use the HTTP API according to one's beliefs (including letting the package auto-generate it), but it is mainly intended for web development and cross platform clients 
 like the interoperable [node-wot](https://github.com/eclipse-thingweb/node-wot) HTTP(s) client. If your plan is to develop a truly networked system, it is recommended to learn more and 
 se [Thing Descriptions](https://www.w3.org/TR/wot-thing-description11) to describe your hardware. A Thing Description will be automatically generated if absent as shown in JSON examples above or can be supplied manually. The default end point to 
-fetch thing descriptions are: <br> `http(s)://<host name>/<instance name of the thing>/resources/wot-td`
+fetch thing descriptions are: <br> `http(s)://<host name>/<instance name of the thing>/resources/wot-td` <br>
 If there are errors in generation of Thing Description
 (mostly due to JSON non-complaint types), one could use: <br> `http(s)://<host name>/<instance name of the thing>/resources/wot-td?ignore_errors=true`
 
