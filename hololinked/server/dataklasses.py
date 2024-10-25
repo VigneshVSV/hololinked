@@ -401,6 +401,20 @@ class ServerSentEvent(SerializableDataclass):
     what : str = field(default=ResourceTypes.EVENT)
 
 
+class SubThing(SerializableDataclass):
+    """
+    A sub-thing is a child thing of a parent thing. It is used to store information about the child thing 
+    for the parent thing to be able to expose it to the network. 
+
+    Attributes
+    ----------
+    qualified_instance_name : str
+        the fully qualified name of the child thing
+    """
+    qualified_instance_name : str
+    
+
+
 def build_our_temp_TD(instance):
     """
     A temporary extension of TD used to build GUI of thing control panel.
@@ -571,7 +585,7 @@ def get_organised_resources(instance):
             continue
         resource._owner = instance      
         resource._prepare_resources()
-        httpserver_resources.update(resource.httpserver_resources)
+        # httpserver_resources.update(resource.httpserver_resources)
         # zmq_resources.update(resource.zmq_resources)
         instance_resources.update(resource.instance_resources)
    
