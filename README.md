@@ -136,7 +136,7 @@ Those familiar with Web of Things (WoT) terminology may note that these properti
 },
 ```
 If you are <span style="text-decoration: underline">not familiar</span> with Web of Things or the term "property affordance", consider the above JSON as a description of 
-what the property represents and how to interact with it from somewhere else. Such a JSON is both human-readable, yet consumable by any application that may use the property, say a client provider to create a client object to interact with the property or a GUI application to autogenerate a suitable input field for this property. 
+what the property represents and how to interact with it from somewhere else. Such a JSON is both human-readable, yet consumable by any application that may use the property - say, a client provider to create a client object to interact with the property or a GUI application to autogenerate a suitable input field for this property. 
 For example, the Eclipse ThingWeb [node-wot](https://github.com/eclipse-thingweb/node-wot) supports this feature to produce a HTTP(s) client that can issue `readProperty("integration_time")` and `writeProperty("integration_time", 1000)` to read and write this property.
 
 The URL path segment `../spectrometer/..` in href field is taken from the `instance_name` which was specified in the `__init__`. 
