@@ -1,10 +1,8 @@
-import datetime
-import logging
-import unittest
-import time
-import os
+import logging, unittest, time, os
+import pydantic_core
+from pydantic import BaseModel
 from hololinked.client import ObjectProxy
-from hololinked.server import action, Thing, global_config
+from hololinked.server import action, Thing, Property
 from hololinked.server.properties import Number, String, Selector, List, Integer
 from hololinked.server.database import BaseDB
 try:
@@ -38,6 +36,30 @@ class TestThing(Thing):
                         doc="A selector property to check persistence to db on write operations")
     non_remote_number_prop = Number(default=5, remote=False,
                         doc="A non remote number property to check non-availability on client")
+    
+
+    class PydanticProp(BaseModel):
+        foo : str
+        bar : int
+        foo_bar : float
+
+
+    pydantic_prop = Property(default=None, allow_None=True, model=PydanticProp, 
+                        doc="A property with a pydantic model to check RW")
+
+    pydantic_simple_prop = Property(default=None, allow_None=True, model='int', 
+                        doc="A property with a simple pydantic model to check RW")
+
+    schema = {
+        "type" : "string",
+        "minLength" : 1,
+        "maxLength" : 10,
+        "pattern" : "^[a-z]+$"
+    }
+
+    json_schema_prop = Property(default=None, allow_None=True, model=schema, 
+                        doc="A property with a json schema to check RW")
+
 
     @observable_readonly_prop.getter
     def get_observable_readonly_prop(self):
@@ -80,6 +102,7 @@ class TestProperty(TestCase):
 
 
     def test_1_client_api(self):
+        """basic read write tests for properties involing the dot operator"""
         # Test read
         self.assertEqual(self.thing_client.number_prop, 0)
         # Test write
@@ -216,5 +239,44 @@ class TestProperty(TestCase):
         self.assertEqual(thing.db_init_int_prop, 101)
 
 
+    def test_5_json_schema_property(self):
+        """Test json schema based property"""
+        self.thing_client.json_schema_prop = 'hello'
+        self.assertEqual(self.thing_client.json_schema_prop, 'hello')
+        self.thing_client.json_schema_prop = 'world'
+        self.assertEqual(self.thing_client.json_schema_prop, 'world')
+        with self.assertRaises(Exception) as ex:
+            self.thing_client.json_schema_prop = 'world1'
+        self.assertTrue("Failed validating 'pattern' in schema:" in str(ex.exception))
+
+
+    def test_6_pydantic_model_property(self):
+        """Test pydantic model based property"""
+        valid_value = {
+            'foo': 'foo',
+            'bar': 1,
+            'foo_bar': 1.0
+        }
+        self.thing_client.pydantic_prop = valid_value
+        self.assertEqual(self.thing_client.pydantic_prop, valid_value)
+
+        invalid_value = {
+            'foo': 1,
+            'bar': '1',
+            'foo_bar': 1.0
+        }    
+        with self.assertRaises(Exception) as ex:
+            self.thing_client.pydantic_prop = invalid_value
+        self.assertTrue("validation error for PydanticProp" in str(ex.exception))
+
+        self.thing_client.pydantic_simple_prop = 5
+        self.assertEqual(self.thing_client.pydantic_simple_prop, 5)
+        with self.assertRaises(Exception) as ex:
+            self.thing_client.pydantic_simple_prop = '5str'
+        self.assertTrue("validation error for 'int'" in str(ex.exception))
+
+
+
 if __name__ == '__main__':
     unittest.main(testRunner=TestRunner())
+  
