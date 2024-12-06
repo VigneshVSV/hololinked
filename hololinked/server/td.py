@@ -240,7 +240,7 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
             form.href = f"{authority}{owner._full_URL_path_prefix}{property._observable_event_descriptor.URL_path}"
             form.htv_methodName = "GET"
             form.subprotocol = "sse"
-            form.contentType = "text/plain"
+            form.contentType = "application/json"
             self.forms.append(form.asdict())
 
 

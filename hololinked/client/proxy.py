@@ -783,7 +783,7 @@ class _Event:
             self._callbacks.append(callbacks)
 
     def subscribe(self, callbacks : typing.Union[typing.List[typing.Callable], typing.Callable], 
-                    thread_callbacks : bool = False, deserialize : bool = True):
+                    thread_callbacks : bool = False, deserialize : bool = True) -> None:
         self._event_consumer = EventConsumer(
                                     'zmq-' + self._unique_identifier if self._serialization_specific else self._unique_identifier, 
                                     self._socket_address, f"{self._name}|RPCEvent|{uuid.uuid4()}", b'PROXY',

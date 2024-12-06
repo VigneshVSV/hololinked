@@ -1,13 +1,14 @@
 import typing
 from types import FunctionType, MethodType
 from enum import Enum
-import warnings
+
 
 from ..param.parameterized import Parameter, ClassParameters, Parameterized, ParameterizedMetaclass
 from .utils import issubklass, pep8_to_URL_path
 from .dataklasses import RemoteResourceInfoValidator
 from .constants import USE_OBJECT_NAME, HTTP_METHODS
 from .events import Event, EventDispatcher
+from .schema_validators import JsonSchemaValidator
 
 
 
@@ -110,7 +111,7 @@ class Property(Parameter):
 
     """
 
-    __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', 'model', '_remote_info', 
+    __slots__ = ['db_persist', 'db_init', 'db_commit', 'metadata', 'model', '_json_validator', '_remote_info', 
                 '_observable', '_observable_event_descriptor', 'fcomparator', '_old_value_internal_name']
     
     # RPC only init - no HTTP methods for those who dont like
@@ -186,9 +187,13 @@ class Property(Parameter):
                 isproperty=True
             )
         self.model = None
+        self._json_validator = None
         if model:
-            self.model = wrap_plain_types_in_rootmodel(model)
-
+            if isinstance(model, BaseModel):
+                self.model = wrap_plain_types_in_rootmodel(model)
+            elif issubclass(model, dict):
+                self._json_validator = JsonSchemaValidator(model)
+               
 
     def __set_name__(self, owner: typing.Any, attrib_name: str) -> None:
         super().__set_name__(owner, attrib_name)
@@ -209,7 +214,13 @@ class Property(Parameter):
                     ) # type: Event
             self._observable_event_descriptor.__set_name__(owner, _observable_event_name)
             setattr(owner, _observable_event_name, self._observable_event_descriptor)
-          
+    
+
+    def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass) -> typing.Any:
+        read_value = super().__get__(obj, objtype)
+        self._push_change_event_if_needed(obj, read_value)
+        return read_value
+      
 
     def _push_change_event_if_needed(self, obj, value : typing.Any) -> None:
         """
@@ -231,10 +242,18 @@ class Property(Parameter):
             event_dispatcher.push(value)       
 
 
-    def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass) -> typing.Any:
-        read_value = super().__get__(obj, objtype)
-        self._push_change_event_if_needed(obj, read_value)
-        return read_value
+    def validate_and_adapt(self, value):
+        if value is None:
+            if self.allow_None:
+                return value 
+            else:
+                raise ValueError(f"Property {self.name} does not allow None values")
+        elif self.model:
+            if isinstance(value, dict):
+                self._json_validator.validate(value)
+            else: 
+                self.model(**value) # pydantic model validation, just try to create an instance
+        return super().validate_and_adapt(value)
     
 
     def _post_value_set(self, obj, value : typing.Any) -> None:

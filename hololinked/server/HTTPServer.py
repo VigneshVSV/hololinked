@@ -182,7 +182,7 @@ class HTTPServer(Parameterized):
                                                 )
         # print("client pool context", self.zmq_client_pool.context)
         event_loop = EventLoop.get_async_loop() # sets async loop for a non-possessing thread as well
-        event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_things()))
+        self.update_router_with_things()
         event_loop.call_soon(lambda : asyncio.create_task(self.subscribe_to_host()))
         event_loop.call_soon(lambda : asyncio.create_task(self.zmq_client_pool.poll()) )
         for client in self.zmq_client_pool:
@@ -258,19 +258,22 @@ class HTTPServer(Parameterized):
             self.tornado_event_loop.stop()
         
        
-    async def update_router_with_things(self) -> None:
+    def update_router_with_things(self) -> None:
         """
         updates HTTP router with paths from ``Thing`` (s)
         """
-        await asyncio.gather(*[self.update_router_with_thing(client) for client in self.zmq_client_pool])
+        event_loop = EventLoop.get_async_loop() # sets async loop for a non-possessing thread as well
+        for client in self.zmq_client_pool:
+            event_loop.call_soon(lambda : asyncio.create_task(self.update_router_with_thing(client)))
+            
 
         
     async def update_router_with_thing(self, client : AsyncZMQClient):
         if client.instance_name in self._lost_things:
             # Just to avoid duplication of this call as we proceed at single client level and not message mapped level
             return 
-        self._lost_things[client.instance_name] = client
         self.logger.info(f"attempting to update router with thing {client.instance_name}.")
+        self._lost_things[client.instance_name] = client
         while True:
             try:
                 await client.handshake_complete()
@@ -354,6 +357,7 @@ class HTTPServer(Parameterized):
                         arguments=dict(value=object_info), 
                         raise_client_side_exception=True
                     )
+            self.logger.info(f"updated ThingInformation to {client.instance_name}")
         except Exception as ex:
             self.logger.error(f"error while trying to update thing with HTTP server details - {str(ex)}. " +
                                 "Trying again in 5 seconds")
@@ -388,7 +392,8 @@ class HTTPServer(Parameterized):
                         kwargs=kwargs)
         if obj not in self._local_rules[event.owner.__name__]:
             self._local_rules[event.owner.__name__].append(obj)
-               
+
+    
     
 __all__ = [
     HTTPServer.__name__

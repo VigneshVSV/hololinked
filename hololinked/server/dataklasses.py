@@ -565,7 +565,7 @@ def get_organised_resources(instance):
         assert isinstance(resource, Thing), ("thing children query from inspect.ismethod is not a Thing",
                                     "logic error - visit https://github.com/VigneshVSV/hololinked/issues to report")
         # above assertion is only a typing convenience
-        if name == '_owner' or resource._owner is not None: 
+        if name == '_owner': 
             # second condition allows sharing of Things without adding once again to the list of exposed resources
             # for example, a shared logger 
             continue
