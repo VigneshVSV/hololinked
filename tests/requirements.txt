@@ -8,3 +8,4 @@ tornado==6.3.3
 jsonschema==4.22.0
 requests==2.32.3
 numpy==2.0.0
+pydantic==2.8.0
