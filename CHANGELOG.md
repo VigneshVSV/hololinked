@@ -12,10 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 New:
 - cookie auth & its specification in TD (cookie auth branch)
 - adding custom handlers for each property, action and event to override default behaviour
-- pydantic & JSON schema support for property models 
 
 Bug Fixes:
 - composed sub`Thing`s exposed with correct URL path 
+
+## [v0.2.8] - 2024-12-06
+
+- pydantic & JSON schema support for property models 
 
 ## [v0.2.7] - 2024-10-22
 
