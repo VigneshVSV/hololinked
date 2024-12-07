@@ -569,8 +569,9 @@ def get_organised_resources(instance):
             # second condition allows sharing of Things without adding once again to the list of exposed resources
             # for example, a shared logger 
             continue
-        resource._owner = instance      
-        resource._prepare_resources()
+        if resource._owner is None:
+            resource._owner = instance
+            resource._prepare_resources()
         httpserver_resources.update(resource.httpserver_resources)
         # zmq_resources.update(resource.zmq_resources)
         instance_resources.update(resource.instance_resources)

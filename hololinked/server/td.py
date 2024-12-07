@@ -736,8 +736,7 @@ class ThingDescription(Schema):
                     'events', 'thing_description', 'GUI', 'object_info' ]
 
     skip_actions = ['_set_properties', '_get_properties', '_add_property', '_get_properties_in_db', 
-                    'push_events', 'stop_events', 'get_postman_collection', 'get_thing_description',
-                    'get_our_temp_thing_description']
+                    'get_postman_collection', 'get_thing_description', 'get_our_temp_thing_description']
 
     # not the best code and logic, but works for now
 
@@ -779,12 +778,18 @@ class ThingDescription(Schema):
                     if (resource.obj_name == 'state' and (not hasattr(self.instance, 'state_machine') or 
                                 not isinstance(self.instance.state_machine, StateMachine))):
                         continue
+                    if resource.obj_name not in self.instance.properties:
+                        continue 
                     self.properties[resource.obj_name] = PropertyAffordance.generate_schema(resource.obj, 
                                                                             self.instance, self.authority) 
                 
                 elif (resource.isaction and resource.obj_name not in self.actions and 
                     resource.obj_name not in self.skip_actions and hasattr(resource.obj, '_remote_info')):
-                   
+
+                    if resource.bound_obj != self.instance or (resource.obj_name == 'exit' and 
+                            self.instance._owner is not None) or (not hasattr(resource.bound_obj, 'db_engine') and
+                            resource.obj_name == 'load_properties_from_DB'):
+                        continue
                     self.actions[resource.obj_name] = ActionAffordance.generate_schema(resource.obj, 
                                                                                 self.instance, self.authority)
             except Exception as ex:
