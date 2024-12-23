@@ -13,27 +13,21 @@ from collections import deque
 from uuid import uuid4
 
 
-from ..param.parameterized import Undefined
-from .constants import JSON, ZMQ_TRANSPORTS, ServerTypes
-from .utils import format_exception_as_json, get_current_async_loop, get_default_logger
-from .config import global_config
-from .exceptions import *
-from .protocols.zmq.message import ERROR, HANDSHAKE, INVALID_MESSAGE, TIMEOUT, ResponseMessage
-from .thing import Thing, ThingMeta
-from .property import Property
-from .properties import TypedList, Boolean, TypedDict
-from .actions import Action, action as remote_method
-from .logger import ListHandler
+from ....param.parameterized import Undefined
+from ...constants import ZMQ_TRANSPORTS, ServerTypes
+from ...exceptions import BreakLoop
+from ...utils import format_exception_as_json, get_current_async_loop, get_default_logger
+from ...config import global_config
+from ...exceptions import *
+from .message import (ERROR, HANDSHAKE, INVALID_MESSAGE, TIMEOUT,
+                                ResponseMessage, RequestMessage)
+from .brokers import AsyncZMQServer, BaseZMQServer, EventPublisher
+from ...thing import Thing, ThingMeta
+from ...property import Property
+from ...properties import TypedList, Boolean, TypedDict
+from ...actions import Action, action as remote_method
+from ...logger import ListHandler
 
-# from .protocols.zmq.brokers import (CM_INDEX_ADDRESS, CM_INDEX_CLIENT_TYPE, CM_INDEX_MESSAGE_TYPE, CM_INDEX_MESSAGE_ID, 
-#                                 CM_INDEX_SERVER_EXEC_CONTEXT, CM_INDEX_THING_ID)
-# from .protocols.zmq.brokers import SM_INDEX_ADDRESS
-# from .protocols.zmq.brokers import EXIT, HANDSHAKE, INVALID_MESSAGE, TIMEOUT
-# from .protocols.zmq.brokers import HTTP_SERVER, PROXY, TUNNELER 
-# from .protocols.zmq.brokers import EMPTY_DICT
-from .protocols.zmq.brokers import (AsyncZMQClient, AsyncZMQServer, BaseZMQServer, 
-                                  EventPublisher, SyncZMQClient)
-from .protocols.zmq.brokers import RequestMessage
 
 
 if global_config.TRACE_MALLOC:
@@ -152,18 +146,8 @@ class RPCServer(BaseZMQServer):
         socket = server.socket
         while True:
             try:
-                raw_message = await socket.recv_multipart()
-                request_message = RequestMessage(raw_message)
+                request_message = await server.async_recv_request()
                 
-                # handle message types first
-                # if message_type == HANDSHAKE:
-                #     handshake_task = asyncio.create_task(self._handshake(message, socket))
-                #     self.eventloop.call_soon(lambda : handshake_task)
-                #     continue 
-                # if message_type == EXIT:
-                #     break
-                
-                self.logger.debug(f"received message from client '{request_message.sender_id}' with message id '{request_message.id}', queuing.")
                 # handle invokation timeout
                 invokation_timeout = request_message.server_execution_context.get("invokation_timeout", None)
 
@@ -182,6 +166,8 @@ class RPCServer(BaseZMQServer):
                                             )
                                         )
                     eventloop.call_soon(lambda : timeout_task)
+            except BreakLoop:
+                break
             except Exception as ex:
                 # handle invalid message
                 self.logger.error(f"exception occurred for message id '{request_message.id}' - {str(ex)}")
@@ -665,52 +651,3 @@ __all__ = [
 
 
 
-class ZMQServer:
-    
-
-    def __init__(self, *, id : str, 
-                things : typing.Union[Thing, typing.List[typing.Union[Thing]]], # type: ignore - requires covariant types
-                protocols : typing.Union[ZMQ_TRANSPORTS, str, typing.List[ZMQ_TRANSPORTS]] = ZMQ_TRANSPORTS.IPC, 
-                poll_timeout = 25, context : typing.Union[zmq.asyncio.Context, None] = None, 
-                **kwargs
-            ) -> None:
-        self.inproc_server = self.ipc_server = self.tcp_server = self.event_publisher = None
-        
-        if isinstance(protocols, str): 
-            protocols = [protocols]
-        elif not isinstance(protocols, list): 
-            raise TypeError(f"unsupported protocols type : {type(protocols)}")
-        tcp_socket_address = kwargs.pop('tcp_socket_address', None)
-        event_publisher_protocol = None 
-        
-        # initialise every externally visible protocol          
-        if ZMQ_TRANSPORTS.TCP in protocols or "TCP" in protocols:
-            self.tcp_server = AsyncZMQServer(id=self.id, server_type=ServerTypes.RPC, 
-                                    context=self.context, transport=ZMQ_TRANSPORTS.TCP, poll_timeout=poll_timeout, 
-                                    socket_address=tcp_socket_address, **kwargs)
-            self.poller.register(self.tcp_server.socket, zmq.POLLIN)
-            event_publisher_protocol = ZMQ_TRANSPORTS.TCP
-        if ZMQ_TRANSPORTS.IPC in protocols or "IPC" in protocols: 
-            self.ipc_server = AsyncZMQServer(id=self.id, server_type=ServerTypes.RPC, 
-                                    context=self.context, transport=ZMQ_TRANSPORTS.IPC, poll_timeout=poll_timeout, **kwargs)
-            self.poller.register(self.ipc_server.socket, zmq.POLLIN)
-            event_publisher_protocol = ZMQ_TRANSPORTS.IPC if not event_publisher_protocol else event_publisher_protocol           
-            event_publisher_protocol = "IPC" if not event_publisher_protocol else event_publisher_protocol    
-
-        self.poller = zmq.asyncio.Poller()
-        self.poll_timeout = poll_timeout
-
-    
-    @property
-    def poll_timeout(self) -> int:
-        """
-        socket polling timeout in milliseconds greater than 0. 
-        """
-        return self._poll_timeout
-
-    @poll_timeout.setter
-    def poll_timeout(self, value) -> None:
-        if not isinstance(value, int) or value < 0:
-            raise ValueError(("polling period must be an integer greater than 0, not {}.",
-                              "Value is considered in milliseconds.".format(value)))
-        self._poll_timeout = value 
