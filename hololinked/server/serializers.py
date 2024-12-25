@@ -204,7 +204,6 @@ serializers = {
 
 
 class Serializers:
-    
     json = JSONSerializer()
     pickle = PickleSerializer()
     msgpack = MsgpackSerializer()
@@ -252,7 +251,7 @@ except ImportError:
 
 
 
-def _get_serializer_from_user_given_options(
+def set_serializer_from_user_given_options(
         zmq_serializer : typing.Union[str, BaseSerializer], 
         http_serializer : typing.Union[str, JSONSerializer]
     ) -> typing.Tuple[BaseSerializer, JSONSerializer]:
