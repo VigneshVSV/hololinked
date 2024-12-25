@@ -222,7 +222,6 @@ def issubklass(obj, cls):
             return False
     except TypeError:
         return False
-  
 
 
 def get_current_async_loop():
@@ -251,6 +250,4 @@ __all__ = [
     issubklass.__name__,
     get_current_async_loop.__name__
 ]
-
-
 

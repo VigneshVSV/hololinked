@@ -244,6 +244,7 @@ try:
             serpent.register_class(object_type, custom_serializer)
 
     serializers['serpent'] = SerpentSerializer
+    Serializers.serpent = SerpentSerializer()
 except ImportError:
     pass
 
