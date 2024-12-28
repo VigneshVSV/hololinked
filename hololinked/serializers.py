@@ -37,7 +37,7 @@ import warnings
 from enum import Enum
 from collections import deque
 
-from ..param.parameters import TypeConstrainedList, TypeConstrainedDict, TypedKeyMappingsConstrainedDict
+from .param.parameters import TypeConstrainedList, TypeConstrainedDict, TypedKeyMappingsConstrainedDict
 from .constants import JSONSerializable, Serializers
 from .utils import format_exception_as_json
 
