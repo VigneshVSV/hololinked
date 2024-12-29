@@ -6,8 +6,6 @@ import asyncio
 import logging
 import typing
 from uuid import uuid4
-from zmq.utils.monitor import parse_monitor_message
-
 
 from ...utils import *
 from ...config import global_config
