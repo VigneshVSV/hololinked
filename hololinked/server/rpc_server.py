@@ -327,22 +327,27 @@ class RPCServer(BaseZMQServer):
                     isinstance(return_value[1], bytes) or 
                     isinstance(return_value[1], PreserializedData) 
                 ):  
+                    if fetch_execution_logs:
+                        return_value[0] = {
+                            "return_value" : return_value[0],
+                            "execution_logs" : list_handler.log_list
+                        }
                     payload = SerializableData(return_value[0], 'application/json')
                     preserialized_payload = PreserializedData(return_value[1], 'text/plain')
                 elif isinstance(return_value, bytes):
                     payload = SerializableData(None, 'application/json')
                     preserialized_payload = PreserializedData(return_value, 'text/plain')
                 else:
+                     # complete thing execution context
+                    if fetch_execution_logs:
+                        return_value = {
+                            "return_value" : return_value,
+                            "execution_logs" : list_handler.log_list
+                        }
                     payload = SerializableData(return_value, 'application/json')
                     preserialized_payload = PreserializedData(EMPTY_BYTE, 'text/plain')
 
-                # complete thing execution context
-                if fetch_execution_logs:
-                    return_value = {
-                        "return_value" : return_value,
-                        "execution_logs" : list_handler.log_list
-                    }
-
+                # set reply
                 instance._last_operation_reply = (payload, preserialized_payload)
             except (BreakInnerLoop, BreakAllLoops):
                 # exit the loop and stop the thing
@@ -517,18 +522,7 @@ class RPCServer(BaseZMQServer):
         self.logger.info("terminated context of socket '{}' of type '{}'".format(self.id, self.__class__))
 
 
-    # example of overloading
-    # @remote_method()
-    # def exit(self):
-    #     """
-    #     Stops the event loop and all its things. Generally, this leads
-    #     to exiting the program unless some code follows the ``run()`` method.  
-    #     """
-    #     for thing in self.things:
-    #         thing.exit()
-    #     raise BreakAllLoops
-    
-
+   
     uninstantiated_things = TypedDict(default=None, allow_None=True, key_type=str,
                                             item_type=str)
     
