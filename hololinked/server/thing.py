@@ -216,6 +216,12 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         from .events import EventPublisher
         self.rpc_server = None # type: typing.Optional[RPCServer]
         self.event_publisher = None # type: typing.Optional[EventPublisher] 
+        for property in self.properties.descriptors.values():
+            property.owner = self.__class__
+        for action in self.actions.values():
+            action.owner = self.__class__
+        for event in self.events.values():
+            event.owner = self.__class__
 
 
     def __setattr__(self, __name: str, __value: typing.Any) -> None:
@@ -231,15 +237,15 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
             super().__setattr__(__name, __value)
 
 
-    def _prepare_resources(self):
-        """
-        this method analyses the members of the class which have '_execution_info_validator' variable declared
-        and extracts information necessary to make RPC functionality work.
-        """
-        if self._owner is None:
-            if self.rpc_server is None or self.event_publisher is None:
-                raise RuntimeError("Call _prepare_resources() only after creating server objects")
-        self._zmq_resources = get_organised_resources(self)
+    # def _prepare_resources(self):
+    #     """
+    #     this method analyses the members of the class which have '_execution_info_validator' variable declared
+    #     and extracts information necessary to make RPC functionality work.
+    #     """
+    #     if self._owner is None:
+    #         if self.rpc_server is None or self.event_publisher is None:
+    #             raise RuntimeError("Call _prepare_resources() only after creating server objects")
+    #     self._zmq_resources = get_organised_resources(self)
 
 
     def _prepare_logger(self, log_level : int, log_file : str, remote_access : bool = False):
@@ -637,7 +643,7 @@ class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
         # host: str
         #     Host Server to subscribe to coordinate starting sequence of things & web GUI
         
-        from ..protocols.http.HTTPServer import HTTPServer        
+        from ..protocols.http.server import HTTPServer        
         http_server = HTTPServer(
             [self.id], logger=self.logger, serializer=self.http_serializer, 
             port=port, address=address, ssl_context=ssl_context,
