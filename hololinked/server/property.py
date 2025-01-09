@@ -218,6 +218,14 @@ class Property(Parameter):
     @property 
     def is_remote(self):
         return self._execution_info_validator is not None
+    
+    def to_affordance(self) -> dict:
+        from hololinked.server.td import PropertyAffordance
+        affordance = PropertyAffordance()
+        affordance._build(self, self.owner_inst, None)
+        return affordance
+
+
 
 try: 
     from pydantic import BaseModel, RootModel, create_model
@@ -239,7 +247,7 @@ try:
             raise ImportError("pydantic is not installed, please install it to use this feature") from None
 except ImportError:
     def wrap_plain_types_in_rootmodel(model : type) -> type:
-        raise ImportError("pydantic is not installed, please install it to use this feature") from None
+        raise ImportError("pydantic is not installed, please install it to use pydantic models for properties") from None
 
 
 
