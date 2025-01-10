@@ -7,8 +7,13 @@ long_description = (Path(__file__).parent/"README.md").read_text()
 
 setuptools.setup(
     name="hololinked",
+<<<<<<< HEAD
     version="0.2.8",
     author="Vignesh Vaidyanathan",
+=======
+    version="0.3.1",
+    author="Vigneh Vaidyanathan",
+>>>>>>> 1d8e151f3346e203a5abdc9d07ec37a794b74801
     author_email="vignesh.vaidyanathan@hololinked.dev",
     description="A ZMQ-based Object Oriented RPC tool-kit for instrument control/data acquisition or controlling generic python objects.",
     long_description=long_description,

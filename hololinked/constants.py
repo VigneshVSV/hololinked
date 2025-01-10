@@ -7,6 +7,7 @@ from enum import StrEnum, IntEnum, Enum
 # types
 JSONSerializable = typing.Union[typing.Dict[str, typing.Any], list, str, int, float, None]
 JSON = typing.Dict[str, JSONSerializable]
+byte_types = (bytes, bytearray, memoryview)
 
 # decorator constants 
 # naming
@@ -26,21 +27,20 @@ class ResourceTypes(StrEnum):
     PROPERTY = "PROPERTY"
     ACTION = "ACTION"
     EVENT = "EVENT"
-    IMAGE_STREAM = "IMAGE_STREAM"
-    FILE = "FILE"
-
+    THING = "THING"
+    
 
 class CommonRPC(StrEnum):
     """some common RPC and their associated instructions for quick access by lower level code"""
 
-    ZMQ_RESOURCES = '/resources/zmq-object-proxy'
+    ZMQ_RESOURCES = 'zmq-resources'
     HTTP_RESOURCES = '/resources/http-server'
     OBJECT_INFO = '/object-info'
     PING = '/ping'
 
     @classmethod
     def zmq_resource_read(cls, instance_name : str) -> str:
-        return f"/{instance_name}{cls.ZMQ_RESOURCES}/read"
+        return f"{cls.ZMQ_RESOURCES}"
 
     @classmethod
     def http_resource_read(cls, instance_name : str) -> str:
@@ -87,7 +87,7 @@ class LOGLEVEL(IntEnum):
 
 
 # ZMQ
-class ZMQ_PROTOCOLS(StrEnum):
+class ZMQ_TRANSPORTS(StrEnum):
     """
     supported ZMQ transport protocols - TCP, IPC, INPROC
 
@@ -132,7 +132,7 @@ class ServerTypes(Enum):
     "type of ZMQ servers"
 
     UNKNOWN_TYPE = b'UNKNOWN' 
-    EVENTLOOP = b'EVENTLOOP'  
+    RPC = b'RPC'  
     THING = b'THING'
     POOL = b'POOL'
        
@@ -190,10 +190,25 @@ for name in dir(zmq):
         ZMQ_EVENT_MAP[value] = name
 
 
+# Function to get the socket type name from the enum
+def get_socket_type_name(socket_type):
+    try:
+        return ZMQSocketType(socket_type).name
+    except ValueError:
+        return "UNKNOWN"
+
+
+class Operations(StrEnum):
+    readProperty = 'readProperty'
+    writeProperty = 'writeProperty'
+    deleteProperty = 'deleteProperty'
+    invokeAction = 'invokeAction'
+    subscribeEvent = 'subscribeEvent'
+    unsubscribeEvent = 'unsubscribeEvent'
 
 
 __all__ = [
     Serializers.__name__, 
     HTTP_METHODS.__name__,
-    ZMQ_PROTOCOLS.__name__
+    ZMQ_TRANSPORTS.__name__
 ]

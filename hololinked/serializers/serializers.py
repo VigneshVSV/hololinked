@@ -23,7 +23,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import pickle
+<<<<<<< HEAD:hololinked/server/serializers.py
 from msgspec import json as msgspecjson, msgpack 
+=======
+import msgspec
+from msgspec import json, msgpack 
+>>>>>>> 1d8e151f3346e203a5abdc9d07ec37a794b74801:hololinked/serializers/serializers.py
 import json as pythonjson
 import inspect
 import array
@@ -41,8 +46,8 @@ except ImportError:
     pass 
 
 from ..param.parameters import TypeConstrainedList, TypeConstrainedDict, TypedKeyMappingsConstrainedDict
-from .constants import JSONSerializable, Serializers
-from .utils import format_exception_as_json
+from ..constants import JSONSerializable
+from ..utils import format_exception_as_json
 
 
 
@@ -77,6 +82,7 @@ class BaseSerializer(object):
         raise TypeError("serializer convert_to_bytes accepts only bytes, bytearray or memoryview")
     
 
+
 dict_keys = type(dict().keys())
 
 class JSONSerializer(BaseSerializer):
@@ -102,6 +108,8 @@ class JSONSerializer(BaseSerializer):
         if hasattr(obj, 'json'):
             # alternative to type replacement
             return obj.json()
+        if isinstance(obj, msgspec.Struct):
+            return obj
         if isinstance(obj, Enum):
             return obj.name
         if isinstance(obj, (set, dict_keys, deque, tuple)):
@@ -137,7 +145,11 @@ class JSONSerializer(BaseSerializer):
             raise ValueError("refusing to register replacement for a non-type or the type 'type' itself")
         cls._type_replacements[object_type] = replacement_function
 
-
+    @property
+    def content_type(self) -> str:
+        return 'application/json'
+    
+    
 class PythonBuiltinJSONSerializer(JSONSerializer):
     "(de)serializer that wraps the python builtin JSON serialization protocol."
 
@@ -163,6 +175,7 @@ class PythonBuiltinJSONSerializer(JSONSerializer):
         return pythonjson.load(file_desc)
 
 
+
 class PickleSerializer(BaseSerializer):
     "(de)serializer that wraps the pickle serialization protocol, use with encryption for safety."
 
@@ -177,6 +190,10 @@ class PickleSerializer(BaseSerializer):
     def loads(self, data) -> typing.Any:
         "method called by ZMQ message brokers to deserialize data"
         return pickle.loads(self.convert_to_bytes(data))
+    
+    @property
+    def content_type(self) -> str:
+        return 'application/octet-stream'
     
 
 
@@ -197,13 +214,18 @@ class MsgpackSerializer(BaseSerializer):
     def loads(self, value) -> typing.Any:
         return msgpack.decode(self.convert_to_bytes(value))
     
-serializers = {
-    None      : JSONSerializer,
-    'json'    : JSONSerializer, 
-    'pickle'  : PickleSerializer,
-    'msgpack' : MsgpackSerializer
-}
+    @property
+    def content_type(self) -> str:
+        return 'x-msgpack'
     
+
+__all__ = [
+    JSONSerializer.__name__, 
+    PickleSerializer.__name__, 
+    MsgpackSerializer.__name__, 
+    BaseSerializer.__name__
+]
+
 
 try:
     import serpent
@@ -237,37 +259,8 @@ try:
                 raise ValueError("refusing to register replacement for a non-type or the type 'type' itself")
             serpent.register_class(object_type, custom_serializer)
 
-    serializers['serpent'] = SerpentSerializer
+    __all__.append(SerpentSerializer.__name__)
 except ImportError:
     pass
 
 
-
-def _get_serializer_from_user_given_options(
-        zmq_serializer : typing.Union[str, BaseSerializer], 
-        http_serializer : typing.Union[str, JSONSerializer]
-    ) -> typing.Tuple[BaseSerializer, JSONSerializer]:
-    """
-    We give options to specify serializer as a string or an object,  
-    """ 
-    if http_serializer in [None, 'json'] or isinstance(http_serializer, JSONSerializer):
-        http_serializer = http_serializer if isinstance(http_serializer, JSONSerializer) else JSONSerializer()
-    else:
-        raise ValueError("invalid JSON serializer option : {}".format(http_serializer))
-        # could also technically be TypeError 
-    if isinstance(zmq_serializer, BaseSerializer):
-        zmq_serializer = zmq_serializer 
-        if isinstance(zmq_serializer, PickleSerializer) or zmq_serializer.type == pickle:
-            warnings.warn("using pickle serializer which is unsafe, consider another like msgpack.", UserWarning)
-    elif zmq_serializer == 'json' or zmq_serializer is None:
-        zmq_serializer = http_serializer
-    elif isinstance(zmq_serializer, str): 
-        zmq_serializer = serializers.get(zmq_serializer, JSONSerializer)()
-    else:
-        raise ValueError("invalid rpc serializer option : {}".format(zmq_serializer))    
-    return zmq_serializer, http_serializer
-
-
-
-__all__ = ['JSONSerializer', 'PickleSerializer', 'MsgpackSerializer', 
-        'serializers', 'BaseSerializer']

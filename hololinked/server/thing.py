@@ -1,27 +1,29 @@
+import asyncio
+from collections import deque
 import logging 
 import inspect
 import os
 import ssl
+import threading
 import typing
 import warnings
 import zmq
 import zmq.asyncio
 
+
 from ..param.parameterized import Parameterized, ParameterizedMetaclass, edit_constant as edit_constant_parameters
-from .constants import (JSON, LOGLEVEL, ZMQ_PROTOCOLS, HTTP_METHODS, JSONSerializable)
+from ..constants import JSON, ZMQ_TRANSPORTS, JSONSerializable
+from ..utils import get_default_logger, getattr_without_descriptor_read
+from ..exceptions import *
+from ..serializers.serializers import set_serializer_from_user_given_options, BaseSerializer, JSONSerializer
 from .database import ThingDB, ThingInformation
-from .serializers import _get_serializer_from_user_given_options, BaseSerializer, JSONSerializer
+from .dataklasses import ZMQResource, build_our_temp_TD, get_organised_resources
 from .schema_validators import BaseSchemaValidator, JsonSchemaValidator
-from .exceptions import BreakInnerLoop
-from .action import action
-from .dataklasses import HTTPResource, ZMQResource, build_our_temp_TD, get_organised_resources
-from .utils import get_default_logger, getattr_without_descriptor_read
+from .state_machine import StateMachine
+from .actions import RemoteInvokable, action
 from .property import Property, ClassProperties
 from .properties import String, ClassSelector, Selector, TypedKeyMappingsConstrainedDict
-from .zmq_message_brokers import RPCServer, ServerTypes, EventPublisher
-from .state_machine import StateMachine
-from .events import Event
-
+from .events import EventSource
 
 
 
@@ -40,7 +42,7 @@ class ThingMeta(ParameterizedMetaclass):
         return TypedKeyMappingsConstrainedDict({},
             type_mapping = dict(
                 state_machine = (StateMachine, type(None)),
-                instance_name = String, 
+                id = String, 
                 log_level = Selector,
                 logger = ClassSelector,
                 logfile = String,
@@ -77,15 +79,15 @@ class ThingMeta(ParameterizedMetaclass):
 
 
 
-class Thing(Parameterized, metaclass=ThingMeta):
+class Thing(Parameterized, RemoteInvokable, EventSource, metaclass=ThingMeta):
     """
-    Subclass from here to expose python objects on the network (with HTTP/TCP) or to other processes (ZeroMQ)
+    Subclass from here to expose hardware or python objects on the network
     """
 
-    __server_type__ = ServerTypes.THING # not a server, this needs to be removed.
+    state_machine : typing.Optional[StateMachine]
    
     # local properties
-    instance_name = String(default=None, regex=r'[A-Za-z]+[A-Za-z_0-9\-\/]*', constant=True, remote=False,
+    id = String(default=None, regex=r'[A-Za-z]+[A-Za-z_0-9\-\/]*', constant=True, remote=False,
                         doc="""Unique string identifier of the instance. This value is used for many operations,
                         for example - creating zmq socket address, tables in databases, and to identify the instance 
                         in the HTTP Server - (http(s)://{domain and sub domain}/{instance name}). 
@@ -94,46 +96,49 @@ class Thing(Parameterized, metaclass=ThingMeta):
                         doc="""logging.Logger instance to print log messages. Default 
                             logger with a IO-stream handler and network accessible handler is created 
                             if none supplied.""") # type: logging.Logger
-    zmq_serializer = ClassSelector(class_=(BaseSerializer, str), 
-                        allow_None=True, default='json', remote=False,
-                        doc="""Serializer used for exchanging messages with python RPC clients. Subclass the base serializer 
-                        or one of the available serializers to implement your own serialization requirements; or, register 
-                        type replacements. Default is JSON. Some serializers like MessagePack improve performance many times 
-                        compared to JSON and can be useful for data intensive applications within python.""") # type: BaseSerializer
-    http_serializer = ClassSelector(class_=(JSONSerializer, str), default=None, allow_None=True, remote=False,
-                        doc="""Serializer used for exchanging messages with a HTTP clients,
-                            subclass JSONSerializer to implement your own JSON serialization requirements; or, 
-                            register type replacements. Other types of serializers are currently not allowed for HTTP clients.""") # type: JSONSerializer
+    # zmq_serializer = ClassSelector(class_=(BaseSerializer, str), 
+    #                     allow_None=True, default='json', remote=False,
+    #                     doc="""Serializer used for exchanging messages with ZMQ clients. Subclass the base serializer 
+    #                     or one of the available serializers to implement your own serialization requirements; or, register 
+    #                     type replacements. Default is JSON. Some serializers like MessagePack improve performance many times 
+    #                     compared to JSON and can be useful for data intensive applications within python.""") # type: BaseSerializer
+    # http_serializer = ClassSelector(class_=(JSONSerializer, str), default=None, allow_None=True, remote=False,
+    #                     doc="""Serializer used for exchanging messages with a HTTP clients,
+    #                         subclass JSONSerializer to implement your own JSON serialization requirements; or, 
+    #                         register type replacements. Other types of serializers are currently not allowed for HTTP clients.""") # type: JSONSerializer
     schema_validator = ClassSelector(class_=BaseSchemaValidator, default=JsonSchemaValidator, allow_None=True, 
                         remote=False, isinstance=False,
                         doc="""Validator for JSON schema. If not supplied, a default JSON schema validator is created.""") # type: BaseSchemaValidator
     
-    # remote properties
-    state = String(default=None, allow_None=True, URL_path='/state', readonly=True, observable=True, 
+    # remote paramerters
+    state = String(default=None, allow_None=True, readonly=True, observable=True, 
                 fget=lambda self : self.state_machine.current_state if hasattr(self, 'state_machine') else None,  
                 doc="current state machine's state if state machine present, None indicates absence of state machine.") #type: typing.Optional[str]
-    httpserver_resources = Property(readonly=True, URL_path='/resources/http-server', 
-                        doc="object's resources exposed to HTTP client (through ``hololinked.server.HTTPServer.HTTPServer``)", 
-                        fget=lambda self: self._httpserver_resources ) # type: typing.Dict[str, HTTPResource]
-    zmq_resources = Property(readonly=True, URL_path='/resources/zmq-object-proxy', 
+    zmq_resources = Property(readonly=True, 
                         doc="object's resources exposed to RPC client, similar to HTTP resources but differs in details.", 
                         fget=lambda self: self._zmq_resources) # type: typing.Dict[str, ZMQResource]
-    gui_resources = Property(readonly=True, URL_path='/resources/portal-app', 
-                        doc="""object's data read by hololinked-portal GUI client, similar to http_resources but differs 
-                        in details.""",
-                        fget=lambda self: build_our_temp_TD(self)) # type: typing.Dict[str, typing.Any]
-    GUI = Property(default=None, allow_None=True, URL_path='/resources/web-gui', fget = lambda self : self._gui,
-                        doc="GUI specified here will become visible at GUI tab of hololinked-portal dashboard tool")     
-    object_info = Property(doc="contains information about this object like the class name, script location etc.",
-                        URL_path='/object-info') # type: ThingInformation
+    object_info = Property(doc="contains information about this object like the class name, script location etc.") # type: ThingInformation
     
 
-    def __init__(self, *, instance_name : str, logger : typing.Optional[logging.Logger] = None, 
-                serializer : typing.Optional[JSONSerializer] = None, **kwargs) -> None:
+    def __new__(cls, *args, **kwargs):
+        obj = super().__new__(cls)
+        # defines some internal fixed attributes. attributes created by us that require no validation but 
+        # cannot be modified are called _internal_fixed_attributes
+        obj._internal_fixed_attributes = ['_internal_fixed_attributes', '_zmq_resources', '_owner', 'rpc_server', 'message_broker',
+                                        '_event_publisher']        
+        return obj
+
+
+    def __init__(self, *, 
+                id : str, 
+                logger : typing.Optional[logging.Logger] = None, 
+                serializer : typing.Optional[JSONSerializer] = None, 
+                **kwargs
+            ) -> None:
         """
         Parameters
         ----------
-        instance_name: str
+        id: str
             Unique string identifier of the instance. This value is used for many operations,
             for example - creating zmq socket address, tables in databases, and to identify the instance in the HTTP Server - 
             (http(s)://{domain and sub domain}/{instance name}). 
@@ -142,54 +147,58 @@ class Thing(Parameterized, metaclass=ThingMeta):
             logging.Logger instance to print log messages. Default logger with a IO-stream handler and network 
             accessible handler is created if none supplied.
         serializer: JSONSerializer, optional
-            custom JSON serializer. To use separate serializer for python RPC clients and cross-platform 
-            HTTP clients, use keyword arguments zmq_serializer and http_serializer and leave this argument at None.
-        **kwargs:
-            zmq_serializer: BaseSerializer | str, optional 
-                Serializer used for exchanging messages with python RPC clients. If string value is supplied, 
+            custom JSON serializer. To use separate serializer for different protocols, use keyword arguments 
+            like zmq_serializer and http_serializer and leave this argument at None.
+        **kwargs: typing.Dict[str, Any]
+            - zmq_serializer: BaseSerializer | str, optional 
+                Serializer used for exchanging messages with ZMQ clients. If string value is supplied, 
                 supported are 'msgpack', 'pickle', 'serpent', 'json'. Subclass the base serializer 
                 ``hololinked.server.serializer.BaseSerializer`` or one of the available serializers to implement your 
                 own serialization requirements; or, register type replacements. Default is JSON. Some serializers like 
                 MessagePack improve performance many times  compared to JSON and can be useful for data intensive 
                 applications within python. The serializer supplied here must also be supplied to object proxy from 
                 ``hololinked.client``. 
-            http_serializer: JSONSerializer, optional
+            - http_serializer: JSONSerializer, optional
                 serializer used for cross platform HTTP clients. 
-            use_default_db: bool, Default False
-                if True, default SQLite database is created where properties can be stored and loaded. There is no need to supply
-                any database credentials. This value can also be set as a class attribute, see docs.
-            logger_remote_access: bool, Default True
+            - logger_remote_access: bool, Default True
                 if False, network accessible handler is not attached to the logger. This value can also be set as a 
                 class attribute, see docs.
-            schema_validator: BaseSchemaValidator, optional
+            - use_default_db: bool, Default False
+                if True, default SQLite database is created where properties can be stored and loaded. There is no need to supply
+                any database credentials. This value can also be set as a class attribute, see docs.
+            - schema_validator: BaseSchemaValidator, optional
                 schema validator class for JSON schema validation, not supported by ZMQ clients. 
-            db_config_file: str, optional
+            - db_config_file: str, optional
                 if not using a default database, supply a JSON configuration file to create a connection. Check documentaion
                 of ``hololinked.server.database``.  
 
         """
-        if instance_name.startswith('/'):
-            instance_name = instance_name[1:]
         # Type definitions
         self._owner : typing.Optional[Thing] = None 
         self._internal_fixed_attributes : typing.List[str]
-        self._full_URL_path_prefix : str
-        self._gui = None # filler for a future feature
-        self._event_publisher = None # type : typing.Optional[EventPublisher]
-        self.rpc_server  = None # type: typing.Optional[RPCServer]
-        self.message_broker = None # type : typing.Optional[AsyncPollingZMQServer]
+        self._qualified_id : str
+        self._zmq_messages = None # type: typing.Optional[deque]
+        self._zmq_message_arrived_event = None # type: typing.Optional[asyncio.Event]
+        self._last_operation_request = None # type: typing.Tuple[str, str, str, typing.Any, bytes, typing.Dict[str, typing.Any]]
+        self._last_operation_reply = None 
+        self._request_execution_ready_event = None # type: threading.Event
+        self._request_execution_complete_event = None # type: threading.Event
+        
         # serializer
         if not isinstance(serializer, JSONSerializer) and serializer != 'json' and serializer is not None:
             raise TypeError("serializer key word argument must be JSONSerializer. If one wishes to use separate serializers " +
-                            "for python clients and HTTP clients, use zmq_serializer and http_serializer keyword arguments.")
+                            "for protocol specific implementations, use zmq_serializer, http_serializer, {protocol}_serializer keyword arguments.")
         zmq_serializer = serializer or kwargs.pop('zmq_serializer', 'json')
         http_serializer = serializer if isinstance(serializer, JSONSerializer) else kwargs.pop('http_serializer', 'json')
-        zmq_serializer, http_serializer = _get_serializer_from_user_given_options(
-                                                                    zmq_serializer=zmq_serializer,
-                                                                    http_serializer=http_serializer
-                                                                )
-        super().__init__(instance_name=instance_name, logger=logger, 
-                        zmq_serializer=zmq_serializer, http_serializer=http_serializer, **kwargs)
+        # zmq_serializer, http_serializer = _get_serializer_from_user_given_options(zmq_serializer=zmq_serializer,
+        #                                                             http_serializer=http_serializer)
+         
+        Parameterized.__init__(self, id=id, logger=logger, **kwargs)
+        RemoteInvokable.__init__(self)
+        EventSource.__init__(self)
+
+        if self.id.startswith('/'):
+            self.id = self.id[1:]
 
         self._prepare_logger(
                     log_level=kwargs.get('log_level', None), 
@@ -202,29 +211,53 @@ class Thing(Parameterized, metaclass=ThingMeta):
 
 
     def __post_init__(self):
-        self._prepare_resources()
         self.load_properties_from_DB()
-        self.logger.info(f"initialialised Thing class {self.__class__.__name__} with instance name {self.instance_name}")
+        self.logger.info(f"initialialised Thing class {self.__class__.__name__} with instance name {self.id}")
+        from .rpc_server import RPCServer
+        from .events import EventPublisher
+        self.rpc_server = None # type: typing.Optional[RPCServer]
+        self.event_publisher = None # type: typing.Optional[EventPublisher] 
+        for property in self.properties.descriptors.values():
+            property.owner = self.__class__
+        for action in self.actions.values():
+            action.owner = self.__class__
+        for event in self.events.values():
+            event.owner = self.__class__
 
 
-    def _prepare_resources(self):
-        """
-        this method analyses the members of the class which have '_remote_info' variable declared
-        and extracts information necessary to make RPC functionality work.
-        """
-        # The following dict is to be given to the HTTP server
-        self._zmq_resources, self._httpserver_resources, self.instance_resources = get_organised_resources(self)
+    def __setattr__(self, __name: str, __value: typing.Any) -> None:
+        if  __name == '_internal_fixed_attributes' or __name in self._internal_fixed_attributes: 
+            # order of 'or' operation for above 'if' matters
+            if not hasattr(self, __name) or getattr(self, __name, None) is None:
+                # allow setting of fixed attributes once
+                super().__setattr__(__name, __value)
+            else:
+                raise AttributeError(f"Attempted to set {__name} more than once. " +
+                                     "Cannot assign a value to this variable after creation.")
+        else:
+            super().__setattr__(__name, __value)
+
+
+    # def _prepare_resources(self):
+    #     """
+    #     this method analyses the members of the class which have '_execution_info_validator' variable declared
+    #     and extracts information necessary to make RPC functionality work.
+    #     """
+    #     if self._owner is None:
+    #         if self.rpc_server is None or self.event_publisher is None:
+    #             raise RuntimeError("Call _prepare_resources() only after creating server objects")
+    #     self._zmq_resources = get_organised_resources(self)
 
 
     def _prepare_logger(self, log_level : int, log_file : str, remote_access : bool = False):
         from .logger import RemoteAccessHandler
         if self.logger is None:
-            self.logger = get_default_logger(self.instance_name, 
+            self.logger = get_default_logger(self.id, 
                                     logging.INFO if not log_level else log_level, 
                                     None if not log_file else log_file)
         if remote_access:
             if not any(isinstance(handler, RemoteAccessHandler) for handler in self.logger.handlers):
-                self._remote_access_loghandler = RemoteAccessHandler(instance_name='logger', 
+                self._remote_access_loghandler = RemoteAccessHandler(id='logger', 
                                                     maxlen=500, emit_interval=1, logger=self.logger) 
                                                     # thing has its own logger so we dont recreate one for
                                                     # remote access handler
@@ -266,12 +299,12 @@ class Thing(Parameterized, metaclass=ThingMeta):
     def _get_object_info(self):
         if not hasattr(self, '_object_info'):
             self._object_info = ThingInformation(
-                    instance_name  = self.instance_name, 
+                    id  = self.id, 
                     class_name     = self.__class__.__name__,
                     script         = os.path.dirname(os.path.abspath(inspect.getfile(self.__class__))),
                     http_server    = "USER_MANAGED", 
                     kwargs         = "USER_MANAGED",  
-                    eventloop_instance_name = "USER_MANAGED", 
+                    eventloop_id = "USER_MANAGED", 
                     level          = "USER_MANAGED", 
                     level_type     = "USER_MANAGED"
                 )  
@@ -289,11 +322,11 @@ class Thing(Parameterized, metaclass=ThingMeta):
         """container for the property descriptors of the object."""
         return self.parameters
 
-    @action(URL_path='/properties', http_method=HTTP_METHODS.GET)
+   
     def _get_properties(self, **kwargs) -> typing.Dict[str, typing.Any]:
         """
         """
-        skip_props = ["httpserver_resources", "zmq_resources", "gui_resources", "GUI", "object_info"]
+        skip_props = ["zmq_resources", "GUI", "object_info"]
         for prop_name in skip_props:
             if prop_name in kwargs:
                 raise RuntimeError("GUI, httpserver resources, RPC resources , object info etc. cannot be queried" + 
@@ -303,7 +336,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
             for name, prop in self.properties.descriptors.items():
                 if name in skip_props or not isinstance(prop, Property):
                     continue
-                if prop._remote_info is None:
+                if not prop.remote:
                     continue
                 data[name] = prop.__get__(self, type(self))
         elif 'names' in kwargs:
@@ -315,17 +348,17 @@ class Thing(Parameterized, metaclass=ThingMeta):
             for requested_prop in names:
                 if not isinstance(requested_prop, str):
                     raise TypeError(f"property name must be a string. Given type {type(requested_prop)}")
-                if not isinstance(self.properties[requested_prop], Property) or self.properties[requested_prop]._remote_info is None:
+                if not isinstance(self.properties[requested_prop], Property) or self.properties[requested_prop].remote is None:
                     raise AttributeError("this property is not remote accessible")
                 data[requested_prop] = self.properties[requested_prop].__get__(self, type(self))
         elif len(kwargs.keys()) != 0:
             for rename, requested_prop in kwargs.items():
-                if not isinstance(self.properties[requested_prop], Property) or self.properties[requested_prop]._remote_info is None:
+                if not isinstance(self.properties[requested_prop], Property) or self.properties[requested_prop].remote is None:
                     raise AttributeError("this property is not remote accessible")
                 data[rename] = self.properties[requested_prop].__get__(self, type(self))                   
         return data 
     
-    @action(URL_path='/properties', http_method=[HTTP_METHODS.PUT, HTTP_METHODS.PATCH])
+   
     def _set_properties(self, **values : typing.Dict[str, typing.Any]) -> None:
         """ 
         set properties whose name is specified by keys of a dictionary
@@ -350,7 +383,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
             ex.__notes__ = errors
             raise ex from None
 
-    @action(URL_path='/properties/db', http_method=HTTP_METHODS.GET)     
+    @action()     
     def _get_properties_in_db(self) -> typing.Dict[str, JSONSerializable]:
         """
         get all properties in the database
@@ -372,7 +405,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
                 self.logger.error(f"could not serialize property {name} to JSON due to error {str(ex)}, skipping this property")
         return final_list
 
-    @action(URL_path='/properties', http_method=HTTP_METHODS.POST)
+    @action()
     def _add_property(self, name : str, prop : JSON) -> None:
         """
         add a property to the object
@@ -390,38 +423,8 @@ class Thing(Parameterized, metaclass=ThingMeta):
         self._prepare_resources()
         # instruct the clients to fetch the new resources
 
-    @property
-    def event_publisher(self) -> EventPublisher:
-        """
-        event publishing PUB socket owning object, valid only after 
-        ``run()`` is called, otherwise raises AttributeError.
-        """
-        return self._event_publisher 
-                   
-    @event_publisher.setter
-    def event_publisher(self, value : EventPublisher) -> None:
-        if self._event_publisher is not None:
-            if value is not self._event_publisher:
-                raise AttributeError("Can set event publisher only once")
-            
-        def recusively_set_event_publisher(obj : Thing, publisher : EventPublisher) -> None:
-            for name, evt in inspect._getmembers(obj, lambda o: isinstance(o, Event), getattr_without_descriptor_read):
-                assert isinstance(evt, Event), "object is not an event"
-                # above is type definition
-                e = evt.__get__(obj, type(obj)) 
-                e.publisher = publisher 
-                e._remote_info.socket_address = publisher.socket_address
-                self.logger.info(f"registered event '{evt.friendly_name}' serving at PUB socket with address : {publisher.socket_address}")
-            for name, subobj in inspect._getmembers(obj, lambda o: isinstance(o, Thing), getattr_without_descriptor_read):
-                if name == '_owner':
-                    continue 
-                recusively_set_event_publisher(subobj, publisher)
-            obj._event_publisher = publisher            
-
-        recusively_set_event_publisher(self, value)
-
-
-    @action(URL_path='/properties/db-reload', http_method=HTTP_METHODS.POST)
+    
+    @action()
     def load_properties_from_DB(self):
         """
         Load and apply property values which have ``db_init`` or ``db_persist``
@@ -441,26 +444,39 @@ class Thing(Parameterized, metaclass=ThingMeta):
                 except Exception as ex:
                     self.logger.error(f"could not set attribute {db_prop} due to error {str(ex)}")
 
-        
-    @action(URL_path='/resources/postman-collection', http_method=HTTP_METHODS.GET)
+
+    @property
+    def sub_things(self) -> typing.Dict[str, "Thing"]:
+        return inspect._getmembers(self, lambda o : isinstance(o, Thing), getattr_without_descriptor_read)
+
+
+    @action()
     def get_postman_collection(self, domain_prefix : str = None):
         """
         organised postman collection for this object
         """
+        raise NotImplementedError("this method will be implemented properly in a future release")
         from .api_platforms import postman_collection
         return postman_collection.build(instance=self, 
                     domain_prefix=domain_prefix if domain_prefix is not None else self._object_info.http_server)
     
 
-    @action(URL_path='/resources/wot-td', http_method=HTTP_METHODS.GET)
-    def get_thing_description(self, authority : typing.Optional[str] = None, ignore_errors : bool = False): 
+    @action(
+        input_schema={
+            "type": "object", 
+            "properties": {
+                "authority": {"type": "string"}, 
+                "ignore_errors" : {"type" : "boolean"}
+            }
+        }
+    )
+    def get_thing_description(self, authority : typing.Optional[str] = None, ignore_errors : bool = False) -> JSON: 
                             # allow_loose_schema : typing.Optional[bool] = False): 
         """
-        generate thing description schema of Web of Things https://www.w3.org/TR/wot-thing-description11/.
-        one can use the node-wot as a client for the object with the generated schema 
+        generate thing description schema of [Web of Things](https://www.w3.org/TR/wot-thing-description11/).
+        one can use the [node-wot]() as a HTTPs client for the object with the generated schema 
         (https://github.com/eclipse-thingweb/node-wot). Other WoT related tools based on TD will be compatible. 
-        Composed Things that are not the top level object is currently not supported.
-        
+       
         Parameters
         ----------
         authority: str, optional
@@ -473,7 +489,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
             schema always.             
         Returns
         -------
-        hololinked.wot.td.ThingDescription
+        hololinked.server.td.ThingDescription
             represented as an object in python, gets automatically serialized to JSON when pushed out of the socket. 
         """
         # allow_loose_schema: bool, optional, Default False 
@@ -483,9 +499,35 @@ class Thing(Parameterized, metaclass=ThingMeta):
         from .td import ThingDescription
         return ThingDescription(instance=self, authority=authority or self._object_info.http_server,
                                     allow_loose_schema=False, ignore_errors=ignore_errors).produce() #allow_loose_schema)   
+    
+    @action(
+        input_schema={
+            "type": "object", 
+            "properties": {
+                "authority": {"type": "string"}, 
+                "ignore_errors" : {"type" : "boolean"}
+            }
+        })
+    def get_thing_model(self) -> JSON:
+        """
+        get the model of the object. The model is a JSON object that describes the object's properties, actions, events, 
+        and their types. The model is used by the client to understand the object and its capabilities. 
+        """
+        raise NotImplementedError("this method will be implemented properly in a future release")
+        # return self._thing_model
 
 
-    @action(URL_path='/exit', http_method=HTTP_METHODS.POST)                                                                                                                                          
+    @action()
+    def get_our_temp_thing_description(self, authority : typing.Optional[str] = None,
+                                       ignore_errors : bool = False) -> JSON:
+        """
+        object's data read by hololinked-portal GUI client, similar to http_resources but differs 
+        in details.
+        """
+        return build_our_temp_TD(self, authority=authority, ignore_errors=ignore_errors)
+    
+
+    @action()                                                                                                                                          
     def exit(self) -> None:
         """
         Exit the object without killing the eventloop that runs this object. If Thing was 
@@ -495,7 +537,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
         if self.rpc_server is None:
             return 
         if self._owner is None:
-            self.rpc_server.stop_polling()
+            self.rpc_server.stop()
             raise BreakInnerLoop # stops the inner loop of the object
         else:
             warnings.warn("call exit on the top object, composed objects cannot exit the loop.", RuntimeWarning)
@@ -505,9 +547,44 @@ class Thing(Parameterized, metaclass=ThingMeta):
         """ping the Thing to see if it is alive"""
         pass 
 
-    def run(self, 
-            zmq_protocols : typing.Union[typing.Sequence[ZMQ_PROTOCOLS], 
-                                         ZMQ_PROTOCOLS] = ZMQ_PROTOCOLS.IPC, 
+    def _prepare_rpc_server(self, 
+                        transports : ZMQ_TRANSPORTS, 
+                        context : zmq.asyncio.Context | None = None,
+                        **kwargs
+                    ) -> None:
+        # expose_eventloop: bool, False
+        #     expose the associated Eventloop which executes the object. This is generally useful for remotely 
+        #     adding more objects to the same event loop.
+        # dont specify http server as a kwarg, as the other method run_with_http_server has to be used
+        if context is not None and not isinstance(context, zmq.asyncio.Context):
+            raise TypeError("context must be an instance of zmq.asyncio.Context")
+        context = context or zmq.asyncio.Context()
+
+        if transports == 'INPROC' or transports == ZMQ_TRANSPORTS.INPROC:
+            from .rpc_server import RPCServer
+            RPCServer(
+                id=self.id, 
+                things=[self],
+                context=context, 
+                protocols=ZMQ_TRANSPORTS.INPROC, 
+                logger=self.logger
+            )   
+        else: 
+            from ..protocols.zmq import ZMQServer
+            ZMQServer(
+                id=self.id, 
+                things=[self],
+                context=context, 
+                protocols=transports, 
+                tcp_socket_address=kwargs.get('tcp_socket_address', None),
+                logger=self.logger
+            )
+
+
+    def run_with_zmq_server(self, 
+            transports : typing.Union[typing.Sequence[ZMQ_TRANSPORTS], 
+                                         ZMQ_TRANSPORTS] = ZMQ_TRANSPORTS.IPC, 
+            forked: bool = False,
             # expose_eventloop : bool = False,
             **kwargs 
         ) -> None:
@@ -517,7 +594,7 @@ class Thing(Parameterized, metaclass=ThingMeta):
 
         Parameters
         ----------
-        zmq_protocols: Sequence[ZMQ_PROTOCOLS] | ZMQ_Protocools, Default ZMQ_PROTOCOLS.IPC or "IPC"
+        ZMQ_TRANSPORTS: Sequence[ZMQ_TRANSPORTS] | ZMQ_Protocools, Default ZMQ_TRANSPORTS.IPC or "IPC"
             zmq transport layers at which the object is exposed. 
             TCP - provides network access apart from HTTP - please supply a socket address additionally.  
             IPC - inter process communication - connection can be made from other processes running 
@@ -534,50 +611,9 @@ class Thing(Parameterized, metaclass=ThingMeta):
                 zmq context to be used. If not supplied, a new context is created.
                 For INPROC clients, you need to provide a context.
         """
-        # expose_eventloop: bool, False
-        #     expose the associated Eventloop which executes the object. This is generally useful for remotely 
-        #     adding more objects to the same event loop.
-        # dont specify http server as a kwarg, as the other method run_with_http_server has to be used
-        self._prepare_resources()
-        context = kwargs.get('context', None)
-        if context is not None and not isinstance(context, zmq.asyncio.Context):
-            raise TypeError("context must be an instance of zmq.asyncio.Context")
-        context = context or zmq.asyncio.Context()
-
-        self.rpc_server = RPCServer(
-                                instance_name=self.instance_name, 
-                                server_type=self.__server_type__.value, 
-                                context=context, 
-                                protocols=zmq_protocols, 
-                                zmq_serializer=self.zmq_serializer, 
-                                http_serializer=self.http_serializer, 
-                                tcp_socket_address=kwargs.get('tcp_socket_address', None),
-                                logger=self.logger
-                            ) 
-        self.message_broker = self.rpc_server.inner_inproc_server
-        self.event_publisher = self.rpc_server.event_publisher 
-
-        from .eventloop import EventLoop
-        self.event_loop = EventLoop(
-                    instance_name=f'{self.instance_name}/eventloop', 
-                    things=[self], 
-                    logger=self.logger,
-                    zmq_serializer=self.zmq_serializer, 
-                    http_serializer=self.http_serializer, 
-                    expose=False, # expose_eventloop
-                )
-        
-        if kwargs.get('http_server', None):
-            from .HTTPServer import HTTPServer
-            httpserver = kwargs.pop('http_server')
-            assert isinstance(httpserver, HTTPServer)
-            httpserver._zmq_protocol = ZMQ_PROTOCOLS.INPROC
-            httpserver._zmq_inproc_socket_context = context
-            httpserver._zmq_inproc_event_context = self.event_publisher.context
-            assert httpserver.all_ok
-            httpserver.tornado_instance.listen(port=httpserver.port, address=httpserver.address)
-        self.event_loop.run()
-
+        self._prepare_rpc_server(transports=transports, **kwargs)
+        self.rpc_server.run()
+     
 
     def run_with_http_server(self, port : int = 8080, address : str = '0.0.0.0', 
                 # host : str = None, 
@@ -616,24 +652,19 @@ class Thing(Parameterized, metaclass=ThingMeta):
         # host: str
         #     Host Server to subscribe to coordinate starting sequence of things & web GUI
         
-        from .HTTPServer import HTTPServer
-        
+        from ..protocols.http.server import HTTPServer        
         http_server = HTTPServer(
-            [self.instance_name], logger=self.logger, serializer=self.http_serializer, 
+            [self.id], logger=self.logger,
             port=port, address=address, ssl_context=ssl_context,
             allowed_clients=allowed_clients, schema_validator=self.schema_validator,
             # network_interface=network_interface, 
             **kwargs,
         )
-        
-        self.run(
-            zmq_protocols=ZMQ_PROTOCOLS.INPROC,
-            http_server=http_server,
-            context=kwargs.get('context', None)
-        ) # blocks until exit is called
-
-        http_server.tornado_instance.stop()
-
+        assert http_server.all_ok
+        http_server.listen()
+     
        
+    def run(self):
+        raise NotImplementedError("this method will be implemented properly in a future release")
 
 

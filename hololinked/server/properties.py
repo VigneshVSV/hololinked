@@ -10,12 +10,11 @@ from collections import OrderedDict
 
 from ..param.utils import *
 from ..param.exceptions import *
-from ..param.parameterized import  Parameterized, dt_types, Parameter
-
+from ..param.parameterized import Parameterized, dt_types, Parameter
 from ..param.parameters import (TypeConstrainedList, TypeConstrainedDict, abbreviate_paths,
                        TypedKeyMappingsConstrainedDict, resolve_path, concrete_descendents, named_objs)
 from .property import Property
-from .constants import USE_OBJECT_NAME, HTTP_METHODS
+from ..constants import USE_OBJECT_NAME, HTTP_METHODS
 
 GET = HTTP_METHODS.GET 
 PUT = HTTP_METHODS.PUT
@@ -40,9 +39,6 @@ class String(Property):
     def __init__(self, default : typing.Optional[str] = "", *, regex : typing.Optional[str] = None, 
             doc : typing.Optional[str] = None, constant : bool = False, 
             readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -52,7 +48,7 @@ class String(Property):
             precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
         ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            allow_None=allow_None, label=label, state=state, 
             db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
             observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
             metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -123,9 +119,6 @@ class IPAddress(Property):
             allow_localhost : bool = True,
             doc : typing.Optional[str] = None, constant : bool = False, 
             readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -135,7 +128,7 @@ class IPAddress(Property):
             precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
         ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            allow_None=allow_None, label=label, state=state, 
             db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
             observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
             metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -365,9 +358,6 @@ class Number(Property):
             crop_to_bounds : bool = False, inclusive_bounds : typing.Tuple = (True,True), step : typing.Any = None, 
             doc : typing.Optional[str] = None, constant : bool = False, soft_bounds : typing.Optional[typing.Tuple] = None, 
             readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -377,7 +367,7 @@ class Number(Property):
             precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
         ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            allow_None=allow_None, label=label, state=state, 
             db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
             observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
             metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -494,10 +484,7 @@ class Integer(Number):
     def __init__(self, default : typing.Optional[int] = 0, *, bounds : typing.Optional[typing.Tuple] = None, 
             crop_to_bounds : bool = False, inclusive_bounds : typing.Tuple = (True,True), step : typing.Any = None, 
             doc : typing.Optional[str] = None, constant : bool = False, soft_bounds : typing.Optional[typing.Tuple] = None, 
-            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None,  
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -508,7 +495,7 @@ class Integer(Number):
         ) -> None:
         super().__init__(default=default, bounds=bounds, crop_to_bounds=crop_to_bounds, inclusive_bounds=inclusive_bounds, 
                 soft_bounds=soft_bounds, step=step, doc=doc, constant=constant, readonly=readonly, 
-                allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+                allow_None=allow_None, label=label, state=state, 
                 db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
                 observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
                 metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -527,9 +514,6 @@ class Boolean(Property):
     def __init__(self, default : typing.Optional[bool] = False, *, 
             doc : typing.Optional[str] = None, constant : bool = False, 
             readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -539,7 +523,7 @@ class Boolean(Property):
             precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
         ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, 
-                allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+                allow_None=allow_None, label=label, state=state, 
                 db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
                 observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
                 metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -561,9 +545,6 @@ class Iterable(Property):
             length : typing.Optional[int] = None, item_type : typing.Optional[typing.Tuple] = None,
             doc : typing.Optional[str] = None, constant : bool = False, deepcopy_default : bool = False,
             readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -573,7 +554,7 @@ class Iterable(Property):
             precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
         ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, 
-                allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+                allow_None=allow_None, label=label, state=state, 
                 db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
                 observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
                 metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -618,10 +599,7 @@ class Tuple(Iterable):
             length: typing.Optional[int] = None, item_type : typing.Optional[typing.Tuple] = None, 
             accept_list : bool = False, deepcopy_default : bool = False, 
             doc : typing.Optional[str] = None, constant : bool = False, 
-            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            readonly : bool = False, allow_None : bool = True, label : typing.Optional[str] = None, 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -632,7 +610,7 @@ class Tuple(Iterable):
         ) -> None:
         super().__init__(default=default, bounds=bounds, length=length, item_type=item_type, 
                 doc=doc, constant=constant, readonly=readonly, 
-                allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+                allow_None=allow_None, label=label, state=state, 
                 db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
                 observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
                 metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -678,10 +656,7 @@ class List(Iterable):
             length : typing.Optional[int] = None, item_type : typing.Optional[typing.Tuple] = None, 
             accept_tuple : bool = False, deepcopy_default : bool = False, 
             doc : typing.Optional[str] = None, constant : bool = False, 
-            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            readonly : bool = False, allow_None : bool = True, label : typing.Optional[str] = None, 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -692,7 +667,7 @@ class List(Iterable):
         ) -> None:
         super().__init__(default=default, bounds=bounds, length=length, item_type=item_type,
                 doc=doc, constant=constant, readonly=readonly, 
-                allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+                allow_None=allow_None, label=label, state=state, 
                 db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
                 observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
                 metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -744,9 +719,7 @@ class Composite(Property):
 
     def __init__(self, attribs : typing.List[typing.Union[str, Property]], *, 
             doc : typing.Optional[str] = None, constant : bool = False, 
-            readonly : bool = False, label : typing.Optional[str] = None, URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            readonly : bool = False, label : typing.Optional[str] = None, 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -757,7 +730,7 @@ class Composite(Property):
         ) -> None:
         kwargs.pop('allow_None')
         super().__init__(None, doc=doc, constant=constant, readonly=readonly, allow_None=True,
-                label=label, URL_path=URL_path, http_method=http_method, state=state, 
+                label=label, state=state, 
                 db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
                 observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
                 metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -837,9 +810,6 @@ class Selector(SelectorBase):
     def __init__(self, *, objects : typing.List[typing.Any], default : typing.Any = None, empty_default : bool = False,  
             doc : typing.Optional[str] = None, constant : bool = False, 
             readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -849,7 +819,7 @@ class Selector(SelectorBase):
             precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
         ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            allow_None=allow_None, label=label, state=state, 
             db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
             observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
             metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -905,9 +875,6 @@ class ClassSelector(SelectorBase):
     def __init__(self, *, class_ , default : typing.Any, isinstance : bool = True, deepcopy_default : bool = False,  
             doc : typing.Optional[str] = None, constant : bool = False, 
             readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -917,7 +884,7 @@ class ClassSelector(SelectorBase):
             precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
         ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            allow_None=allow_None, label=label, state=state, 
             db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
             observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
             metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -985,9 +952,6 @@ class TupleSelector(Selector):
     def __init__(self, *, objects : typing.List, default : typing.Any, accept_list : bool = True,
             doc : typing.Optional[str] = None, constant : bool = False, 
             readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -998,7 +962,7 @@ class TupleSelector(Selector):
         ) -> None:
         super().__init__(objects=objects, default=default, empty_default=True,
                         doc=doc, constant=constant, readonly=readonly, 
-                        allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+                        allow_None=allow_None, label=label, state=state, 
                         db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
                         observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
                         metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -1055,9 +1019,6 @@ class Path(Property):
     def __init__(self, default : typing.Any = '', *, search_paths : typing.Optional[str] = None, 
             doc : typing.Optional[str] = None, constant : bool = False, 
             readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -1067,7 +1028,7 @@ class Path(Property):
             precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
         ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            allow_None=allow_None, label=label, state=state, 
             db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
             observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
             metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -1168,10 +1129,7 @@ class FileSelector(Selector):
 
     def __init__(self, default : typing.Any, *, objects : typing.List, path : str = "", 
             doc : typing.Optional[str] = None, constant : bool = False, 
-            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None,  
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -1182,7 +1140,7 @@ class FileSelector(Selector):
         ) -> None:
         super().__init__(default=default, objects=objects, empty_default=True,
                     doc=doc, constant=constant, readonly=readonly, 
-                    allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+                    allow_None=allow_None, label=label, state=state, 
                     db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
                     observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
                     metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -1215,9 +1173,6 @@ class MultiFileSelector(FileSelector):
     def __init__(self, default : typing.Any, *, path : str = "", 
             doc : typing.Optional[str] = None, constant : bool = False, 
             readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -1227,7 +1182,7 @@ class MultiFileSelector(FileSelector):
             precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
         ) -> None:
         super().__init__(default=default, objects=None, doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            allow_None=allow_None, label=label, state=state, 
             db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
             observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
             metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -1251,9 +1206,6 @@ class Date(Number):
             crop_to_bounds : bool = False, inclusive_bounds : typing.Tuple = (True,True), step : typing.Any = None, 
             doc : typing.Optional[str] = None, constant : bool = False, 
             readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -1264,7 +1216,7 @@ class Date(Number):
         ) -> None:
         super().__init__(default=default, bounds=bounds, crop_to_bounds=crop_to_bounds,
             inclusive_bounds=inclusive_bounds, step=step, doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            allow_None=allow_None, label=label, state=state, 
             db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
             observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
             metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -1299,10 +1251,7 @@ class CalendarDate(Number):
     def __init__(self, default, *, bounds : typing.Union[typing.Tuple, None] = None, 
             crop_to_bounds : bool = False, inclusive_bounds : typing.Tuple = (True,True), step : typing.Any = None, 
             doc : typing.Optional[str] = None, constant : bool = False, 
-            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None,  
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -1313,7 +1262,7 @@ class CalendarDate(Number):
         ) -> None:
         super().__init__(default=default, bounds=bounds, crop_to_bounds=crop_to_bounds,
             inclusive_bounds=inclusive_bounds, step=step, doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            allow_None=allow_None, label=label, state=state, 
             db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
             observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
             metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -1386,9 +1335,6 @@ class CSS3Color(Property):
     def __init__(self, default, *, allow_named : bool = True,  
             doc : typing.Optional[str] = None, constant : bool = False, 
             readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -1398,7 +1344,7 @@ class CSS3Color(Property):
             precedence : typing.Optional[float] = None, metadata : typing.Optional[typing.Dict] = None, **kwargs
         ) -> None:
         super().__init__(default=default, doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            allow_None=allow_None, label=label, state=state, 
             db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
             observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
             metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -1433,9 +1379,6 @@ class Range(Tuple):
             item_type : typing.Optional[typing.Tuple] = None, softbounds=None, inclusive_bounds=(True,True), step=None,  
             doc : typing.Optional[str] = None, constant : bool = False, 
             readonly : bool = False, allow_None : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -1449,7 +1392,7 @@ class Range(Tuple):
         self.step = step
         super().__init__(default=default, bounds=bounds, item_type=item_type, length=length, 
                     doc=doc, constant=constant, readonly=readonly, 
-                    allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+                    allow_None=allow_None, label=label, state=state, 
                     db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
                     observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
                     metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -1587,9 +1530,7 @@ class TypedList(ClassSelector):
     def __init__(self, default : typing.Optional[typing.List[typing.Any]] = None, *, item_type : typing.Any = None, 
             deepcopy_default : bool = True, allow_None : bool = True,  bounds : tuple = (0,None), 
             doc : typing.Optional[str] = None, constant : bool = False, 
-            readonly : bool = False, label : typing.Optional[str] = None,URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            readonly : bool = False, label : typing.Optional[str] = None, 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -1603,7 +1544,7 @@ class TypedList(ClassSelector):
                                skip_validate=False)  
         super().__init__(class_=TypeConstrainedList, default=default, isinstance=True, 
             doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            allow_None=allow_None, label=label, state=state, 
             db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
             observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
             metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -1636,9 +1577,7 @@ class TypedDict(ClassSelector):
     def __init__(self, default : typing.Optional[typing.Dict] = None, *, key_type : typing.Any = None, 
             item_type : typing.Any = None, deepcopy_default : bool = True, allow_None : bool = True, 
             bounds : tuple = (0, None), doc : typing.Optional[str] = None, constant : bool = False, 
-            readonly : bool = False, label : typing.Optional[str] = None, URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
+            readonly : bool = False, label : typing.Optional[str] = None, 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -1655,7 +1594,7 @@ class TypedDict(ClassSelector):
         self.bounds = bounds 
         super().__init__(class_=TypeConstrainedDict, default=default, isinstance=True, 
             doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            allow_None=allow_None, label=label, state=state, 
             db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
             observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
             metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 
@@ -1684,9 +1623,6 @@ class TypedKeyMappingsDict(ClassSelector):
             type_mapping : typing.Dict, allow_unspecified_keys : bool = True, bounds : tuple = (0, None), 
             deepcopy_default : bool = True, allow_None : bool = True, doc : typing.Optional[str] = None, 
             constant : bool = False, readonly : bool = False, label : typing.Optional[str] = None, 
-            URL_path : str = USE_OBJECT_NAME, 
-            http_method : typing.Tuple[typing.Optional[str], typing.Optional[str], typing.Optional[str]] = 
-                                                        (HTTP_METHODS.GET, HTTP_METHODS.PUT, HTTP_METHODS.DELETE), 
             state : typing.Optional[typing.Union[typing.List, typing.Tuple, str, Enum]] = None,
             db_persist : bool = False, db_init : bool = False, db_commit : bool = False, 
             observable : bool = False, class_member : bool = False, 
@@ -1704,7 +1640,7 @@ class TypedKeyMappingsDict(ClassSelector):
         self.bounds = bounds 
         super().__init__(class_=TypedKeyMappingsConstrainedDict, default=default, isinstance=True, 
             doc=doc, constant=constant, readonly=readonly, 
-            allow_None=allow_None, label=label, URL_path=URL_path, http_method=http_method, state=state, 
+            allow_None=allow_None, label=label, state=state, 
             db_persist=db_persist, db_init=db_init, db_commit=db_commit, class_member=class_member, 
             observable=observable, remote=remote, fget=fget, fset=fset, fdel=fdel, fcomparator=fcomparator, 
             metadata=metadata, precedence=precedence, per_instance_descriptor=per_instance_descriptor, 

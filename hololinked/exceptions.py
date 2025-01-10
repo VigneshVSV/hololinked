@@ -10,6 +10,15 @@ class BreakAllLoops(Exception):
     """
     pass
 
+class BreakLoop(Exception):
+    pass 
+
+class BreakFlow(Exception):
+    """
+    raised to break the flow of the program
+    """
+    pass
+
 class StateMachineError(Exception):
     """
     raise to show errors while calling actions or writing properties in wrong state
@@ -23,4 +32,11 @@ class DatabaseError(Exception):
 
 
 
-__all__ = ['BreakInnerLoop', 'BreakAllLoops', 'StateMachineError']
+__all__ = [
+    'BreakInnerLoop', 
+    'BreakAllLoops', 
+    'BreakLoop', 
+    'BreakFlow',
+    'StateMachineError', 
+    'DatabaseError' 
+]

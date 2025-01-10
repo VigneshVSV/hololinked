@@ -27,8 +27,8 @@ import os
 import typing 
 import warnings
 
-from .. import __version__
-from .serializers import PythonBuiltinJSONSerializer
+from . import __version__
+from .serializers.serializers import PythonBuiltinJSONSerializer
 
 
 class Configuration:
@@ -74,18 +74,19 @@ class Configuration:
     __slots__ = [
         # folders
         "TEMP_DIR",
-        # TCP socket 
+        # TCP sockets 
         "TCP_SOCKET_SEARCH_START_PORT", "TCP_SOCKET_SEARCH_END_PORT",
-        # system view
-        "PRIMARY_HOST", "LOCALHOST_PORT", 
-        # database
-        "DB_CONFIG_FILE", 
         # HTTP server
         "COOKIE_SECRET",
         # credentials
         "PWD_HASHER_TIME_COST", "PWD_HASHER_MEMORY_COST",
+        # system view
+        "PRIMARY_HOST", "LOCALHOST_PORT", 
+        # database
+        "DB_CONFIG_FILE", 
         # Eventloop
         "USE_UVLOOP", "TRACE_MALLOC",
+        # Schema
         'validate_schema_on_client', 'validate_schemas'
     ]
 

@@ -3,4 +3,4 @@
 	url = https://github.com/VigneshVSV/hololinked-examples.git
 [submodule "doc"]
 	path = doc
-	url = https://github.com/VigneshVSV/hololinked-docs.git
+	url = https://github.com/hololinked-dev/docs-v2.git
