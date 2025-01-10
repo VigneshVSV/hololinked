@@ -3,13 +3,13 @@ import inspect
 from types import FunctionType, MethodType
 from enum import EnumMeta, Enum, StrEnum
 
-from ..param.parameterized import Parameterized
+from ..param.parameterized import Parameterized, edit_constant
 from .utils import getattr_without_descriptor_read
 from .exceptions import StateMachineError
 from .dataklasses import RemoteResourceInfoValidator
 from .property import Property
 from .properties import ClassSelector, TypedDict, Boolean
-from .events import Event
+
 
 
 
@@ -86,8 +86,10 @@ class StateMachine:
         owner_methods = [obj[0] for obj in inspect._getmembers(owner, inspect.ismethod, getattr_without_descriptor_read)]
         
         if isinstance(self.states, list):
+            self.__class__.states.constant = False 
             self.states = tuple(self.states) # freeze the list of states
-      
+            self.__class__.states.constant = True   
+            
         # first validate machine
         for state, objects in self.machine.items():
             if state in self:

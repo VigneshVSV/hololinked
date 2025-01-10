@@ -292,10 +292,11 @@ class EventHandler(BaseHandler):
                 if data:
                     # already JSON serialized 
                     self.write(self.data_header % data)
-                    await self.flush()
+                    await self.flush() # log after flushing just to be sure
                     self.logger.debug(f"new data sent - {self.resource.name}")
                 else:
-                    self.logger.debug(f"found no new data")
+                    self.logger.debug(f"found no new data - {self.resource.name}")
+                    await self.flush() # heartbeat - raises StreamClosedError if client disconnects
             except StreamClosedError:
                 break 
             except Exception as ex:

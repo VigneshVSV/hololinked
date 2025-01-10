@@ -240,7 +240,7 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
             form.href = f"{authority}{owner._full_URL_path_prefix}{property._observable_event_descriptor.URL_path}"
             form.htv_methodName = "GET"
             form.subprotocol = "sse"
-            form.contentType = "text/plain"
+            form.contentType = "application/json"
             self.forms.append(form.asdict())
 
 
@@ -266,10 +266,13 @@ class PropertyAffordance(InteractionAffordance, DataSchema):
         elif self._custom_schema_generators.get(property, NotImplemented) is not NotImplemented:
             schema = self._custom_schema_generators[property]()
         elif isinstance(property, Property) and property.model is not None:
-            from .td_pydantic_extensions import GenerateJsonSchemaWithoutDefaultTitles, type_to_dataschema
+            if isinstance(property.model, dict):
+                data_schema = property.model
+            else: 
+                from .td_pydantic_extensions import GenerateJsonSchemaWithoutDefaultTitles, type_to_dataschema
+                data_schema = type_to_dataschema(property.model).model_dump(mode='json', exclude_none=True)
             schema = PropertyAffordance()
             schema.build(property=property, owner=owner, authority=authority)
-            data_schema = type_to_dataschema(property.model).model_dump(mode='json', exclude_none=True)
             final_schema = schema.asdict()
             if schema.oneOf: # allow_None = True
                 final_schema['oneOf'].append(data_schema)
@@ -733,8 +736,7 @@ class ThingDescription(Schema):
                     'events', 'thing_description', 'GUI', 'object_info' ]
 
     skip_actions = ['_set_properties', '_get_properties', '_add_property', '_get_properties_in_db', 
-                    'push_events', 'stop_events', 'get_postman_collection', 'get_thing_description',
-                    'get_our_temp_thing_description']
+                    'get_postman_collection', 'get_thing_description', 'get_our_temp_thing_description']
 
     # not the best code and logic, but works for now
 
@@ -776,12 +778,18 @@ class ThingDescription(Schema):
                     if (resource.obj_name == 'state' and (not hasattr(self.instance, 'state_machine') or 
                                 not isinstance(self.instance.state_machine, StateMachine))):
                         continue
+                    if resource.obj_name not in self.instance.properties:
+                        continue 
                     self.properties[resource.obj_name] = PropertyAffordance.generate_schema(resource.obj, 
                                                                             self.instance, self.authority) 
                 
                 elif (resource.isaction and resource.obj_name not in self.actions and 
                     resource.obj_name not in self.skip_actions and hasattr(resource.obj, '_remote_info')):
-                   
+
+                    if resource.bound_obj != self.instance or (resource.obj_name == 'exit' and 
+                            self.instance._owner is not None) or (not hasattr(resource.bound_obj, 'db_engine') and
+                            resource.obj_name == 'load_properties_from_DB'):
+                        continue
                     self.actions[resource.obj_name] = ActionAffordance.generate_schema(resource.obj, 
                                                                                 self.instance, self.authority)
             except Exception as ex:
