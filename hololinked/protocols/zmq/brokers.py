@@ -13,8 +13,8 @@ from ...constants import ZMQ_TRANSPORTS, ZMQSocketType, ZMQ_EVENT_MAP, CommonRPC
 from ...serializers.serializers import JSONSerializer
 from ...exceptions import BreakLoop
 from .message import (EMPTY_BYTE, EXIT, HANDSHAKE, INVALID_MESSAGE, SERVER_DISCONNECTED, TIMEOUT, EventMessage, 
-                    RequestMessage, ResponseMessage, SerializableData, PreserializedData, 
-                    ServerExecutionContext, ThingExecutionContext, default_server_execution_context, default_thing_execution_context)
+        RequestMessage, ResponseMessage, SerializableData, PreserializedData, SerializableNone, PreserializedEmptyByte,
+        ServerExecutionContext, ThingExecutionContext, default_server_execution_context, default_thing_execution_context)
 
 
    
@@ -395,7 +395,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
     async def async_send_response(self, 
                     request_message: RequestMessage, 
                     payload: SerializableData = SerializableData(None, 'application/json'), 
-                    preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain')
+                    preserialized_payload: PreserializedData = PreserializedEmptyByte
                 ) -> None:
         """
         Send response message for a request message. 
@@ -427,7 +427,7 @@ class AsyncZMQServer(BaseZMQServer, BaseAsyncZMQ):
                                         request_message: RequestMessage, 
                                         message_type: str,
                                         payload: SerializableData = SerializableData(None, 'application/json'),
-                                        preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain')
+                                        preserialized_payload: PreserializedData = PreserializedEmptyByte
                                     ) -> None:
         """
         Send response message for a request message. 
@@ -652,7 +652,7 @@ class ZMQServerPool(BaseZMQServer):
                                 id: str, 
                                 request_message: RequestMessage,  
                                 payload: SerializableData = SerializableData(None, 'application/json'),
-                                preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain')
+                                preserialized_payload: PreserializedData = PreserializedEmptyByte
                             ) -> None:
         """
         send response for instance name
@@ -861,7 +861,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
                     objekt: str, 
                     operation: str, 
                     payload: SerializableData = SerializableData(None, 'application/json'),
-                    preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain'),
+                    preserialized_payload: PreserializedData = PreserializedEmptyByte,
                     server_execution_context: ServerExecutionContext = default_server_execution_context,
                     thing_execution_context: ThingExecutionContext = default_thing_execution_context
                 ) -> bytes:
@@ -937,7 +937,7 @@ class SyncZMQClient(BaseZMQClient, BaseSyncZMQ):
             objekt: str,
             operation: str, 
             payload: SerializableData = SerializableData(None, 'application/json'),
-            preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain'),
+            preserialized_payload: PreserializedData = PreserializedEmptyByte,
             server_execution_context: ServerExecutionContext = default_server_execution_context,
             thing_execution_context: ThingExecutionContext = default_thing_execution_context,
         ) -> ResponseMessage:
@@ -1111,7 +1111,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                                 objekt: str, 
                                 operation: str, 
                                 payload: SerializableData = SerializableData(None, 'application/json'),
-                                preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain'),
+                                preserialized_payload: PreserializedData = PreserializedEmptyByte,
                                 server_execution_context: ServerExecutionContext = default_server_execution_context,
                                 thing_execution_context: typing.Dict[str, typing.Any] = default_thing_execution_context
                             ) -> str:
@@ -1210,7 +1210,7 @@ class AsyncZMQClient(BaseZMQClient, BaseAsyncZMQ):
                         objekt: str, 
                         operation: str, 
                         payload: SerializableData = SerializableData(None, 'application/json'),
-                        preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain'),
+                        preserialized_payload: PreserializedData = PreserializedEmptyByte,
                         server_execution_context: ServerExecutionContext = default_server_execution_context, 
                         thing_execution_context: ThingExecutionContext = default_thing_execution_context
                     ) -> ResponseMessage: 
@@ -1495,8 +1495,8 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                             thing_id: str, 
                             objekt: str, 
                             operation: str,
-                            payload: SerializableData = SerializableData(None, 'application/json'), 
-                            preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain'),
+                            payload: SerializableData = SerializableNone, 
+                            preserialized_payload: PreserializedData = PreserializedEmptyByte,
                             server_execution_context: ServerExecutionContext = default_server_execution_context,
                             thing_execution_context: ThingExecutionContext  = default_thing_execution_context
                         ) -> bytes:
@@ -1596,7 +1596,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                         objekt: str, 
                         operation: str, 
                         payload: SerializableData = SerializableData(None, 'application/json'), 
-                        preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain'),
+                        preserialized_payload: PreserializedData = PreserializedEmptyByte,
                         server_execution_context: ServerExecutionContext = default_server_execution_context,
                         thing_execution_context: ThingExecutionContext  = default_thing_execution_context, 
                     ) -> typing.Dict[str, typing.Any]:
@@ -1656,7 +1656,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                                 objekt: str, 
                                 operation: str, 
                                 payload: SerializableData = SerializableData(None, 'application/json'), 
-                                preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain'),
+                                preserialized_payload: PreserializedData = PreserializedEmptyByte,
                                 ids: typing.Optional[typing.List[str]] = None,
                                 server_execution_context: ServerExecutionContext = default_server_execution_context,
                                 thing_execution_context: ThingExecutionContext = default_thing_execution_context,
@@ -1682,7 +1682,7 @@ class MessageMappedZMQClientPool(BaseZMQClient):
                                         objekt: str, 
                                         operation: str, 
                                         payload: SerializableData = SerializableData(None, 'application/json'), 
-                                        preserialized_payload: PreserializedData = PreserializedData(EMPTY_BYTE, 'text/plain'),
+                                        preserialized_payload: PreserializedData = PreserializedEmptyByte,
                                         server_execution_context: ServerExecutionContext = default_server_execution_context,
                                         thing_execution_context: ThingExecutionContext = default_thing_execution_context,        
                                     ) -> typing.Dict[str, typing.Any]:
@@ -1784,10 +1784,10 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
         self.create_socket(id=id, node_type='server', context=context,
                            transport=transport, socket_type=zmq.PUB, **kwargs)
         self.logger.info(f"created event publishing socket at {self.socket_address}")
-        self.events = set() # type: typing.Set[EventDispatcher] 
+        self.events = set() # type is typing.Set[EventDispatcher] 
         self.event_ids = set() # type: typing.Set[bytes]
 
-    def register(self, event: "EventDispatcher") -> None:
+    def register(self, event) -> None:
         """
         register event with a specific (unique) name
 
@@ -1797,13 +1797,15 @@ class EventPublisher(BaseZMQServer, BaseSyncZMQ):
             ``Event`` object that needs to be registered. Events created at ``__init__()`` of Thing are 
             automatically registered. 
         """
+        from ...server import EventDispatcher
+        assert isinstance(event, EventDispatcher), "event must be an instance of EventDispatcher"
         if event._unique_identifier in self.events and event not in self.events:
             raise AttributeError(f"event {event._unique_identifier} already found in list of events, please use another name.")
         self.event_ids.add(event._unique_identifier)       
         self.events.add(event) 
         
                
-    def publish(self, event: "EventDispatcher", data: SerializableData, *, serialize: bool = True) -> None: 
+    def publish(self, event, data: SerializableData, *, serialize: bool = True) -> None: 
         """
         publish an event with given unique name. 
 
@@ -2061,7 +2063,7 @@ class EventConsumer(BaseEventConsumer):
     
         
 
-from ...server.events import EventDispatcher
+# from ...server.events import EventDispatcher
 
 
 __all__ = [

@@ -103,7 +103,8 @@ class Property(Parameter):
     """
 
     __slots__ = ['db_persist', 'db_init', 'db_commit', 'model', 'metadata', '_execution_info_validator', 'execution_info',
-                '_observable', '_observable_event_descriptor', 'fcomparator', '_old_value_internal_name']
+                '_observable', '_observable_event_descriptor', 'fcomparator', '_old_value_internal_name',
+                'validator']
 
  
     def __init__(self, default: typing.Any = None, *, 
@@ -161,7 +162,7 @@ class Property(Parameter):
 
     def __get__(self, obj: Parameterized, objtype: ParameterizedMetaclass) -> typing.Any:
         read_value = super().__get__(obj, objtype)
-        self._push_change_event_if_needed(obj, read_value)
+        self.push_change_event(obj, read_value)
         return read_value
       
 
@@ -238,38 +239,13 @@ class Property(Parameter):
         return self._execution_info_validator is not None
     
     def to_affordance(self) -> dict:
-        from hololinked.server.td import PropertyAffordance
+        from hololinked.td import PropertyAffordance
         affordance = PropertyAffordance()
         affordance._build(self, self.owner_inst, None)
         return affordance
 
 
-
-try: 
-    from pydantic import BaseModel, RootModel, create_model
-    def wrap_plain_types_in_rootmodel(model : type) -> type["BaseModel"]:
-        """
-        Ensure a type is a subclass of BaseModel.
-
-        If a `BaseModel` subclass is passed to this function, we will pass it
-        through unchanged. Otherwise, we wrap the type in a RootModel.
-        In the future, we may explicitly check that the argument is a type
-        and not a model instance.
-        """
-        try:  # This needs to be a `try` as basic types are not classes
-            assert issubclass(model, BaseModel)
-            return model
-        except (TypeError, AssertionError):
-            return create_model(f"{model!r}", root=(model, ...), __base__=RootModel)
-        except NameError:
-            raise ImportError("pydantic is not installed, please install it to use this feature") from None
-except ImportError:
-    def wrap_plain_types_in_rootmodel(model : type) -> type:
-        raise ImportError("pydantic is not installed, please install it to use pydantic models for properties") from None
-
-
-
-    
+   
 __property_info__ = [
                 'allow_None' , 'class_member', 'db_init', 'db_persist', 
                 'db_commit', 'deepcopy_default', 'per_instance_descriptor', 
