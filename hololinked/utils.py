@@ -513,7 +513,7 @@ __all__ = [
     isclassmethod.__name__,
     issubklass.__name__,
     get_current_async_loop.__name__,
-    get_input_model_from_signature.__name__,,
+    get_input_model_from_signature.__name__,
     validate_args_kwargs.__name__,
     get_return_type_from_signature.__name__
 ]
