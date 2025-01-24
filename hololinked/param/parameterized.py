@@ -1790,7 +1790,7 @@ class ParameterizedMetaclass(type):
             # checking isinstance(value, Parameter) will not work for ClassSelector 
             # and besides value is anyway validated. On the downside, this does not allow
             # altering of parameter instances if class already of the parameter with attribute_name
-            if parameter: # and not isinstance(value, Parameter): 
+            if parameter and parameter.class_member: # and not isinstance(value, Parameter): 
                 # if owning_class != mcs:
                 #     parameter = copy.copy(parameter)
                 #     parameter.owner = mcs
