@@ -575,14 +575,26 @@ class RPCServer(BaseZMQServer):
         self.logger.info("terminated context of socket '{}' of type '{}'".format(self.id, self.__class__))
 
 
-   
+    def __hash__(self):
+        return hash('RPCServer' + self.id)
     
+    def __eq__(self, other):
+        if not isinstance(other, RPCServer):
+            return False
+        return self.id == other.id
+    
+    def __str__(self):
+        return f"RPCServer({self.id})"
+    
+   
+
 class Scheduler:
     """
     Scheduler class to schedule the operations of a thing either in queued mode, or a one-shot mode in either 
     async or threaded loops. 
 
     [UML Diagram](http://localhost:8000/UML/PDF/RPCServer.pdf)
+    
     [UML Diagram subclasses](http://localhost:8000/UML/PDF/Scheduler.pdf)
     """
 
