@@ -9,9 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ✓ means ready to try
 
-New:
+## [v0.3.0] - 2025-Apr/May 
+
+This release will contain a lot of new features and improvements. 
+- better conceptual alignment with WoT in code structure
+- docs recreated in mkdocs-material, more examples and full coverage of features (hosted [here for now](https://docs.hololinked.dev))
+- more tests coverage (over 70%)
+- adding custom handlers for each property, action and event to override default behaviour for HTTP protocol 
+- schedule async methods & threaded methods more easily
+- supports pydantic models for action schema validation, directly with python typing annotations - no need explicitly specify schema. 
+- bug fix to create pydantic models for properties during validation & pass the model to the setter (instead of JSON)
+- bug fix to remove shared state machine for multiple instances of the same class in the same process
+
+Not finalised:
 - cookie auth & its specification in TD (cookie auth branch)
-- adding custom handlers for each property, action and event to override default behaviour
 
 ## [v0.2.8] - 2024-12-07
 
